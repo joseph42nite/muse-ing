@@ -28,7 +28,7 @@ export default function PromoterLayout({
   const pathname = usePathname()
 
   const handleLogout = async () => {
-    // TODO: Implement logout
+    await fetch("/api/auth/logout", { method: "POST" })
     window.location.href = "/login"
   }
 

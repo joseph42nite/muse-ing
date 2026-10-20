@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
+import { ArrowLeft, Mic2 } from "lucide-react"
 
 export default function SignUpPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -15,15 +15,15 @@ export default function SignUpPage() {
     register,
     handleSubmit,
     watch,
-    setValue,
     formState: { errors },
   } = useForm({
     defaultValues: {
       name: "",
       email: "",
       phone: "",
-      role: "promoter" as const,
-      promoter_code: "",
+      role: "artist" as "artist" | "promoter" | "venue",
+      instagram_handle: "",
+      avatar_url: "",
       password: "",
       repeatPassword: "",
     },
@@ -31,19 +31,8 @@ export default function SignUpPage() {
 
   const password = watch("password")
   const role = watch("role")
-  const name = watch("name")
-
-  useEffect(() => {
-    if (role === "promoter" && name) {
-      const promoterCode = name.slice(0, 3).toUpperCase() + Math.floor(100 + Math.random() * 900)
-      setValue("promoter_code", promoterCode)
-    } else {
-      setValue("promoter_code", "")
-    }
-  }, [role, name, setValue])
 
   const handleSignUp = async (values: any) => {
-    const supabase = createClient()
     setIsLoading(true)
     setError(null)
 
@@ -54,193 +43,177 @@ export default function SignUpPage() {
     }
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email: values.email,
-        password: values.password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/login`,
-        },
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
       })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Sign up failed.")
 
-      if (signUpError) throw signUpError
-
-      if (data.user) {
-        const { error: insertError } = await supabase.from("users").insert([
-          {
-            id: data.user.id,
-            name: values.name,
-            email: values.email,
-            phone: values.phone,
-            role: values.role,
-            promoter_code: values.role === "promoter" ? values.promoter_code : null,
-          },
-        ])
-
-        if (insertError) throw insertError
-      }
-
-      router.push("/auth/sign-up-success")
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "An error occurred during sign up"
-      setError(errorMessage)
+      if (body.role === "artist") router.push("/artist")
+      else if (body.role === "venue") router.push("/venue-checkin")
+      else router.push("/promoter")
+    } catch (err: any) {
+      setError(err.message || "An error occurred during sign up")
     } finally {
       setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="mb-8">
+    <div className="min-h-screen bg-[#07070b] flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="w-full max-w-md bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 relative z-10">
+        <div className="mb-6">
           <Link
             href="/"
-            className="inline-flex items-center text-white/80 hover:text-white text-sm font-light mb-6 transition-colors"
+            className="inline-flex items-center text-white/70 hover:text-white text-sm font-light mb-4 transition-colors"
           >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Back
+            <ArrowLeft className="w-4 h-4 mr-1.5" />
+            Back to Home
           </Link>
-          <h1 className="text-3xl font-light text-white mb-2">Create an account</h1>
-          <p className="text-white/60 text-sm">Get started with your new account</p>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs mb-3">
+            <Mic2 className="w-3.5 h-3.5" />
+            Create Account
+          </div>
+          <h1 className="text-3xl font-light text-white mb-1">Join Muse-ing</h1>
+          <p className="text-white/60 text-sm">Set up your Artist profile, pre-load your setlist, and run interactive gigs</p>
         </div>
 
         <form onSubmit={handleSubmit(handleSignUp)} className="space-y-4">
           <div>
-            <label htmlFor="name" className="block text-white/80 text-sm font-light mb-2">
-              Name
+            <label htmlFor="role" className="block text-white/80 text-xs font-medium mb-1.5">
+              Account Type
+            </label>
+            <select
+              id="role"
+              className="w-full px-4 py-2.5 rounded-xl bg-[#14141f] border border-white/15 text-white text-sm focus:outline-none focus:border-purple-400"
+              {...register("role", { required: "Please select a role" })}
+            >
+              <option value="artist">Performing Artist / Band</option>
+              <option value="venue">Venue Partner</option>
+              <option value="promoter">Event Promoter</option>
+            </select>
+          </div>
+
+          <div>
+            <label htmlFor="name" className="block text-white/80 text-xs font-medium mb-1.5">
+              {role === "artist" ? "Artist / Stage Name" : "Name"}
             </label>
             <input
               id="name"
               type="text"
-              placeholder="Your name"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
+              placeholder={role === "artist" ? "e.g., Arjun Mehta Live" : "Your name"}
+              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
               {...register("name", { required: "Name is required" })}
             />
-            {errors.name && <p className="text-sm text-red-500 mt-1">{errors.name.message}</p>}
+            {errors.name && <p className="text-xs text-red-400 mt-1">{errors.name.message}</p>}
           </div>
 
-          <div>
-            <label htmlFor="email" className="block text-white/80 text-sm font-light mb-2">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              placeholder="you@example.com"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-              {...register("email", {
-                required: "Email is required",
-                pattern: {
-                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                  message: "Invalid email address",
-                },
-              })}
-            />
-            {errors.email && <p className="text-sm text-red-500 mt-1">{errors.email.message}</p>}
-          </div>
-
-          <div>
-            <label htmlFor="phone" className="block text-white/80 text-sm font-light mb-2">
-              Phone Number
-            </label>
-            <input
-              id="phone"
-              type="tel"
-              placeholder="Your phone number"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-              {...register("phone")}
-            />
-          </div>
-
-          <div>
-            <label htmlFor="role" className="block text-white/80 text-sm font-light mb-2">
-              I am a...
-            </label>
-            <select
-              id="role"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-              {...register("role", { required: "Please select a role" })}
-            >
-              <option value="promoter">Promoter</option>
-              <option value="venue">Venue</option>
-            </select>
-            {errors.role && <p className="text-sm text-red-500 mt-1">{errors.role.message}</p>}
-          </div>
-
-          {role === "promoter" && (
-            <div>
-              <label htmlFor="promoter_code" className="block text-white/80 text-sm font-light mb-2">
-                Promoter Code
-              </label>
-              <input
-                id="promoter_code"
-                type="text"
-                readOnly
-                placeholder="Your unique promoter code"
-                className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-                {...register("promoter_code")}
-              />
-            </div>
+          {role === "artist" && (
+            <>
+              <div>
+                <label htmlFor="instagram_handle" className="block text-white/80 text-xs font-medium mb-1.5">
+                  Instagram Handle (Shown on Audience Phones)
+                </label>
+                <input
+                  id="instagram_handle"
+                  type="text"
+                  placeholder="@yourinstagram"
+                  className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                  {...register("instagram_handle")}
+                />
+              </div>
+              <div>
+                <label htmlFor="avatar_url" className="block text-white/80 text-xs font-medium mb-1.5">
+                  Profile Photo URL (Optional)
+                </label>
+                <input
+                  id="avatar_url"
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                  {...register("avatar_url")}
+                />
+              </div>
+            </>
           )}
 
-          <div>
-            <label htmlFor="password" className="block text-white/80 text-sm font-light mb-2">
-              Password
-            </label>
-            <input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-              {...register("password", {
-                required: "Password is required",
-                minLength: {
-                  value: 6,
-                  message: "Password must be at least 6 characters",
-                },
-              })}
-            />
-            {errors.password && <p className="text-sm text-red-500 mt-1">{errors.password.message}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="email" className="block text-white/80 text-xs font-medium mb-1.5">
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                {...register("email", { required: "Email is required" })}
+              />
+            </div>
+            <div>
+              <label htmlFor="phone" className="block text-white/80 text-xs font-medium mb-1.5">
+                Phone
+              </label>
+              <input
+                id="phone"
+                type="tel"
+                placeholder="9876543210"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                {...register("phone")}
+              />
+            </div>
           </div>
 
-          <div>
-            <label
-              htmlFor="repeatPassword"
-              className="block text-white/80 text-sm font-light mb-2"
-            >
-              Confirm Password
-            </label>
-            <input
-              id="repeatPassword"
-              type="password"
-              placeholder="••••••••"
-              className="w-full px-4 py-2 rounded-lg bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:border-white/40 transition-colors"
-              {...register("repeatPassword", {
-                required: "Please confirm your password",
-                validate: (value) => value === password || "Passwords do not match",
-              })}
-            />
-            {errors.repeatPassword && (
-              <p className="text-sm text-red-500 mt-1">{errors.repeatPassword.message}</p>
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="password" className="block text-white/80 text-xs font-medium mb-1.5">
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                {...register("password", {
+                  required: "Password is required",
+                  minLength: { value: 6, message: "Min 6 chars" },
+                })}
+              />
+            </div>
+            <div>
+              <label htmlFor="repeatPassword" className="block text-white/80 text-xs font-medium mb-1.5">
+                Confirm Password
+              </label>
+              <input
+                id="repeatPassword"
+                type="password"
+                placeholder="••••••••"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
+                {...register("repeatPassword", {
+                  required: "Confirm password",
+                  validate: (v) => v === password || "Mismatch",
+                })}
+              />
+            </div>
           </div>
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && <p className="text-xs text-red-400">{error}</p>}
 
           <button
             type="submit"
-            className="w-full px-6 py-2 rounded-lg bg-white text-black font-normal text-sm transition-all duration-300 hover:bg-white/90 cursor-pointer mt-6"
+            className="w-full px-6 py-3 rounded-xl bg-white text-black font-medium text-sm transition-all duration-300 hover:bg-white/90 cursor-pointer mt-2"
             disabled={isLoading}
           >
-            {isLoading ? "Creating account..." : "Sign up"}
+            {isLoading ? "Creating account..." : "Create Account"}
           </button>
         </form>
 
-        <p className="text-center text-white/60 text-sm mt-6">
+        <p className="text-center text-white/60 text-xs mt-5">
           Already have an account?{" "}
-          <Link href="/login" className="text-white hover:text-white/80 transition-colors">
-            Login
+          <Link href="/login" className="text-white hover:text-white/80 underline underline-offset-4">
+            Artist Login
           </Link>
         </p>
       </div>

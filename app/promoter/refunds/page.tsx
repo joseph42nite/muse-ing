@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { createClient } from "@/lib/supabase/client"
 
 const statusColors = {
   pending: "bg-yellow-500/20 text-yellow-700",
@@ -18,56 +17,16 @@ export default function PromoterRefundsPage() {
   const [refundRequests, setRefundRequests] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const supabase = createClient()
 
   useEffect(() => {
-    const fetchRefundRequests = async () => {
-      const { data: user, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
-        console.error("Error fetching user:", userError?.message)
-        setError("User not authenticated.")
-        setIsLoading(false)
-        return
-      }
-
-      // Fetch events created by this promoter
-      const { data: promoterEvents, error: eventsError } = await supabase
-        .from("events")
-        .select("id")
-        .eq("promoter_id", user.user?.id)
-
-      if (eventsError) {
-        console.error("Error fetching promoter events:", eventsError.message)
-        setError("Error fetching promoter events.")
-        setIsLoading(false)
-        return
-      }
-
-      const eventIds = promoterEvents?.map((event) => event.id) || []
-
-      if (eventIds.length === 0) {
-        setRefundRequests([])
-        setIsLoading(false)
-        return
-      }
-
-      // Fetch refund requests for these events
-      const { data: requests, error: refundsError } = await supabase
-        .from("refund_requests")
-        .select("*", { count: "exact" })
-        .in("event_id", eventIds)
-
-      if (refundsError) {
-        console.error("Error fetching refund requests:", refundsError.message)
-        setError("Error fetching refund requests.")
-      } else {
-        setRefundRequests(requests || [])
-      }
-      setIsLoading(false)
-    }
-
-    fetchRefundRequests()
-  }, [supabase])
+    fetch("/api/promoter/refunds")
+      .then(async (res) => {
+        if (!res.ok) throw new Error((await res.json()).error || "Error fetching refund requests.")
+        setRefundRequests(await res.json())
+      })
+      .catch((e) => setError(e.message))
+      .finally(() => setIsLoading(false))
+  }, [])
 
   if (isLoading) {
     return <div className="p-8">Loading refund requests...</div>
@@ -108,7 +67,7 @@ export default function PromoterRefundsPage() {
                   <TableRow key={request.id} className="border-border hover:bg-muted/50">
                     <TableCell className="text-foreground font-medium">{request.id.substring(0, 8)}...</TableCell>
                     <TableCell className="text-foreground">{request.user_email}</TableCell>
-                    <TableCell className="text-foreground">{request.event_id.substring(0, 8)}...</TableCell>
+                    <TableCell className="text-foreground">{request.event_title}</TableCell>
                     <TableCell className="text-foreground font-semibold">₹{request.amount}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">{request.reason}</TableCell>
                     <TableCell>

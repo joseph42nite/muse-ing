@@ -43,11 +43,23 @@ To get a local copy up and running, follow these simple steps.
    ```sh
    npm install
    ```
-3. Create a `.env` file in the root of the project and add the following environment variables:
+3. Copy `.env.example` to `.env.local` and fill in your Cashfree keys (see below).
+4. Start the app: `npm run dev`. The SQLite database is created automatically at `data/muse.db`.
+5. Create an admin account (after the app has started once):
    ```sh
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   node scripts/create-admin.mjs "Your Name" you@example.com 'a-strong-password'
    ```
+
+### Payments (Cashfree)
+
+Booking links create a Cashfree Payment Link per booking. In the Cashfree dashboard, enable
+webhooks for payment links and point them to `<SITE_URL>/api/cashfree/webhook`. The post-payment
+page also checks the link status directly, so bookings settle even if a webhook is delayed.
+
+### Requirements
+
+Node.js 22.5+ (uses the built-in `node:sqlite`). Because data lives in a local file, deploy to a
+server with persistent disk (not serverless).
 
 ## Testing
 

@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { createClient } from "@/lib/supabase/client"
 
 export default function CreateEventPage() {
   const [formData, setFormData] = useState({
@@ -15,13 +14,19 @@ export default function CreateEventPage() {
     description: "",
     eventDate: "",
     ticketPrice: "",
-    totalTickets: "",
     venue: "",
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [venues, setVenues] = useState<{ id: string; name: string }[]>([])
   const router = useRouter()
-  const supabase = createClient()
+
+  useEffect(() => {
+    fetch("/api/venues")
+      .then((r) => (r.ok ? r.json() : []))
+      .then(setVenues)
+      .catch(() => setVenues([]))
+  }, [])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,24 +34,19 @@ export default function CreateEventPage() {
     setError(null)
 
     try {
-      const { data: user, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
-        throw new Error("User not authenticated.")
-      }
-
-      const { error: insertError } = await supabase.from("events").insert([
-        {
-          event_name: formData.eventName,
+      const res = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: formData.eventName,
           description: formData.description,
-          event_date: formData.eventDate,
+          date: formData.eventDate,
           ticket_price: parseFloat(formData.ticketPrice),
-          total_tickets: parseInt(formData.totalTickets),
-          venue_id: "", // TODO: Replace with actual venue ID from a selection
-          promoter_id: user.user?.id, // Assuming promoter_id is the user's ID
-        },
-      ])
-
-      if (insertError) throw insertError
+          venue_id: formData.venue || null,
+        }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Could not create event.")
 
       router.push("/promoter/events") // Redirect to my events page
     } catch (err: any) {
@@ -99,14 +99,19 @@ export default function CreateEventPage() {
               <Label htmlFor="venue" className="text-foreground">
                 Venue
               </Label>
-              <Input
+              <select
                 id="venue"
                 value={formData.venue}
                 onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                className="bg-input border-border text-foreground mt-1"
-                placeholder="Venue"
-                required
-              />
+                className="bg-input border border-border text-foreground mt-1 w-full h-9 rounded-md px-3 text-sm"
+              >
+                <option value="">Select a venue (optional)</option>
+                {venues.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <Label htmlFor="eventDate" className="text-foreground">
@@ -121,7 +126,7 @@ export default function CreateEventPage() {
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div>
               <div>
                 <Label htmlFor="ticketPrice" className="text-foreground">
                   Ticket Price
@@ -136,26 +141,12 @@ export default function CreateEventPage() {
                   required
                 />
               </div>
-              <div>
-                <Label htmlFor="totalTickets" className="text-foreground">
-                  Total Tickets
-                </Label>
-                <Input
-                  id="totalTickets"
-                  type="number"
-                  value={formData.totalTickets}
-                  onChange={(e) => setFormData({ ...formData, totalTickets: e.target.value })}
-                  className="bg-input border-border text-foreground mt-1"
-                  placeholder="Total"
-                  required
-                />
-              </div>
             </div>
 
             {error && <p className="text-sm text-red-500">{error}</p>}
 
             <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={() => router.push("/promoter/events")}>
+              <Button type="button" variant="outline" onClick={() => router.push("/promoter/events")}>
                 Cancel
               </Button>
               <Button type="submit" className="bg-primary text-primary-foreground hover:bg-primary/90" disabled={isLoading}>

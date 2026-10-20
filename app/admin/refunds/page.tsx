@@ -72,7 +72,7 @@ export default function RefundsPage() {
     // TODO: Implement API calls for:
     // - Approve refund
     // - Reject refund
-    // - Trigger Razorpay refund
+    // - Trigger Cashfree refund
     // - Trigger n8n workflow
 
     console.log(`[v0] ${action} refund:`, selectedRefund.id)
@@ -151,7 +151,7 @@ export default function RefundsPage() {
                             onClick={() => handleAction(refund, "refund")}
                           >
                             <CreditCard className="w-4 h-4 mr-1" />
-                            Refund in Razorpay
+                            Refund in Cashfree
                           </Button>
                         )}
                       </div>
@@ -171,12 +171,12 @@ export default function RefundsPage() {
             <DialogTitle className="text-foreground">
               {action === "approve" && "Approve Refund Request?"}
               {action === "reject" && "Reject Refund Request?"}
-              {action === "refund" && "Process Refund in Razorpay?"}
+              {action === "refund" && "Process Refund in Cashfree?"}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {action === "approve" && "This will approve the refund request and prepare it for processing."}
               {action === "reject" && "This will reject the refund request. The user will be notified."}
-              {action === "refund" && "This will trigger a refund in Razorpay and notify the user."}
+              {action === "refund" && "This will trigger a refund in Cashfree and notify the user."}
             </DialogDescription>
           </DialogHeader>
           {selectedRefund && (

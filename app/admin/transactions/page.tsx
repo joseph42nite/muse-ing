@@ -12,7 +12,7 @@ import { Eye } from "lucide-react"
 const transactions = [
   {
     id: "1",
-    razorpayId: "pay_1234567890",
+    gatewayId: "pay_1234567890",
     userName: "John Doe",
     event: "Summer Music Festival",
     amount: 2500,
@@ -23,7 +23,7 @@ const transactions = [
   },
   {
     id: "2",
-    razorpayId: "pay_0987654321",
+    gatewayId: "pay_0987654321",
     userName: "Jane Smith",
     event: "Tech Conference 2024",
     amount: 5000,
@@ -34,7 +34,7 @@ const transactions = [
   },
   {
     id: "3",
-    razorpayId: "pay_1111111111",
+    gatewayId: "pay_1111111111",
     userName: "Mike Johnson",
     event: "Concert Night",
     amount: 1500,
@@ -45,7 +45,7 @@ const transactions = [
   },
   {
     id: "4",
-    razorpayId: "pay_2222222222",
+    gatewayId: "pay_2222222222",
     userName: "Sarah Williams",
     event: "Art Exhibition",
     amount: 3000,
@@ -56,7 +56,7 @@ const transactions = [
   },
   {
     id: "5",
-    razorpayId: "pay_3333333333",
+    gatewayId: "pay_3333333333",
     userName: "Alex Brown",
     event: "Summer Music Festival",
     amount: 2500,
@@ -95,20 +95,20 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Transactions</h1>
-        <p className="text-muted-foreground mt-2">View all Razorpay transactions and payment details</p>
+        <p className="text-muted-foreground mt-2">View all Cashfree transactions and payment details</p>
       </div>
 
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle>All Transactions</CardTitle>
-          <CardDescription>Complete transaction history from Razorpay</CardDescription>
+          <CardDescription>Complete transaction history from Cashfree</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="text-foreground">Razorpay ID</TableHead>
+                  <TableHead className="text-foreground">Cashfree ID</TableHead>
                   <TableHead className="text-foreground">User</TableHead>
                   <TableHead className="text-foreground">Event</TableHead>
                   <TableHead className="text-foreground">Amount</TableHead>
@@ -121,7 +121,7 @@ export default function TransactionsPage() {
               <TableBody>
                 {transactions.map((transaction) => (
                   <TableRow key={transaction.id} className="border-border hover:bg-muted/50">
-                    <TableCell className="text-foreground font-mono text-sm">{transaction.razorpayId}</TableCell>
+                    <TableCell className="text-foreground font-mono text-sm">{transaction.gatewayId}</TableCell>
                     <TableCell className="text-foreground">{transaction.userName}</TableCell>
                     <TableCell className="text-foreground">{transaction.event}</TableCell>
                     <TableCell className="text-foreground font-semibold">
@@ -171,8 +171,8 @@ export default function TransactionsPage() {
             <div className="space-y-4 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">Razorpay ID</p>
-                  <p className="font-mono text-sm text-foreground break-all">{selectedTransaction.razorpayId}</p>
+                  <p className="text-sm text-muted-foreground">Cashfree ID</p>
+                  <p className="font-mono text-sm text-foreground break-all">{selectedTransaction.gatewayId}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
@@ -218,7 +218,7 @@ export default function TransactionsPage() {
             <Button variant="outline" onClick={() => setShowDialog(false)}>
               Close
             </Button>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">View in Razorpay</Button>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">View in Cashfree</Button>
           </div>
         </DialogContent>
       </Dialog>

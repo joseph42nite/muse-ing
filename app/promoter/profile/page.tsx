@@ -6,11 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createClient } from "@/lib/supabase/client"
-import type { User } from "@supabase/supabase-js"
 
 export default function PromoterProfilePage() {
-  const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -21,65 +18,43 @@ export default function PromoterProfilePage() {
     promoter_code: "",
   })
   const router = useRouter()
-  const supabase = createClient()
 
   useEffect(() => {
-    const fetchUserProfile = async () => {
-      const { data: authUser, error: authError } = await supabase.auth.getUser()
-      if (authError || !authUser.user) {
-        setError("User not authenticated.")
-        setIsLoading(false)
-        router.push("/login")
-        return
-      }
-      setUser(authUser.user)
-
-      const { data: userDetails, error: fetchError } = await supabase
-        .from("users")
-        .select("name, email, phone, promoter_code")
-        .eq("id", authUser.user.id)
-        .single()
-
-      if (fetchError) {
-        setError("Error fetching profile data.")
-        console.error(fetchError)
-      } else if (userDetails) {
+    fetch("/api/profile")
+      .then(async (res) => {
+        if (res.status === 401) {
+          router.push("/login")
+          return
+        }
+        const u = await res.json()
         setFormData({
-          name: userDetails.name,
-          email: userDetails.email,
-          phone: userDetails.phone || "",
-          promoter_code: userDetails.promoter_code || "",
+          name: u.name,
+          email: u.email,
+          phone: u.phone || "",
+          promoter_code: u.promoter_code || "",
         })
-      }
-      setIsLoading(false)
-    }
-
-    fetchUserProfile()
-  }, [supabase, router])
+      })
+      .catch(() => setError("Error fetching profile data."))
+      .finally(() => setIsLoading(false))
+  }, [router])
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSaving(true)
     setError(null)
 
-    if (!user) {
-      setError("User not authenticated.")
-      setIsSaving(false)
-      return
-    }
-
     try {
-      const { error: updateError } = await supabase
-        .from("users")
-        .update({
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           name: formData.name,
           phone: formData.phone,
           promoter_code: formData.promoter_code,
-        })
-        .eq("id", user.id)
-
-      if (updateError) throw updateError
-
+        }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Could not save profile.")
       alert("Profile updated successfully!")
     } catch (err: any) {
       setError(err.message)
@@ -90,10 +65,6 @@ export default function PromoterProfilePage() {
 
   if (isLoading) {
     return <div className="p-8">Loading profile...</div>
-  }
-
-  if (error) {
-    return <div className="p-8 text-red-500">Error: {error}</div>
   }
 
   return (

@@ -1,193 +1,172 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Edit, Trash2, Plus } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { Trash2, Plus, Link2, Copy, Check, MessageCircle } from "lucide-react"
+import Link from "next/link"
 
-// Mock data - replace with actual API calls
-const mockEvents = [
-  {
-    id: "1",
-    eventName: "Summer Music Festival",
-    venue: "Grand Theater",
-    eventDate: "2024-06-15",
-    ticketPrice: 500,
-    totalTickets: 2000,
-    ticketsSold: 1500,
-    status: "published",
-  },
-  {
-    id: "2",
-    eventName: "Tech Conference 2024",
-    venue: "Convention Center",
-    eventDate: "2024-07-20",
-    ticketPrice: 2000,
-    totalTickets: 5000,
-    ticketsSold: 3200,
-    status: "published",
-  },
-  {
-    id: "3",
-    eventName: "Concert Night",
-    venue: "Amphitheater",
-    eventDate: "2024-08-10",
-    ticketPrice: 1000,
-    totalTickets: 3000,
-    ticketsSold: 0,
-    status: "draft",
-  },
-]
+interface EventRow {
+  id: string
+  title: string
+  date: string
+  ticket_price: number
+  total_bookings: number | null
+}
 
-const statusColors = {
-  draft: "bg-gray-500/20 text-gray-700",
-  published: "bg-green-500/20 text-green-700",
-  cancelled: "bg-red-500/20 text-red-700",
-  completed: "bg-blue-500/20 text-blue-700",
+function useCopy() {
+  const [copied, setCopied] = useState<string | null>(null)
+  const copy = async (key: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(key)
+      setTimeout(() => setCopied(null), 1800)
+    } catch {
+      window.prompt("Copy this link:", text)
+    }
+  }
+  return { copied, copy }
 }
 
 export default function MyEventsPage() {
-  const [events, setEvents] = useState<any[]>([])
-  const [showDialog, setShowDialog] = useState(false)
-  const [editingEvent, setEditingEvent] = useState<any | null>(null)
-  const [formData, setFormData] = useState({
-    eventName: "",
-    description: "",
-    eventDate: "",
-    ticketPrice: "",
-    totalTickets: "",
-    venue: "",
-  })
-  const supabase = createClient()
+  const [events, setEvents] = useState<EventRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [promoterCode, setPromoterCode] = useState<string | null>(null)
+  const [promoterId, setPromoterId] = useState<string | null>(null)
+
+  const [shareEvent, setShareEvent] = useState<EventRow | null>(null)
+  const { copied, copy } = useCopy()
+
+  // payment-link generator state
+  const [guest, setGuest] = useState({ name: "", phone: "", email: "", numPeople: 1 })
+  const [generating, setGenerating] = useState(false)
+  const [genError, setGenError] = useState<string | null>(null)
+  const [generated, setGenerated] = useState<{ url: string; amount: number } | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    const [evRes, meRes] = await Promise.all([fetch("/api/events"), fetch("/api/auth/me")])
+    if (meRes.ok) {
+      const me = await meRes.json()
+      setPromoterId(me.id)
+      setPromoterCode(me.promoter_code ?? null)
+    }
+    if (evRes.ok) setEvents(await evRes.json())
+    else setError("Please sign in to see your events.")
+    setLoading(false)
+  }, [])
 
   useEffect(() => {
-    const fetchEvents = async () => {
-      const { data: user, error: userError } = await supabase.auth.getUser()
-      if (userError || !user) {
-        console.error("Error fetching user:", userError?.message)
-        return
-      }
+    load()
+  }, [load])
 
-      const { data: promoterEvents, error } = await supabase
-        .from("events")
-        .select("*", { count: "exact" })
-        .eq("created_by", user.user?.id)
+  const origin = typeof window !== "undefined" ? window.location.origin : ""
+  const ref = promoterCode || promoterId || ""
+  const cleanLink = (e: EventRow) => `${origin}/book/${e.id}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`
 
-      if (error) {
-        console.error("Error fetching events:", error.message)
-      } else {
-        setEvents(promoterEvents || [])
-      }
-    }
-
-    fetchEvents()
-  }, [supabase])
-
-  const handleOpenDialog = (event?: any) => {
-    if (event) {
-      setEditingEvent(event)
-      setFormData({
-        eventName: event.eventName,
-        description: event.description,
-        eventDate: event.eventDate,
-        ticketPrice: event.ticketPrice.toString(),
-        totalTickets: event.totalTickets.toString(),
-        venue: event.venue,
-      })
-    } else {
-      setEditingEvent(null)
-      setFormData({
-        eventName: "",
-        description: "",
-        eventDate: "",
-        ticketPrice: "",
-        totalTickets: "",
-        venue: "",
-      })
-    }
-    setShowDialog(true)
+  const openShare = (e: EventRow) => {
+    setShareEvent(e)
+    setGuest({ name: "", phone: "", email: "", numPeople: 1 })
+    setGenerated(null)
+    setGenError(null)
   }
 
-  const handleSave = async () => {
-    // TODO: Implement API call to save event
-    console.log("Saving event:", formData)
-    setShowDialog(false)
+  const generatePaymentLink = async () => {
+    if (!shareEvent) return
+    setGenerating(true)
+    setGenError(null)
+    setGenerated(null)
+    try {
+      const res = await fetch("/api/payment-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          event_id: shareEvent.id,
+          name: guest.name,
+          phone: guest.phone,
+          email: guest.email,
+          num_people: guest.numPeople,
+          ref,
+        }),
+      })
+      const body = await res.json()
+      if (!res.ok) throw new Error(body.error || "Could not generate link.")
+      setGenerated({ url: body.payment_url, amount: body.amount })
+    } catch (e: any) {
+      setGenError(e.message)
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
-    // TODO: Implement API call to delete event
-    console.log("Deleting event:", id)
+    if (!window.confirm("Delete this event? Its bookings will be removed too.")) return
+    const res = await fetch(`/api/events/${id}`, { method: "DELETE" })
+    if (!res.ok) setError((await res.json()).error || "Could not delete event.")
+    else setEvents((prev) => prev.filter((e) => e.id !== id))
   }
+
+  const whatsapp = (text: string) => `https://wa.me/?text=${encodeURIComponent(text)}`
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-3xl font-bold text-foreground">My Events</h1>
-          <p className="text-muted-foreground mt-2">Manage all events you have created</p>
+          <p className="text-muted-foreground mt-2">Share a booking link or generate a payment link for a guest</p>
         </div>
-        <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => handleOpenDialog()}>
-          <Plus className="w-4 h-4 mr-2" />
-          Create New Event
-        </Button>
+        <Link href="/promoter/events/create">
+          <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Plus className="w-4 h-4 mr-2" />
+            Create New Event
+          </Button>
+        </Link>
       </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
       <Card className="bg-card border-border">
         <CardHeader>
-          <CardTitle>My Events</CardTitle>
-          <CardDescription>View and manage your events</CardDescription>
+          <CardTitle>Events</CardTitle>
+          <CardDescription>{loading ? "Loading…" : `${events.length} event${events.length === 1 ? "" : "s"}`}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="border-border hover:bg-transparent">
-                  <TableHead className="text-foreground">Event Name</TableHead>
-                  <TableHead className="text-foreground">Venue</TableHead>
+                  <TableHead className="text-foreground">Event</TableHead>
                   <TableHead className="text-foreground">Date</TableHead>
                   <TableHead className="text-foreground">Price</TableHead>
-                  <TableHead className="text-foreground">Tickets</TableHead>
-                  <TableHead className="text-foreground">Status</TableHead>
+                  <TableHead className="text-foreground">Bookings</TableHead>
                   <TableHead className="text-foreground text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {events.map((event) => (
                   <TableRow key={event.id} className="border-border hover:bg-muted/50">
-                    <TableCell className="text-foreground font-medium">{event.eventName}</TableCell>
-                    <TableCell className="text-foreground">{event.venue}</TableCell>
-                    <TableCell className="text-foreground">{event.eventDate}</TableCell>
-                    <TableCell className="text-foreground">₹{event.ticketPrice}</TableCell>
-                    <TableCell className="text-foreground">
-                      {event.ticketsSold}/{event.totalTickets}
+                    <TableCell className="text-foreground font-medium">{event.title}</TableCell>
+                    <TableCell className="text-foreground whitespace-nowrap">
+                      {new Date(event.date).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
                     </TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[event.status as keyof typeof statusColors]}>
-                        {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
-                      </Badge>
-                    </TableCell>
+                    <TableCell className="text-foreground">₹{Number(event.ticket_price).toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-foreground">{event.total_bookings ?? 0}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex gap-2 justify-end">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenDialog(event)}
-                          className="text-foreground border-border hover:bg-muted"
-                        >
-                          <Edit className="w-4 h-4" />
+                        <Button size="sm" onClick={() => openShare(event)} className="bg-primary text-primary-foreground">
+                          <Link2 className="w-4 h-4 mr-1" /> Links
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           onClick={() => handleDelete(event.id)}
                           className="text-red-600 border-red-600 hover:bg-red-50 bg-transparent"
+                          aria-label="Delete event"
                         >
                           <Trash2 className="w-4 h-4" />
                         </Button>
@@ -195,107 +174,124 @@ export default function MyEventsPage() {
                     </TableCell>
                   </TableRow>
                 ))}
+                {!loading && events.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                      No events yet. Create your first event to get a shareable booking link.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
 
-      {/* Add/Edit Dialog */}
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="bg-card border-border max-w-md">
+      <Dialog open={!!shareEvent} onOpenChange={(o) => !o && setShareEvent(null)}>
+        <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">{editingEvent ? "Edit Event" : "Create New Event"}</DialogTitle>
+            <DialogTitle className="text-foreground">{shareEvent?.title}</DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              {editingEvent ? "Update event information" : "Fill in the details to create a new event"}
+              Share one link with everyone, or create a ready-to-pay link for a specific guest.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-            <div>
-              <Label htmlFor="eventName" className="text-foreground">
-                Event Name
-              </Label>
-              <Input
-                id="eventName"
-                value={formData.eventName}
-                onChange={(e) => setFormData({ ...formData, eventName: e.target.value })}
-                className="bg-input border-border text-foreground mt-1"
-                placeholder="Enter event name"
-              />
+
+          {shareEvent && (
+            <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-1">
+              {/* Clean booking link */}
+              <section className="space-y-2">
+                <Label className="text-foreground">Public booking link</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={cleanLink(shareEvent)} className="bg-input border-border text-foreground" />
+                  <Button variant="outline" onClick={() => copy("clean", cleanLink(shareEvent))} aria-label="Copy booking link">
+                    {copied === "clean" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                  <a
+                    href={whatsapp(`Book tickets for ${shareEvent.title}: ${cleanLink(shareEvent)}`)}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button variant="outline" aria-label="Share on WhatsApp">
+                      <MessageCircle className="w-4 h-4" />
+                    </Button>
+                  </a>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Guests pick their ticket count and pay. Bookings are credited to you.
+                </p>
+              </section>
+
+              <hr className="border-border" />
+
+              {/* Per-guest payment link */}
+              <section className="space-y-3">
+                <Label className="text-foreground">Payment link for a guest</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    placeholder="Guest name"
+                    value={guest.name}
+                    onChange={(e) => setGuest({ ...guest, name: e.target.value })}
+                    className="bg-input border-border text-foreground"
+                  />
+                  <Input
+                    placeholder="Phone"
+                    type="tel"
+                    value={guest.phone}
+                    onChange={(e) => setGuest({ ...guest, phone: e.target.value })}
+                    className="bg-input border-border text-foreground"
+                  />
+                  <Input
+                    placeholder="Email (optional)"
+                    type="email"
+                    value={guest.email}
+                    onChange={(e) => setGuest({ ...guest, email: e.target.value })}
+                    className="bg-input border-border text-foreground"
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={guest.numPeople}
+                    onChange={(e) => setGuest({ ...guest, numPeople: Math.max(1, parseInt(e.target.value) || 1) })}
+                    className="bg-input border-border text-foreground"
+                  />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Total: ₹{(Number(shareEvent.ticket_price) * guest.numPeople).toLocaleString("en-IN")}
+                </p>
+                <Button
+                  onClick={generatePaymentLink}
+                  disabled={generating || !guest.name || guest.phone.replace(/\D/g, "").length < 10}
+                  className="bg-primary text-primary-foreground"
+                >
+                  {generating ? "Generating…" : "Generate payment link"}
+                </Button>
+                {genError && <p className="text-sm text-red-600">{genError}</p>}
+                {generated && (
+                  <div className="rounded-lg border border-border p-3 space-y-2">
+                    <p className="text-sm text-foreground">
+                      Link ready · ₹{generated.amount.toLocaleString("en-IN")}
+                    </p>
+                    <div className="flex gap-2">
+                      <Input readOnly value={generated.url} className="bg-input border-border text-foreground" />
+                      <Button variant="outline" onClick={() => copy("pay", generated.url)} aria-label="Copy payment link">
+                        {copied === "pay" ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                      <a
+                        href={whatsapp(`Hi ${guest.name}, pay ₹${generated.amount} to confirm your tickets for ${shareEvent.title}: ${generated.url}`)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Button variant="outline" aria-label="Send on WhatsApp">
+                          <MessageCircle className="w-4 h-4" />
+                        </Button>
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </section>
             </div>
-            <div>
-              <Label htmlFor="description" className="text-foreground">
-                Description
-              </Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="bg-input border-border text-foreground mt-1"
-                placeholder="Enter event description" rows={3}
-              />
-            </div>
-            <div>
-              <Label htmlFor="venue" className="text-foreground">
-                Venue
-              </Label>
-              <Input
-                id="venue"
-                value={formData.venue}
-                onChange={(e) => setFormData({ ...formData, venue: e.target.value })}
-                className="bg-input border-border text-foreground mt-1"
-                placeholder="Venue"
-              />
-            </div>
-            <div>
-              <Label htmlFor="eventDate" className="text-foreground">
-                Event Date
-              </Label>
-              <Input
-                id="eventDate"
-                type="date"
-                value={formData.eventDate}
-                onChange={(e) => setFormData({ ...formData, eventDate: e.target.value })}
-                className="bg-input border-border text-foreground mt-1"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="ticketPrice" className="text-foreground">
-                  Ticket Price
-                </Label>
-                <Input
-                  id="ticketPrice"
-                  type="number"
-                  value={formData.ticketPrice}
-                  onChange={(e) => setFormData({ ...formData, ticketPrice: e.target.value })}
-                  className="bg-input border-border text-foreground mt-1"
-                  placeholder="Price"
-                />
-              </div>
-              <div>
-                <Label htmlFor="totalTickets" className="text-foreground">
-                  Total Tickets
-                </Label>
-                <Input
-                  id="totalTickets"
-                  type="number"
-                  value={formData.totalTickets}
-                  onChange={(e) => setFormData({ ...formData, totalTickets: e.target.value })}
-                  className="bg-input border-border text-foreground mt-1"
-                  placeholder="Total"
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setShowDialog(false)}>
-              Cancel
-            </Button>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90" onClick={handleSave}>
-              {editingEvent ? "Update" : "Create"} Event
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
