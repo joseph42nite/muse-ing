@@ -1,5 +1,5 @@
 import type React from "react"
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Figtree, Inter, Instrument_Serif } from "next/font/google"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
@@ -28,11 +28,38 @@ const instrumentSerif = Instrument_Serif({
   display: "swap",
 })
 
+export const viewport: Viewport = {
+  themeColor: "#F4EFE6",
+  width: "device-width",
+  initialScale: 1,
+}
+
 export const metadata: Metadata = {
   title: "Muse-ing — Interactive Live Artists, Hosted Events & Real-Time Setlists",
   description:
     "Discover live performing artists, explore events hosted currently across venues, scan table QR codes to shape the setlist, or book & host an experience.",
-  generator: "muse-ing",
+  keywords: [
+    "live music",
+    "artist booking",
+    "gig discovery",
+    "crowd song request",
+    "interactive setlist",
+    "table voting",
+  ],
+  openGraph: {
+    title: "Muse-ing — Interactive Live Music Experience",
+    description:
+      "Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications.",
+    type: "website",
+    locale: "en_US",
+    siteName: "Muse-ing",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Muse-ing — Interactive Live Music Experience",
+    description:
+      "Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications.",
+  },
 }
 
 export default function RootLayout({

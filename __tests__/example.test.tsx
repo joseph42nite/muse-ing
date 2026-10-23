@@ -1,4 +1,6 @@
+import { describe, it, expect } from '@jest/globals';
 import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
 import Home from '../app/page';
  
 describe('Home', () => {
@@ -7,6 +9,6 @@ describe('Home', () => {
  
     const heading = screen.getByRole('heading', { level: 1 });
  
-    expect(heading).toBeInTheDocument();
+    expect(heading).toBeDefined();
   });
 });
