@@ -1,6 +1,30 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:ital,wght@0,300..900;1,300..900&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* Self-hosted webfonts: guaranteed instant render & eliminates CDN timeouts */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/InstrumentSerif-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/InstrumentSerif-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('/fonts/Figtree-Variable.ttf') format('truetype');
+}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -129,17 +153,17 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-figtree);
+    font-family: 'Figtree', var(--font-figtree), sans-serif;
   }
 }
 
 .instrument,
 .font-serif {
-  font-family: "Instrument Serif", var(--font-instrument-serif), Georgia, serif !important;
+  font-family: 'Instrument Serif', var(--font-instrument-serif), Georgia, serif !important;
 }
 
 .font-sans {
-  font-family: "Figtree", var(--font-figtree), sans-serif !important;
+  font-family: 'Figtree', var(--font-figtree), sans-serif !important;
 }
 
 .font-inter {
