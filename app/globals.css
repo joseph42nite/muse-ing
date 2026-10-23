@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Figtree:ital,wght@0,300..900;1,300..900&family=Inter:wght@300;400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -134,13 +135,13 @@
 
 .instrument,
 .font-serif {
-  font-family: var(--font-instrument-serif), "Instrument Serif", serif !important;
+  font-family: "Instrument Serif", var(--font-instrument-serif), Georgia, serif !important;
 }
 
 .font-sans {
-  font-family: var(--font-figtree), "Figtree", sans-serif !important;
+  font-family: "Figtree", var(--font-figtree), sans-serif !important;
 }
 
 .font-inter {
-  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: "Inter", var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }
