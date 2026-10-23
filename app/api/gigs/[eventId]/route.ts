@@ -24,7 +24,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
        u.name AS artist_name,
        u.instagram_handle AS artist_instagram,
        u.avatar_url AS artist_avatar,
-       u.bio AS artist_bio
+       u.bio AS artist_bio,
+       COALESCE(u.upi_id, 'arjunmehta@ybl') AS artist_upi_id,
+       COALESCE(u.payee_name, u.name, 'Live Artist') AS artist_payee_name,
+       COALESCE(u.upipay_provider, 'upi_direct') AS artist_upipay_provider
      FROM events e
      LEFT JOIN users u ON u.id = e.artist_id
      WHERE e.id = ?`,
@@ -124,7 +127,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid request body." }, { status: 400 })
 
-  const event = get<{ id: string; title: string }>("SELECT id, title FROM events WHERE id = ?", eventId)
+  const event = get<{ id: string; title: string; artist_id: string }>(
+    "SELECT id, title, artist_id FROM events WHERE id = ?",
+    eventId
+  )
   if (!event) return NextResponse.json({ error: "Gig not found." }, { status: 404 })
 
   const action = String(body.action ?? "")
@@ -170,7 +176,39 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
       dedicationMessage
     )
 
+    const upvotedPlaylistSongs: string[] = []
+
     songs.forEach((s: any, idx: number) => {
+      const cleanTitle = String(s.song_title).trim()
+      const cleanArtist = String(s.original_artist ?? "").trim() || null
+
+      // Check if this song is already in the artist's playlist
+      const existingPlaylistSong = get<any>(
+        `SELECT id, song_title FROM song_requests
+          WHERE event_id = ?
+            AND source_type = 'artist_playlist'
+            AND status != 'declined'
+            AND LOWER(TRIM(song_title)) = LOWER(TRIM(?))
+          LIMIT 1`,
+        eventId,
+        cleanTitle
+      )
+
+      if (existingPlaylistSong && !wantsDedication) {
+        // Automatically upvote the existing song in the artist's playlist
+        const existingVote = get(
+          "SELECT 1 FROM song_upvotes WHERE request_id = ? AND voter_token = ?",
+          existingPlaylistSong.id,
+          voterToken
+        )
+        if (!existingVote) {
+          run("INSERT INTO song_upvotes (request_id, voter_token) VALUES (?, ?)", existingPlaylistSong.id, voterToken)
+          run("UPDATE song_requests SET upvotes = upvotes + 1 WHERE id = ?", existingPlaylistSong.id)
+        }
+        upvotedPlaylistSongs.push(existingPlaylistSong.song_title)
+        return
+      }
+
       const reqId = crypto.randomUUID()
       run(
         `INSERT INTO song_requests
@@ -180,8 +218,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
         batchId,
         eventId,
         idx + 1,
-        String(s.song_title).trim(),
-        String(s.original_artist ?? "").trim() || null,
+        cleanTitle,
+        cleanArtist,
         wantsDedication,
         dedicatedTo,
         dedicationMessage,
@@ -189,7 +227,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
       )
     })
 
-    return NextResponse.json({ ok: true, batch_id: batchId, voter_token: voterToken })
+    return NextResponse.json({
+      ok: true,
+      batch_id: batchId,
+      voter_token: voterToken,
+      upvoted_playlist_songs: upvotedPlaylistSongs,
+    })
   }
 
   // 2. Upvote ("Uptick") a Confirmed Song (works for both Artist Playlist songs and Confirmed Crowd Requests)
@@ -243,9 +286,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
     if (!song) {
       return NextResponse.json({ error: "Song request not found." }, { status: 404 })
     }
-    if (!["confirmed", "playing"].includes(song.status)) {
+
+    // If this song is part of a 3-song batch and being paid after selection, ensure it is confirmed and others in batch are declined
+    if (song.batch_id && song.status === "pending_artist") {
+      run(
+        `UPDATE song_requests SET status = 'confirmed' WHERE id = ?`,
+        requestId
+      )
+      run(
+        `UPDATE song_requests SET status = 'declined' WHERE batch_id = ? AND id != ? AND status = 'pending_artist'`,
+        song.batch_id,
+        requestId
+      )
+    } else if (!["confirmed", "playing"].includes(song.status)) {
       return NextResponse.json(
-        { error: "Wait for the artist to confirm they can sing this song before paying ₹50." },
+        { error: "Wait for the artist to confirm they can sing this song before paying." },
         { status: 400 }
       )
     }
@@ -312,7 +367,86 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
       requestId
     )
 
+    if (event.artist_id) {
+      const txId = crypto.randomUUID()
+      const upiOrderId = String(body.upi_order_id || `UPIPAY_DED_${Date.now().toString().slice(-6)}`)
+      const upiUtr = String(body.upi_utr || `4295${Math.floor(10000000 + Math.random() * 90000000)}`)
+      run(
+        `INSERT INTO artist_transactions
+          (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
+         VALUES (?, ?, ?, ?, 'dedication', ?, ?, 50, ?, ?, ?, ?, 'upipay', 'paid')`,
+        txId,
+        event.artist_id,
+        eventId,
+        requestId,
+        finalRequesterName,
+        requesterPhone,
+        song.song_title,
+        `Dedicated to ${finalDedicatedTo}${dedicationMessage ? ` — "${dedicationMessage}"` : ""}`,
+        upiOrderId,
+        upiUtr
+      )
+    }
+
     return NextResponse.json({ ok: true, settled: true })
+  }
+
+  // 4. Artist selects 1 of the 3 songs from a batch so the audience member can pay directly for that song
+  if (action === "artist_select_song") {
+    const requestId = String(body.request_id ?? "").trim()
+    const song = get<any>(
+      "SELECT * FROM song_requests WHERE id = ? AND event_id = ?",
+      requestId,
+      eventId
+    )
+    if (!song) {
+      return NextResponse.json({ error: "Song request not found." }, { status: 404 })
+    }
+    run(`UPDATE song_requests SET status = 'confirmed' WHERE id = ?`, requestId)
+    if (song.batch_id) {
+      run(
+        `UPDATE song_requests SET status = 'declined' WHERE batch_id = ? AND id != ?`,
+        song.batch_id,
+        requestId
+      )
+    }
+    return NextResponse.json({ ok: true, selected_song_id: requestId })
+  }
+
+  // 5. Direct Tip to the Artist via UPIPay
+  if (action === "tip_artist") {
+    const amount = Number(body.amount ?? 100)
+    const supporterName = String(body.supporter_name ?? "Audience Member").trim()
+    const message = String(body.message ?? "").trim() || "Direct Audience Tip"
+    if (!amount || amount < 10) {
+      return NextResponse.json({ error: "Minimum tip amount is ₹10." }, { status: 400 })
+    }
+
+    if (event.artist_id) {
+      const txId = crypto.randomUUID()
+      const upiOrderId = String(body.upi_order_id || `UPIPAY_TIP_${Date.now().toString().slice(-6)}`)
+      const upiUtr = String(body.upi_utr || `4295${Math.floor(10000000 + Math.random() * 90000000)}`)
+      run(
+        `INSERT INTO artist_transactions
+          (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
+         VALUES (?, ?, ?, NULL, 'tip', ?, NULL, ?, NULL, ?, ?, ?, 'upipay', 'paid')`,
+        txId,
+        event.artist_id,
+        eventId,
+        supporterName,
+        amount,
+        message,
+        upiOrderId,
+        upiUtr
+      )
+    }
+
+    return NextResponse.json({
+      ok: true,
+      settled: true,
+      amount,
+      supporter_name: supporterName,
+    })
   }
 
   return NextResponse.json({ error: "Unknown action." }, { status: 400 })

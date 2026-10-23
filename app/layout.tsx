@@ -1,8 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Figtree } from "next/font/google"
+import { Figtree, Inter, Instrument_Serif } from "next/font/google"
 import { GeistMono } from "geist/font/mono"
-import { Instrument_Serif } from "next/font/google"
 import "./globals.css"
 
 import { ThemeProvider } from "@/components/theme-provider"
@@ -11,6 +10,13 @@ const figtree = Figtree({
   subsets: ["latin"],
   weight: ["300", "400", "500", "600", "700"],
   variable: "--font-figtree",
+  display: "swap",
+})
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-inter",
   display: "swap",
 })
 
@@ -23,9 +29,10 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export const metadata: Metadata = {
-  title: "v0 App",
-  description: "Created with v0",
-  generator: "v0.app",
+  title: "Muse-ing — Interactive Live Artists, Hosted Events & Real-Time Setlists",
+  description:
+    "Discover live performing artists, explore events hosted currently across venues, scan table QR codes to shape the setlist, or book & host an experience.",
+  generator: "muse-ing",
 }
 
 export default function RootLayout({
@@ -36,7 +43,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head />
-      <body className={`${figtree.variable} ${instrumentSerif.variable}`}>
+      <body className={`${figtree.variable} ${inter.variable} ${instrumentSerif.variable}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

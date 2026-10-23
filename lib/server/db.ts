@@ -146,6 +146,25 @@ CREATE TABLE IF NOT EXISTS refund_requests (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+CREATE TABLE IF NOT EXISTS artist_transactions (
+  id TEXT PRIMARY KEY,
+  artist_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE SET NULL,
+  request_id TEXT REFERENCES song_requests(id) ON DELETE SET NULL,
+  type TEXT NOT NULL DEFAULT 'dedication' CHECK (type IN ('dedication', 'tip')),
+  payer_name TEXT NOT NULL,
+  payer_phone TEXT,
+  amount REAL NOT NULL,
+  song_title TEXT,
+  note TEXT,
+  upi_order_id TEXT,
+  upi_utr TEXT,
+  provider TEXT NOT NULL DEFAULT 'upipay',
+  status TEXT NOT NULL DEFAULT 'paid' CHECK (status IN ('pending', 'paid')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS artist_tx_artist_idx ON artist_transactions (artist_id, created_at DESC);
 `
 
 function hashPw(password: string): string {
@@ -515,7 +534,131 @@ function seedIfNeeded(conn: DatabaseSync) {
   )
 }
 
-const g = globalThis as unknown as { __museDb?: DatabaseSync }
+const g = globalThis as unknown as { __museDb?: DatabaseSync; __museDbVersion?: number }
+
+function ensureSchemaMigrations(conn: DatabaseSync) {
+  conn.exec(SCHEMA)
+  const alterCols = [
+    "ALTER TABLE song_requests ADD COLUMN karaoke_candidates_json TEXT;",
+    "ALTER TABLE users ADD COLUMN upi_id TEXT;",
+    "ALTER TABLE users ADD COLUMN payee_name TEXT;",
+    "ALTER TABLE users ADD COLUMN bank_name TEXT;",
+    "ALTER TABLE users ADD COLUMN account_number TEXT;",
+    "ALTER TABLE users ADD COLUMN ifsc_code TEXT;",
+    "ALTER TABLE users ADD COLUMN upipay_provider TEXT DEFAULT 'upi_direct';",
+    "ALTER TABLE users ADD COLUMN upipay_merchant_id TEXT;",
+  ]
+  for (const sql of alterCols) {
+    try {
+      conn.exec(sql)
+    } catch {
+      // Column already exists
+    }
+  }
+
+  // Ensure Arjun Mehta has default UPIPay & Bank details if empty
+  conn
+    .prepare(
+      `UPDATE users
+          SET upi_id = COALESCE(upi_id, 'arjunmehta@ybl'),
+              payee_name = COALESCE(payee_name, 'Arjun Mehta Live'),
+              bank_name = COALESCE(bank_name, 'HDFC Bank • Indiranagar'),
+              account_number = COALESCE(account_number, '5010048291034'),
+              ifsc_code = COALESCE(ifsc_code, 'HDFC0000142'),
+              upipay_provider = COALESCE(upipay_provider, 'upi_direct')
+        WHERE id = 'artist-arjun-01'`
+    )
+    .run()
+
+  // Ensure Arjun Mehta has an upcoming weekend gig as well so Upcoming Gigs tab shows multiple gigs
+  const tomorrowDateOnly = new Date(Date.now() + 86400e3).toISOString().slice(0, 10)
+  const tomorrowIso = `${tomorrowDateOnly}T21:00:00.000Z`
+  const nextWeekDateOnly = new Date(Date.now() + 5 * 86400e3).toISOString().slice(0, 10)
+  const nextWeekIso = `${nextWeekDateOnly}T20:30:00.000Z`
+
+  conn
+    .prepare(
+      `INSERT OR IGNORE INTO events
+        (id, title, description, date, event_date_only, location_name, location_slug, artist_id, ticket_price, active_karaoke_Floor_video_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'artist-arjun-01', ?, NULL)`
+    )
+    .run(
+      "gig-arjun-saturday",
+      "Saturday Rooftop Acoustic & Dedications",
+      "Live acoustic requests, crowd sing-alongs, and UPIPay instant dedications.",
+      tomorrowIso,
+      tomorrowDateOnly,
+      "Windmills Craftworks, Whitefield • Bengaluru",
+      "windmills-whitefield",
+      799
+    )
+
+  conn
+    .prepare(
+      `INSERT OR IGNORE INTO events
+        (id, title, description, date, event_date_only, location_name, location_slug, artist_id, ticket_price, active_karaoke_Floor_video_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'artist-arjun-01', ?, NULL)`
+    )
+    .run(
+      "gig-arjun-friday-next",
+      "Midnight Indie & Sufi Unplugged",
+      "Intimate unplugged setlist powered by audience upvotes.",
+      nextWeekIso,
+      nextWeekDateOnly,
+      "Fandom at Gilly's Redefined, Koramangala • Bengaluru",
+      "fandom-koramangala",
+      599
+    )
+
+  // Seed initial incoming UPIPay transactions for Arjun Mehta if none exist
+  const txCount = conn
+    .prepare("SELECT COUNT(*) AS cnt FROM artist_transactions WHERE artist_id = 'artist-arjun-01'")
+    .get() as { cnt: number } | undefined
+
+  if (!txCount || txCount.cnt === 0) {
+    const insertTx = conn.prepare(
+      `INSERT OR IGNORE INTO artist_transactions
+        (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
+       VALUES (?, 'artist-arjun-01', 'gig-koramangala-tonight', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upipay', 'paid')`
+    )
+    insertTx.run(
+      "tx-demo-1",
+      "req-demo-1a",
+      "dedication",
+      "Rohan Verma",
+      "9820112233",
+      50,
+      "Kesariya",
+      "Dedicated to Ananya (Happy Anniversary!)",
+      "UPIPAY_DED_1001",
+      "429518293012"
+    )
+    insertTx.run(
+      "tx-demo-2",
+      "req-demo-2a",
+      "dedication",
+      "Sneha & Table 7",
+      "9811223344",
+      50,
+      "Yellow",
+      "Dedicated to Vikram (Birthday Boy!)",
+      "UPIPAY_DED_1002",
+      "429519847105"
+    )
+    insertTx.run(
+      "tx-demo-3",
+      null,
+      "tip",
+      "Kabir & Table 3",
+      "9845099887",
+      200,
+      null,
+      "Amazing acoustic rendition of Kun Faya Kun!",
+      "UPIPAY_TIP_1003",
+      "429520491823"
+    )
+  }
+}
 
 // Single shared connection (survives Next.js dev hot reloads).
 export function db(): DatabaseSync {
@@ -525,13 +668,13 @@ export function db(): DatabaseSync {
     const conn = new DatabaseSync(file)
     conn.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
     conn.exec(SCHEMA)
-    try {
-      conn.exec("ALTER TABLE song_requests ADD COLUMN karaoke_candidates_json TEXT;")
-    } catch {
-      // Column already exists
-    }
     seedIfNeeded(conn)
+    ensureSchemaMigrations(conn)
     g.__museDb = conn
+    g.__museDbVersion = 2
+  } else if (g.__museDbVersion !== 2) {
+    ensureSchemaMigrations(g.__museDb)
+    g.__museDbVersion = 2
   }
   return g.__museDb
 }

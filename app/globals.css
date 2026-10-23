@@ -40,6 +40,7 @@
   --sidebar-ring: oklch(0.65 0.2 270); /* Violet for sidebar focus */
   --font-instrument-serif: "Instrument Serif", serif; /* Instrument Serif font family configuration */
   --font-figtree: "Figtree", sans-serif; /* Figtree font family configuration */
+  --font-inter: "Inter", sans-serif; /* Inter font family configuration */
 }
 
 .dark {
@@ -81,7 +82,8 @@
 }
 
 @theme inline {
-  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
+  --font-serif: var(--font-instrument-serif);
+  --font-sans: var(--font-figtree);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -130,6 +132,15 @@
   }
 }
 
-.instrument {
-  font-family: var(--font-instrument-serif);
+.instrument,
+.font-serif {
+  font-family: var(--font-instrument-serif), "Instrument Serif", serif !important;
+}
+
+.font-sans {
+  font-family: var(--font-figtree), "Figtree", sans-serif !important;
+}
+
+.font-inter {
+  font-family: var(--font-inter), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
 }

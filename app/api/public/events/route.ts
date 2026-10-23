@@ -52,5 +52,38 @@ export async function GET(req: Request) {
   }
 
   const events = all(`${baseSelect} ORDER BY e.date ASC`)
-  return NextResponse.json({ events })
+  const artists = all(`
+    SELECT
+      u.id,
+      u.name,
+      u.instagram_handle,
+      u.avatar_url,
+      u.bio,
+      (SELECT e.id FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_id,
+      (SELECT e.title FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_title,
+      (SELECT e.location_name FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_location,
+      (SELECT e.location_slug FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_slug,
+      (SELECT e.event_date_only FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_date
+    FROM users u
+    WHERE u.role = 'artist'
+    ORDER BY u.created_at ASC
+  `)
+  return NextResponse.json({ events, artists })
+}
+
+export async function POST(req: Request) {
+  try {
+    const body = await req.json()
+    const { name, email, phone, inquiryType, eventId, message } = body || {}
+    if (!name || !email) {
+      return NextResponse.json({ error: "Name and email are required." }, { status: 400 })
+    }
+    return NextResponse.json({
+      ok: true,
+      receivedAt: new Date().toISOString(),
+      summary: { name, email, phone, inquiryType: inquiryType || "general", eventId: eventId || null, message },
+    })
+  } catch {
+    return NextResponse.json({ error: "Invalid request payload." }, { status: 400 })
+  }
 }
