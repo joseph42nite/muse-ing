@@ -72,7 +72,7 @@ function smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return 
 const smax = (a, b, k) => -smin(-a, -b, k);
 
 /* The smirk lifts the mouth's left corner (his left, our right: +x). */
-const smirk = x => .075 * smooth(-.1, .38, x);
+const smirk = x => .1 * smooth(-.1, .38, x);
 
 /* A chimp's head: a low skull set back, the forehead sloping away behind a
    brow shelf, and a snout that juts — the long upper lip out past the nose.
@@ -171,9 +171,12 @@ function projectSphere(sdf, W, H, o, tMax) {
    each wrinkle is placed in head space, where it was designed. */
 function skinMask(x, y, z) {
   const front = smooth(.2, .45, z);
-  const upper = Math.hypot(x / .74, (y - .12) / .5);
+  /* the brow's edge wanders, and fades over a wider band than the cheeks */
+  const top = smooth(.3, .52, y);
+  const upper = Math.hypot(x / .74, (y - .12) / .5) + (vnoise(x * 7, y * 7, 4.4) - .5) * .16 * top;
   const lower = Math.hypot(x / .5, (y + .5) / .42);
-  return (1 - smooth(.8, 1.05, Math.min(upper, lower))) * front;
+  const e = Math.min(upper, lower);
+  return (1 - smooth(lerp(.8, .64, top), lerp(1.05, 1.14, top), e)) * front;
 }
 
 function paintSkin(proj, W, H, o, TW, TH) {
@@ -247,7 +250,7 @@ function paintSkin(proj, W, H, o, TW, TH) {
 
         /* roughness: oilier on the nose and lips, drier in the creases */
         const nose = Math.exp(-Math.pow(Math.hypot(x / 1.4, (y + .1) / .6) / .17, 2));
-        rg = .52 + cav * .2 - nose * .14 - lips * .1 + pores * .06;
+        rg = .52 + cav * .2 - nose * .14 - lips * .3 + pores * .06;
 
         h = lerp(hf, h, m);
         rg = lerp(.9, rg, m);
@@ -270,6 +273,9 @@ function paintSkin(proj, W, H, o, TW, TH) {
         const ly2 = y - smirk(x);
         const lipTone = (1 - smooth(.28, .38, ax)) * smooth(-.84, -.78, ly2) * (1 - smooth(-.58, -.54, ly2));
         kr = lerp(kr, 40, lipTone * .6); kg = lerp(kg, 38, lipTone * .6); kb = lerp(kb, 44, lipTone * .6);
+        /* the line where the lips meet, dark, following the smirk */
+        const mline = Math.exp(-Math.pow((ly2 + .63) / .014, 2)) * (1 - smooth(.3, .37, ax)) * smooth(.95, 1.05, z);
+        kr *= 1 - .65 * mline; kg *= 1 - .65 * mline; kb *= 1 - .65 * mline;
         const sock = Math.exp(-Math.pow(Math.hypot(ax - .29, (y - .12) / .7) / .2, 2));
         kr *= 1 - .35 * sock; kg *= 1 - .35 * sock; kb *= 1 - .35 * sock;
         sr = lerp(fv, kr, m); sg = lerp(fv, kg, m); sb = lerp(fv + 2, kb, m);
@@ -290,7 +296,7 @@ function paintSkin(proj, W, H, o, TW, TH) {
       const edge = .3 + .7 * (1 - smooth(0, .55, m));
       fur[p] = sat(dens) * 255;
       fur[p + 1] = sat(len * edge) * 255;
-      fur[p + 2] = 0; fur[p + 3] = 255;
+      fur[p + 2] = sat(smooth(.32, .52, y) * smooth(.15, .45, z)) * 255; fur[p + 3] = 255;
     }
   }
 
@@ -335,6 +341,7 @@ function poreMap(size) {
 /* ================================================================= 3 · gl */
 const canvas = document.getElementById('gl');
 const status = document.getElementById('status');
+const TAG = document.getElementById('tag'), CUE = document.getElementById('cue');
 const vpW = () => document.documentElement.clientWidth || innerWidth;
 const vpH = () => document.documentElement.clientHeight || innerHeight;
 let renderer, scene, camera, maxAniso = 1;
@@ -390,7 +397,26 @@ function buildEnvironment() {
 /* ========================================================== 4 · the head */
 const O = new THREE.Vector3(0, -.1, .15);
 const SEG_W = 256, SEG_H = 192;
-const HEAD = {};
+const HEAD = { deform: { uDraw: { value: 0 }, uPuff: { value: 0 } } };
+
+/* The smoking face. uDraw: lips purse round the filter and the cheeks hollow.
+   uPuff: the lower lip drops, the cheeks fill. Applied in the vertex stage of
+   the skin and of every fur shell, so the coat moves with the face. */
+const DEFORM_GLSL = [
+  'uniform float uDraw; uniform float uPuff;',
+  'vec3 muzzleDeform(vec3 p){',
+  '  float ax = abs(p.x);',
+  '  vec3 c = (vec3(ax, p.y, p.z) - vec3(0.42, -0.36, 0.68)) / vec3(0.17, 0.16, 0.2);',
+  '  float ch = exp(-dot(c, c));',
+  '  float inward = ch * (0.035 * uDraw - 0.016 * uPuff);',
+  '  p.x -= sign(p.x) * inward * 0.8; p.z -= inward * 0.4;',
+  '  float lip = exp(-pow(ax / 0.3, 4.0)) * exp(-pow((p.y + 0.62) / 0.13, 2.0)) * smoothstep(0.9, 1.05, p.z);',
+  '  p.x *= 1.0 - 0.1 * uDraw * lip;',
+  '  p.z += 0.025 * uDraw * lip + 0.01 * uPuff * lip;',
+  '  p.y -= 0.024 * uPuff * lip * smoothstep(-0.6, -0.7, p.y);',
+  '  return p;',
+  '}'
+].join('\n');
 
 function buildHead(envMap) {
   const TW = 2048, TH = 1024;
@@ -412,6 +438,11 @@ function buildHead(envMap) {
     clearcoat: .1, clearcoatRoughness: .45, clearcoatNormalMap: normalMap,
     envMap: envMap, envMapIntensity: .26
   });
+  skin.onBeforeCompile = sh => {
+    sh.uniforms.uDraw = HEAD.deform.uDraw; sh.uniforms.uPuff = HEAD.deform.uPuff;
+    sh.vertexShader = DEFORM_GLSL + '\n' + sh.vertexShader.replace(
+      '#include <begin_vertex>', '#include <begin_vertex>\n  transformed = muzzleDeform(transformed);');
+  };
   HEAD.skin = skin;
   const mesh = new THREE.Mesh(proj.geo, skin);
   mesh.castShadow = mesh.receiveShadow = true;
@@ -442,15 +473,16 @@ function buildEars(envMap) {
 
 /* ---------------------------------------------------------- fur shells */
 const FUR_VS = [
+  DEFORM_GLSL,
   'uniform float uLevel; uniform float uLen; uniform float uDroop; uniform sampler2D tFur;',
   'varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying float vDens;',
   'void main(){',
   '  vUv = uv;',
   '  vec4 f = texture2D(tFur, uv);',
   '  float len = uLen * (0.25 + f.g);',
-  '  vec3 p = position + normal * len * uLevel;',
-  '  p.y -= len * uLevel * uLevel * uDroop;',                     /* the coat lies down */
-  '  p.z -= len * uLevel * uLevel * uDroop * 0.45;',
+  '  vec3 p = muzzleDeform(position) + normal * len * uLevel;',
+  '  vec3 lie = normalize(mix(vec3(0.0, -1.0, -0.45), vec3(0.0, 0.25, -1.0), f.b));',  /* down, or back over the brow */
+  '  p += lie * len * uLevel * uLevel * uDroop;',
   '  vec4 w = modelMatrix * vec4(p, 1.0);',
   '  vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vDens = f.r;',
   '  gl_Position = projectionMatrix * viewMatrix * w;',
@@ -492,7 +524,8 @@ function shellGroup(NS, own, order) {
   const shared = Object.assign({
     tFur: { value: HEAD.furTex },
     uKeyDir: { value: new THREE.Vector3(-.55, .7, .45).normalize() },
-    uKey: { value: hdr(1.25, 1.25, 1.3) }, uAmb: { value: hdr(.07, .07, .08) }
+    uKey: { value: hdr(1.25, 1.25, 1.3) }, uAmb: { value: hdr(.07, .07, .08) },
+    uDraw: HEAD.deform.uDraw, uPuff: HEAD.deform.uPuff
   }, own);
   for (let i = 0; i < NS; i++) {
     const u = Object.assign({}, shared, { uLevel: { value: (i + 1) / NS } });
@@ -719,6 +752,7 @@ const SMOKE_VS = [
   '}'
 ].join('\n');
 const SMOKE_FS = [
+  'uniform float uAlpha;',
   'varying float vA; varying float vSeed; varying float vAge;',
   'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
   'float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
@@ -730,7 +764,7 @@ const SMOKE_FS = [
   '  float a = vSeed * 6.2831 + vAge * 2.5;',                       /* each puff turns as it rises */
   '  vec2 q = mat2(cos(a), -sin(a), sin(a), cos(a)) * pc;',
   '  float f = n(q * 3.0 + vSeed * 17.0) * 0.6 + n(q * 7.0 + vSeed * 5.0) * 0.4;',
-  '  float alpha = smoothstep(0.5, 0.0, r) * smoothstep(0.32, 0.8, f) * vA * 0.13;',
+  '  float alpha = smoothstep(0.5, 0.0, r) * smoothstep(0.32, 0.8, f) * vA * uAlpha;',
   '  gl_FragColor = vec4(0.6, 0.6, 0.64, alpha);',
   '}'
 ].join('\n');
@@ -744,7 +778,7 @@ function buildSmoke() {
   g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   g.setAttribute('aOff', new THREE.BufferAttribute(off, 1));
   CIG.smokeMat = new THREE.ShaderMaterial({
-    uniforms: { uT: { value: 0 }, uTip: { value: CIG.tip.clone() }, uPx: { value: 1000 } },
+    uniforms: { uT: { value: 0 }, uTip: { value: CIG.tip.clone() }, uPx: { value: 1000 }, uAlpha: { value: .13 } },
     vertexShader: SMOKE_VS, fragmentShader: SMOKE_FS,
     transparent: true, depthWrite: false
   });
@@ -753,11 +787,58 @@ function buildSmoke() {
   pts.renderOrder = 100;
   return pts;
 }
+/* The exhale: every particle leaves the lips inside the first second of the
+   breath, is pushed out and slows, then rises and spreads. uStart is the
+   breath's start time; before it, and after a particle's life, it is gone. */
+const EXHALE_VS = [
+  'uniform float uT; uniform float uStart; uniform vec3 uMouth; uniform float uPx;',
+  'attribute float aSeed; attribute float aOff;',
+  'varying float vA; varying float vSeed; varying float vAge;',
+  'void main(){',
+  '  float life = 3.2;',
+  '  float age = uT - (uStart + aOff * 1.0);',
+  '  float k = clamp(age / life, 0.0, 1.0);',
+  '  vec3 dir = normalize(vec3((aSeed - 0.5) * 0.7, -0.2 + aSeed * 0.15, 1.0));',
+  '  vec3 p = uMouth + dir * 0.45 * (1.0 - exp(-max(age, 0.0) * 1.7));',
+  '  p += vec3(0.05 * age, 0.04 * age + 0.03 * age * age, 0.0);',
+  '  float sw = 0.01 + max(age, 0.0) * 0.05;',
+  '  p.x += sin(age * 1.9 + aSeed * 30.0) * sw; p.y += cos(age * 1.5 + aSeed * 17.0) * sw * 0.6;',
+  '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
+  '  vA = (age < 0.0 || age > life) ? 0.0 : smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.25, 1.0, k));',
+  '  gl_PointSize = vA > 0.0 ? uPx * (0.035 + max(age, 0.0) * 0.085) / -mv.z : 0.0;',
+  '  gl_Position = projectionMatrix * mv;',
+  '  vSeed = aSeed; vAge = k;',
+  '}'
+].join('\n');
+
+function buildExhale() {
+  const N = 90, rnd = mulberry32(19);
+  const pos = new Float32Array(N * 3), seed = new Float32Array(N), off = new Float32Array(N);
+  for (let i = 0; i < N; i++) { seed[i] = rnd(); off[i] = rnd(); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
+  g.setAttribute('aOff', new THREE.BufferAttribute(off, 1));
+  CIG.mouth = mouthCorner(.04, -.64).add(new THREE.Vector3(0, 0, .03));
+  CIG.exhaleMat = new THREE.ShaderMaterial({
+    uniforms: { uT: { value: 0 }, uStart: { value: -99 }, uMouth: { value: CIG.mouth }, uPx: { value: 1000 }, uAlpha: { value: .16 } },
+    vertexShader: EXHALE_VS, fragmentShader: SMOKE_FS,
+    transparent: true, depthWrite: false
+  });
+  const pts = new THREE.Points(g, CIG.exhaleMat);
+  pts.frustumCulled = false;
+  pts.renderOrder = 101;
+  return pts;
+}
+
 /* point sizes are in world units: scale by the buffer's pixels per unit at depth 1 */
 function smokePx() {
   if (!CIG.smokeMat) return;
   const h = renderer.domElement.height;
-  CIG.smokeMat.uniforms.uPx.value = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  const px = h / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  CIG.smokeMat.uniforms.uPx.value = px;
+  if (CIG.exhaleMat) CIG.exhaleMat.uniforms.uPx.value = px;
+  if (WORD.mat) WORD.mat.uniforms.uPx.value = px;
 }
 
 /* ---------------------------------------------------- shirt, for framing */
@@ -910,53 +991,183 @@ function resizePost() {
 }
 
 /* ====================================================== 7 · the camera */
-const TARGET = new THREE.Vector3(0, -.22, .3);
-const VIEWS = { front: [0, .02], three: [.55, .06], profile: [1.45, .02] };
-const RIG = { yaw: VIEWS.three[0], pitch: VIEWS.three[1], tYaw: VIEWS.three[0], tPitch: VIEWS.three[1], dist: 5.6, tDist: 5.6, mx: 0, my: 0 };
+/* Two shots, scrubbed by the scroll: the close side-on profile with the
+   cigarette, and the wide that leaves room on the left for the word. A drag
+   turns the head on top of either, and springs back when let go. */
+const SHOTS = {
+  close: { yaw: 1.32, pitch: .02, dist: 3.3, base: new THREE.Vector3(0, -.42, .7), shift: 0 },
+  wide:  { yaw: .95, pitch: .07, dist: 7.4, base: new THREE.Vector3(0, -.2, .4), shift: 1.35 }
+};
+const SCROLL = { p: 0, sp: 0 };
+const RIG = { dYaw: 0, dPitch: 0, tdYaw: 0, tdPitch: 0, dragging: false };
+const _right = new THREE.Vector3(), _target = new THREE.Vector3();
+
+/* the frame a shot sees: target shifted along the camera's right, so the
+   head can sit off-centre */
+function shotPose(yaw, pitch, dist, base, shift, outPos, outTarget) {
+  _right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+  outTarget.copy(base).addScaledVector(_right, -shift);
+  outPos.set(
+    outTarget.x + Math.sin(yaw) * Math.cos(pitch) * dist,
+    outTarget.y + Math.sin(pitch) * dist,
+    outTarget.z + Math.cos(yaw) * Math.cos(pitch) * dist
+  );
+}
+const tallFix = () => clamp((1.2 - vpW() / vpH()) / .7, 0, 1);
 
 function applyCamera(dt) {
-  RIG.yaw = damp(RIG.yaw, RIG.tYaw, 6, dt);
-  RIG.pitch = damp(RIG.pitch, RIG.tPitch, 6, dt);
-  RIG.dist = damp(RIG.dist, RIG.tDist, 6, dt);
-  const tall = clamp((1.2 - vpW() / vpH()) / .7, 0, 1);
-  const r = RIG.dist + tall * 2.2;
-  camera.position.set(
-    TARGET.x + Math.sin(RIG.yaw) * Math.cos(RIG.pitch) * r,
-    TARGET.y + Math.sin(RIG.pitch) * r,
-    TARGET.z + Math.cos(RIG.yaw) * Math.cos(RIG.pitch) * r
-  );
-  camera.lookAt(TARGET);
+  SCROLL.sp = damp(SCROLL.sp, SCROLL.p, REDUCE ? 30 : 5, dt);
+  if (!RIG.dragging) { RIG.tdYaw = damp(RIG.tdYaw, 0, 1.6, dt); RIG.tdPitch = damp(RIG.tdPitch, 0, 1.6, dt); }
+  RIG.dYaw = damp(RIG.dYaw, RIG.tdYaw, 8, dt);
+  RIG.dPitch = damp(RIG.dPitch, RIG.tdPitch, 8, dt);
+  const a = SHOTS.close, b = SHOTS.wide, u = smooth(0, .55, SCROLL.sp);
+  _target.lerpVectors(a.base, b.base, u);
+  shotPose(lerp(a.yaw, b.yaw, u) + RIG.dYaw, lerp(a.pitch, b.pitch, u) + RIG.dPitch,
+    lerp(a.dist, b.dist, u) + tallFix() * 2.4, _target, lerp(a.shift, b.shift, u) * (1 - tallFix() * .8),
+    camera.position, _target);
+  camera.lookAt(_target);
 }
 
 function wireControls() {
   let drag = null;
-  canvas.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); canvas.classList.add('is-drag'); });
+  canvas.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'touch') return;                /* touch scrolls the page */
+    drag = { x: e.clientX, y: e.clientY }; RIG.dragging = true;
+    canvas.setPointerCapture(e.pointerId); canvas.classList.add('is-drag');
+  });
   canvas.addEventListener('pointermove', e => {
     if (!drag) return;
-    RIG.tYaw -= (e.clientX - drag.x) * .006;
-    RIG.tPitch = clamp(RIG.tPitch + (e.clientY - drag.y) * .004, -.5, .7);
+    RIG.tdYaw = clamp(RIG.tdYaw - (e.clientX - drag.x) * .006, -1.6, 1.6);
+    RIG.tdPitch = clamp(RIG.tdPitch + (e.clientY - drag.y) * .004, -.4, .5);
     drag.x = e.clientX; drag.y = e.clientY;
-    setPressed(null);
   });
-  const end = () => { drag = null; canvas.classList.remove('is-drag'); };
+  const end = () => { drag = null; RIG.dragging = false; canvas.classList.remove('is-drag'); };
   canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
-  canvas.addEventListener('wheel', e => { e.preventDefault(); RIG.tDist = clamp(RIG.tDist + e.deltaY * .003, 2.4, 7); }, { passive: false });
 
-  const views = [].slice.call(document.querySelectorAll('[data-view]'));
-  function setPressed(name) { views.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name))); }
-  views.forEach(b => b.addEventListener('click', () => {
-    const v = VIEWS[b.dataset.view];
-    /* take the short way round */
-    const turns = Math.round((RIG.tYaw - v[0]) / (Math.PI * 2));
-    RIG.tYaw = v[0] + turns * Math.PI * 2; RIG.tPitch = v[1];
-    setPressed(b.dataset.view);
-  }));
+  /* the canvas sits under the page; let the wheel scroll it */
+  const onScroll = () => {
+    const max = document.documentElement.scrollHeight - vpH();
+    SCROLL.p = max > 0 ? clamp(scrollY / max, 0, 1) : 0;
+  };
+  addEventListener('scroll', onScroll, { passive: true });
+  onScroll(); SCROLL.sp = SCROLL.p;
+
   document.querySelectorAll('[data-toggle]').forEach(b => b.addEventListener('click', () => {
     const on = b.getAttribute('aria-pressed') !== 'true';
     b.setAttribute('aria-pressed', String(on));
     if (b.dataset.toggle === 'fur') { HEAD.fur.visible = on; HEAD.wisps.visible = on; }
     if (b.dataset.toggle === 'post') setFilm(on);
   }));
+}
+
+/* =================================================== 7b · the wordmark */
+/* The exhale that becomes the name. Every particle leaves the lips on its
+   own clock, billows out through a turbulent middle, and settles onto a
+   glyph of "muse-ing" set in a plane that faces the wide shot — so the word
+   is only perfectly legible once the camera has arrived. Scrolling back
+   draws it all back in. */
+const WORD_VS = [
+  'uniform float uP; uniform float uT; uniform float uPx;',
+  'attribute vec3 aStart; attribute vec3 aMid; attribute float aR;',
+  'varying float vA; varying float vK; varying float vSeed;',
+  'vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }',
+  'void main(){',
+  '  float k = clamp((uP - aR * 0.45) / 0.55, 0.0, 1.0);',
+  '  float e = k * k * (3.0 - 2.0 * k);',
+  '  vec3 p = bez(aStart, aMid, position, e);',
+  '  float turb = sin(e * 3.14159);',                                  /* wild mid-flight, calm once set */
+  '  p += vec3(sin(uT * 1.3 + aR * 40.0), cos(uT * 1.1 + aR * 31.0), sin(uT * 0.9 + aR * 23.0)) * (0.07 * turb + 0.005);',
+  '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
+  '  vA = smoothstep(0.0, 0.06, k);',
+  '  gl_PointSize = vA > 0.0 ? uPx * mix(0.11, 0.024, e) / -mv.z : 0.0;',
+  '  gl_Position = projectionMatrix * mv;',
+  '  vK = e; vSeed = aR;',
+  '}'
+].join('\n');
+const WORD_FS = [
+  'varying float vA; varying float vK; varying float vSeed;',
+  'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+  'float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+  '  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }',
+  'void main(){',
+  '  vec2 pc = gl_PointCoord - 0.5; float r = length(pc);',
+  '  if (r > 0.5) discard;',
+  '  float wisp = mix(smoothstep(0.25, 0.75, n(pc * 4.0 + vSeed * 13.0)), 1.0, vK);',  /* puffs in flight, dots once set */
+  '  float a = smoothstep(0.5, 0.05, r) * wisp * vA * mix(0.055, 0.62, vK * vK);',
+  '  vec3 c = mix(vec3(0.6, 0.6, 0.64), vec3(0.93, 0.92, 0.9), vK);',
+  '  gl_FragColor = vec4(c, a);',
+  '}'
+].join('\n');
+
+function sampleWord(text, family, maxPts) {
+  const W = 1600, H = 420, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = '330px ' + family;
+  g.fillText(text, W / 2, H / 2 + 10);
+  const d = g.getImageData(0, 0, W, H).data, pts = [];
+  let minX = W, maxX = 0;
+  for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) {
+    if (d[(y * W + x) * 4 + 3] > 140) { pts.push(x, y); if (x < minX) minX = x; if (x > maxX) maxX = x; }
+  }
+  const rnd = mulberry32(5), idx = [];
+  for (let i = 0; i < pts.length / 2; i++) idx.push(i);
+  for (let i = idx.length - 1; i > 0; i--) { const j = (rnd() * (i + 1)) | 0; const t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+  const n = Math.min(maxPts, idx.length), out = new Float32Array(n * 2);
+  const cx = (minX + maxX) / 2, span = Math.max(1, maxX - minX);
+  /* normalised: x across [-.5, .5] of the word's ink width, y in the same units */
+  for (let i = 0; i < n; i++) { const k = idx[i]; out[i * 2] = (pts[k * 2] - cx) / span; out[i * 2 + 1] = -(pts[k * 2 + 1] - H / 2) / span; }
+  return out;
+}
+
+const WORD = {};
+function buildWord(family) {
+  /* the plane the word sits on: in front of the face, in the left of the wide shot */
+  const b = SHOTS.wide, cam = new THREE.Vector3(), tgt = new THREE.Vector3(), tf = tallFix();
+  shotPose(b.yaw, b.pitch, b.dist + tf * 2.4, b.base, b.shift * (1 - tf * .8), cam, tgt);
+  const fwd = tgt.clone().sub(cam).normalize();
+  const right = new THREE.Vector3(Math.cos(b.yaw), 0, -Math.sin(b.yaw));
+  const up = new THREE.Vector3().crossVectors(right, fwd).normalize();
+  const D = b.dist + tf * 2.4 - 1.6;
+  const halfH = D * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), halfW = halfH * camera.aspect;
+  /* wide frames: the left half, beside the head. Tall frames: across the top, above it. */
+  const tall = camera.aspect < .85;
+  const centre = cam.clone().addScaledVector(fwd, D)
+    .addScaledVector(right, tall ? 0 : -.42 * halfW)
+    .addScaledVector(up, tall ? .62 * halfH : .12 * halfH);
+  const width = tall ? 1.7 * halfW : .76 * halfW;
+
+  const uv = sampleWord('muse-ing', family, 9000), N = uv.length / 2;
+  const end = new Float32Array(N * 3), start = new Float32Array(N * 3), mid = new Float32Array(N * 3), r = new Float32Array(N);
+  const rnd = mulberry32(23), mouth = CIG.mouth, out = mouth.clone().add(new THREE.Vector3(0, -.05, .4));
+  const e = new THREE.Vector3(), m = new THREE.Vector3();
+  for (let i = 0; i < N; i++) {
+    e.copy(centre).addScaledVector(right, uv[i * 2] * width).addScaledVector(up, uv[i * 2 + 1] * width)
+      .addScaledVector(fwd, (rnd() - .5) * .04);
+    end.set([e.x, e.y, e.z], i * 3);
+    start.set([mouth.x + (rnd() - .5) * .04, mouth.y + (rnd() - .5) * .03, mouth.z], i * 3);
+    m.lerpVectors(out, e, .3 + rnd() * .25);
+    m.x += (rnd() - .5) * .9; m.y += .1 + rnd() * .7; m.z += (rnd() - .5) * .7;
+    mid.set([m.x, m.y, m.z], i * 3);
+    /* the letters fill roughly in reading order, with plenty of overlap */
+    r[i] = clamp((uv[i * 2] + .5) * .55 + rnd() * .45, 0, 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(end, 3));
+  g.setAttribute('aStart', new THREE.BufferAttribute(start, 3));
+  g.setAttribute('aMid', new THREE.BufferAttribute(mid, 3));
+  g.setAttribute('aR', new THREE.BufferAttribute(r, 1));
+  WORD.mat = new THREE.ShaderMaterial({
+    uniforms: { uP: { value: WORD.mat ? WORD.mat.uniforms.uP.value : 0 }, uT: { value: 0 }, uPx: { value: CIG.smokeMat ? CIG.smokeMat.uniforms.uPx.value : 1000 } },
+    vertexShader: WORD_VS, fragmentShader: WORD_FS, transparent: true, depthWrite: false
+  });
+  const pts = new THREE.Points(g, WORD.mat);
+  pts.frustumCulled = false; pts.renderOrder = 102;
+  if (WORD.pts) { scene.remove(WORD.pts); WORD.pts.geometry.dispose(); }
+  scene.add(pts);
+  WORD.pts = pts;
+  WORD.family = family;
 }
 
 /* film off keeps the tone curve, drops what the lens adds */
@@ -971,6 +1182,8 @@ function resize() {
   camera.aspect = vpW() / vpH(); camera.updateProjectionMatrix();
   resizePost();
   smokePx();
+  clearTimeout(WORD.relayout);
+  if (WORD.family) WORD.relayout = setTimeout(() => buildWord(WORD.family), 250);
 }
 
 function start() {
@@ -985,32 +1198,54 @@ function start() {
   scene.add(buildShirt());
   buildCigarette();
   scene.add(buildSmoke());
+  scene.add(buildExhale());
   smokePx();
   buildLights(visor.userData.frontZ);
   initPost();
   if (qs('post', '1') === '0') setFilm(false);
   if (qs('debug', '0') === '1') window.__face = { scene: scene, camera: camera, renderer: renderer, HEAD: HEAD, RIG: RIG };
   wireControls();
+  const family = '"Instrument Serif", Georgia, serif';
+  (document.fonts ? document.fonts.load('330px "Instrument Serif"', 'muse-ing') : Promise.resolve())
+    .catch(() => {}).then(() => buildWord(family));
   addEventListener('resize', resize);
 
   let last = performance.now(), t0 = last;
   (function frame(now) {
     const dt = Math.min(.05, (now - last) / 1000); last = now;
-    if (!REDUCE) RIG.tYaw += Math.sin((now - t0) * .00025) * .00025;    /* breath of a drift */
     applyCamera(dt);
     const tt = (now - t0) / 1000;
     POST.comp.uniforms.uT.value = tt;
-    /* the ember breathes: a slow draw, a quick flicker on top */
-    const draw = .75 + .25 * Math.sin(tt * 1.3) + .08 * Math.sin(tt * 17.0 + Math.sin(tt * 5.0) * 2.0);
-    CIG.emberMat.color.setRGB(3.2 * draw, .6 * draw, .12 * draw);
-    CIG.light.intensity = .7 * draw;
-    if (!REDUCE) CIG.smokeMat.uniforms.uT.value = tt;
+    /* A drag every nine seconds: draw on the filter (lips purse, cheeks
+       hollow, ember flares), hold, then let it out through the lips. */
+    const CYCLE = 9, ct = tt % CYCLE;
+    const sp = SCROLL.sp;
+    const scrolled = smooth(0, .03, sp);                /* once scrolling, the scroll breathes for him */
+    const cycleOn = REDUCE ? 0 : 1 - scrolled;
+    const inhale = cycleOn * smooth(0, 1.1, ct) * (1 - smooth(1.6, 2.1, ct));
+    const cyclePuff = cycleOn * smooth(2.2, 2.5, ct) * (1 - smooth(3.5, 4.4, ct));
+    const longExhale = smooth(.03, .1, sp) * (1 - smooth(.45, .62, sp));
+    HEAD.deform.uDraw.value = inhale;
+    HEAD.deform.uPuff.value = Math.max(cyclePuff, longExhale);
+    const flicker = .06 * Math.sin(tt * 17.0 + Math.sin(tt * 5.0) * 2.0);
+    const glow = .7 + .8 * inhale + flicker;
+    CIG.emberMat.color.setRGB(3.2 * glow, .6 * glow, .12 * glow);
+    CIG.light.intensity = .6 * glow;
+    if (!REDUCE) {
+      CIG.smokeMat.uniforms.uT.value = tt;
+      CIG.exhaleMat.uniforms.uT.value = tt;
+      CIG.exhaleMat.uniforms.uStart.value = scrolled > .5 ? -99 : Math.floor(tt / CYCLE) * CYCLE + 2.2;
+    }
+    if (WORD.mat) { WORD.mat.uniforms.uP.value = smooth(.06, .62, sp); WORD.mat.uniforms.uT.value = tt; }
+    TAG.style.opacity = smooth(.58, .72, sp);
+    CUE.style.opacity = 1 - smooth(.01, .06, sp);
     renderer.setRenderTarget(POST.scene);
     renderer.render(scene, camera);
     renderPost();
     requestAnimationFrame(frame);
   })(last);
   status.classList.add('is-done');
+  CUE.classList.add('is-in');             /* the cue arrives once there is something to scroll */
 }
 
 /* let the status line paint before the sculpt blocks the thread */
