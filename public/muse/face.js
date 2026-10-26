@@ -68,6 +68,10 @@ function sdCap(px, py, pz, ax, ay, az, bx, by, bz, r) {
   const dx = pax - bax * h, dy = pay - bay * h, dz = paz - baz * h;
   return Math.sqrt(dx * dx + dy * dy + dz * dz) - r;
 }
+function sdRB(px, py, pz, cx, cy, cz, hx, hy, hz, r) {
+  const qx = Math.abs(px - cx) - hx + r, qy = Math.abs(py - cy) - hy + r, qz = Math.abs(pz - cz) - hz + r;
+  return Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - r;
+}
 function smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * .25; }
 const smax = (a, b, k) => -smin(-a, -b, k);
 
@@ -358,7 +362,7 @@ function initGL() {
   maxAniso = renderer.capabilities.getMaxAnisotropy();
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0x070707);
-  camera = new THREE.PerspectiveCamera(28, vpW() / vpH(), .1, 60);
+  camera = new THREE.PerspectiveCamera(28, vpW() / vpH(), .1, 120);
 }
 
 const hdr = (r, g, b) => new THREE.Color().setRGB(r, g, b);
@@ -714,8 +718,8 @@ function buildCigarette() {
   cyl(R * 1.005, R * .96, .016, L + .008, CIG.emberMat);
   cyl(R * .95, R * .8, .04, L + .036, new THREE.MeshStandardMaterial({ color: hdr(.09, .09, .09), roughness: 1 }));
 
-  scene.add(g);
-  g.updateMatrixWorld(true);
+  HEAD.group.add(g);
+  g.updateWorldMatrix(true, false);
   CIG.tip.set(0, L + .06, 0).applyMatrix4(g.matrixWorld);
 
   /* the ember lights the lip and chin, and breathes */
@@ -819,7 +823,7 @@ function buildExhale() {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('aSeed', new THREE.BufferAttribute(seed, 1));
   g.setAttribute('aOff', new THREE.BufferAttribute(off, 1));
-  CIG.mouth = mouthCorner(.04, -.64).add(new THREE.Vector3(0, 0, .03));
+  CIG.mouth = mouthCorner(.04, -.64).add(new THREE.Vector3(0, 0, .03)).applyMatrix4(HEAD.group.matrixWorld);
   CIG.exhaleMat = new THREE.ShaderMaterial({
     uniforms: { uT: { value: 0 }, uStart: { value: -99 }, uMouth: { value: CIG.mouth }, uPx: { value: 1000 }, uAlpha: { value: .16 } },
     vertexShader: EXHALE_VS, fragmentShader: SMOKE_FS,
@@ -841,31 +845,376 @@ function smokePx() {
   if (WORD.mat) WORD.mat.uniforms.uPx.value = px;
 }
 
-/* ---------------------------------------------------- shirt, for framing */
-function buildShirt() {
-  const cloth = new THREE.MeshStandardMaterial({ color: hdr(.006, .006, .007), roughness: .9 });
-  const g = new THREE.Group();
-  const torso = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), cloth);
-  torso.scale.set(1.6, .62, .82); torso.position.set(0, -1.92, -.12);
-  const band = new THREE.Mesh(new THREE.CylinderGeometry(.6, .66, .24, 48, 1, true), cloth);
-  band.position.set(0, -1.34, -.06); band.material.side = THREE.DoubleSide;
-  g.add(torso, band);
-  [-1, 1].forEach(s => {
-    const pt = new THREE.Mesh(new THREE.BoxGeometry(.42, .03, .3), cloth);
-    pt.position.set(s * .32, -1.38, .38); pt.rotation.set(.55, s * -.5, s * -.55);
-    pt.castShadow = true; g.add(pt);
-  });
-  g.traverse(o => { if (o.isMesh) o.receiveShadow = true; });
+/* ============================================================ the body */
+/* He stands the way he smirks: weight dropped on his right leg, the left
+   one loose and turned out, right hand shoved in a pocket, the chrome
+   thumb hooked in his belt. Everything below the collar is built from the
+   same three tools as the head — SDF projections for the big soft volumes,
+   tubes for limbs and trims, and fabric painted into tiling normal maps. */
+const FLOOR_Y = -8.62;
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+/* --- fabrics: one tile of height, turned into a normal map that repeats */
+function tiledNormal(size, heightAt, strength) {
+  const h = new Float32Array(size * size);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) h[y * size + x] = heightAt(x / size, y / size, x, y);
+  const out = new Uint8Array(size * size * 4), S = strength;
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const du = (h[y * size + (x + 1) % size] - h[y * size + (x - 1 + size) % size]) * S;
+    const dv = (h[((y + 1) % size) * size + x] - h[((y - 1 + size) % size) * size + x]) * S;
+    const il = 1 / Math.hypot(du, dv, 1), p = (y * size + x) * 4;
+    out[p] = (-du * il * .5 + .5) * 255; out[p + 1] = (-dv * il * .5 + .5) * 255; out[p + 2] = (il * .5 + .5) * 255; out[p + 3] = 255;
+  }
+  const t = new THREE.DataTexture(out, size, size, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.anisotropy = Math.min(8, maxAniso);
+  t.needsUpdate = true;
+  return t;
+}
+const withRepeat = (tex, u, v) => { const t = tex.clone(); t.repeat.set(u, v); t.needsUpdate = true; return t; };
+
+function fabrics() {
+  /* puffer channels: each tile is one stitched row, plump in the middle */
+  const quilt = tiledNormal(256, (u, v, x, y) => Math.pow(Math.sin(Math.PI * v), .45) * .9 + (vnoise(x * .2, y * .2, 1.1) - .5) * .06, 6);
+  /* twill: the diagonal of workwear cotton */
+  const twill = tiledNormal(256, (u, v, x, y) => .5 + .35 * Math.sin((u * 18 + v * 18) * Math.PI * 2) + (vnoise(x * .5, y * .5, 2.3) - .5) * .3, 2.2);
+  /* knit, for the tee */
+  const knit = tiledNormal(256, (u, v, x, y) => .5 + .25 * Math.sin(u * Math.PI * 2 * 48) * Math.sin(v * Math.PI * 2 * 64) + (vnoise(x * .7, y * .7, 3.7) - .5) * .3, 1.4);
+  /* leather grain */
+  const grain = tiledNormal(256, (u, v, x, y) => vnoise(x * .35, y * .35, 4.4) * .6 + vnoise(x * .08, y * .08, 5.1) * .4, 2.4);
+  return { quilt, twill, knit, grain };
+}
+
+function bodyMaterials(env) {
+  const F = fabrics();
+  return {
+    F,
+    jacket: new THREE.MeshPhysicalMaterial({
+      color: hdr(.016, .016, .019), roughness: .4, metalness: .05, clearcoat: .45, clearcoatRoughness: .32,
+      normalMap: withRepeat(F.quilt, 1, 30), normalScale: new THREE.Vector2(.32, .32),
+      envMap: env, envMapIntensity: .7, side: THREE.DoubleSide
+    }),
+    sleeve: new THREE.MeshPhysicalMaterial({
+      color: hdr(.016, .016, .019), roughness: .4, metalness: .05, clearcoat: .45, clearcoatRoughness: .32,
+      normalMap: withRepeat(F.quilt, 1, 12), normalScale: new THREE.Vector2(.32, .32), envMap: env, envMapIntensity: .7
+    }),
+    rib: new THREE.MeshStandardMaterial({ color: hdr(.022, .022, .026), roughness: .75, normalMap: withRepeat(F.knit, 8, 2) }),
+    lining: new THREE.MeshStandardMaterial({ color: hdr(.32, .02, .03), emissive: hdr(.08, 0, .004), roughness: .6, side: THREE.BackSide }),
+    shirt: new THREE.MeshStandardMaterial({ color: hdr(.007, .007, .008), roughness: .92, normalMap: withRepeat(F.knit, 6, 8), normalScale: new THREE.Vector2(.6, .6) }),
+    neon: new THREE.MeshBasicMaterial({ color: hdr(3.4, .1, .07) }),
+    neonSoft: new THREE.MeshBasicMaterial({ color: hdr(1.6, .05, .035) }),
+    chrome: new THREE.MeshPhysicalMaterial({ color: hdr(.78, .79, .83), metalness: 1, roughness: .2, clearcoat: .6, clearcoatRoughness: .15, envMap: env, envMapIntensity: 1.3 }),
+    chromeDark: new THREE.MeshPhysicalMaterial({ color: hdr(.18, .18, .2), metalness: 1, roughness: .34, envMap: env, envMapIntensity: 1 }),
+    pants: new THREE.MeshStandardMaterial({ color: hdr(.024, .024, .027), roughness: .85, normalMap: withRepeat(F.twill, 4, 8), normalScale: new THREE.Vector2(.8, .8) }),
+    strap: new THREE.MeshStandardMaterial({ color: hdr(.012, .012, .014), roughness: .55 }),
+    boot: new THREE.MeshPhysicalMaterial({
+      color: hdr(.012, .012, .014), roughness: .34, clearcoat: .7, clearcoatRoughness: .25,
+      normalMap: withRepeat(F.grain, 4, 4), normalScale: new THREE.Vector2(.5, .5), envMap: env, envMapIntensity: .8
+    }),
+    sole: new THREE.MeshStandardMaterial({ color: hdr(.03, .03, .032), roughness: .9 })
+  };
+}
+
+/* --- a tube along a path; radius may vary along it (t) and around it (θ) */
+function tubeGeometry(pts, radius, radial, seg) {
+  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const fr = curve.computeFrenetFrames(seg, false);
+  const P = [], UV = [], I = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg, c = curve.getPointAt(t), n = fr.normals[i], b = fr.binormals[i];
+    for (let j = 0; j <= radial; j++) {
+      const th = j / radial * Math.PI * 2, r = radius(t, th), cx = Math.cos(th), sx = Math.sin(th);
+      P.push(c.x + (cx * n.x + sx * b.x) * r, c.y + (cx * n.y + sx * b.y) * r, c.z + (cx * n.z + sx * b.z) * r);
+      UV.push(j / radial, t);
+    }
+  }
+  for (let i = 0; i < seg; i++) for (let j = 0; j < radial; j++) {
+    const a = i * (radial + 1) + j, b = a + radial + 1;
+    I.push(a, b, a + 1, b, b + 1, a + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+  g.setIndex(I);
+  g.computeVertexNormals();
   return g;
+}
+function mesh(geo, mat, shadow) {
+  const m = new THREE.Mesh(geo, mat);
+  m.castShadow = shadow !== false; m.receiveShadow = true;
+  return m;
+}
+function ball(p, r, mat, s) {
+  const m = mesh(new THREE.SphereGeometry(1, 32, 24), mat);
+  m.position.copy(p); m.scale.set(r * (s ? s[0] : 1), r * (s ? s[1] : 1), r * (s ? s[2] : 1));
+  return m;
+}
+/* a ring hugging a limb at point p, its axis along d */
+function ringAt(p, d, r, tube, mat) {
+  const m = mesh(new THREE.TorusGeometry(r, tube, 10, 48), mat, false);
+  m.position.copy(p);
+  m.quaternion.setFromUnitVectors(v3(0, 0, 1), d.clone().normalize());
+  return m;
+}
+/* march along an axis from outside to the first surface of an SDF */
+function surfaceAlong(sdf, o, d, tMax) {
+  let t = tMax;
+  for (let k = 0; k < 240; k++) {
+    const dd = sdf(o.x + d.x * t, o.y + d.y * t, o.z + d.z * t);
+    if (dd < 1e-4) break;
+    t -= Math.max(dd * .8, .002);
+  }
+  return o.clone().addScaledVector(d, t);
+}
+
+/* --- the jacket: a cropped puffer, padded at the shoulders, worn open */
+function jacketSDF(x, y, z) {
+  const ax = Math.abs(x);
+  let d = sdRB(x, y, z, 0, -2.62, 0, 1.3, .92, .7, .32);                    /* a boxy chest   */
+  d = smin(d, sdRB(ax, y, z, 1.36, -1.98, 0, .46, .24, .6, .16), .14);      /* squared shoulders */
+  d = smin(d, sdRB(x, y, z, 0, -3.6, 0, 1.06, .5, .64, .3), .3);            /* the waist, tapering */
+  d = smin(d, sdCap(x, y, z, 0, -1.7, -.05, 0, -2.2, -.05, .74), .25);      /* up to the collar */
+  d = Math.max(d, -(y + 4.05));                                             /* cropped        */
+  return Math.max(d, y + 1.42);
+}
+/* the opening widens as it falls, like a jacket nobody bothered to zip */
+const slotW = y => .2 + .3 * smooth(-1.55, -4.0, y);
+
+function buildJacket(M) {
+  const g = new THREE.Group();
+  /* the tee underneath, tucked in */
+  const tee = projectSphere((x, y, z) => Math.max(sdRB(x, y, z, 0, -3.0, 0, 1.08, 1.42, .6, .34), y + 1.45), 120, 90, v3(0, -3, 0), 4);
+  g.add(mesh(tee.geo, M.shirt));
+
+  const jp = projectSphere(jacketSDF, 180, 140, v3(0, -2.8, 0), 4);
+  /* open it down the front: drop every triangle inside the slot */
+  const pos = jp.geo.attributes.position, idx = jp.geo.index.array, keep = [];
+  for (let i = 0; i < idx.length; i += 3) {
+    let cx = 0, cy = 0, cz = 0;
+    for (let k = 0; k < 3; k++) { cx += pos.getX(idx[i + k]); cy += pos.getY(idx[i + k]); cz += pos.getZ(idx[i + k]); }
+    cx /= 3; cy /= 3; cz /= 3;
+    if (cz > .25 && Math.abs(cx) < slotW(cy)) continue;
+    keep.push(idx[i], idx[i + 1], idx[i + 2]);
+  }
+  jp.geo.setIndex(keep);
+  jp.geo.computeVertexNormals();
+  g.add(mesh(jp.geo, M.jacket));
+
+  /* neon piping down both edges of the opening */
+  [-1, 1].forEach(s => {
+    const pts = [];
+    for (let y = -1.45; y >= -4.05; y -= .1) {
+      pts.push(surfaceAlong(jacketSDF, v3(s * slotW(y), y, 0), v3(0, 0, 1), 3).add(v3(0, 0, .01)));
+    }
+    g.add(mesh(tubeGeometry(pts, () => .028, 10, 60), M.neon, false));
+  });
+
+  /* ribbed hem, broken at the front where the jacket hangs open */
+  const hem = [], A0 = .45, A1 = Math.PI * 2 - .45;
+  for (let i = 0; i <= 40; i++) {
+    const a = lerp(A0, A1, i / 40);
+    const dir = v3(Math.sin(a), 0, Math.cos(a));
+    hem.push(surfaceAlong(jacketSDF, v3(0, -3.97, 0), dir, 3));
+  }
+  g.add(mesh(tubeGeometry(hem, t => .11 + .012 * Math.sin(t * 360), 14, 160), M.rib));
+
+  /* the popped collar: flared, open at the throat, lined in red */
+  const ARC = 4.1, collar = new THREE.CylinderGeometry(.96, .8, .56, 56, 1, true, Math.PI - ARC / 2, ARC);
+  const cOut = mesh(collar, M.jacket); cOut.position.set(0, -1.3, -.06);
+  const cIn = mesh(collar, M.lining, false); cIn.position.copy(cOut.position);
+  const rim = mesh(new THREE.TorusGeometry(.96, .02, 8, 80, ARC), M.neon, false);
+  /* the cylinder's θ runs from +z toward +x; the torus arc from +x toward +z —
+     so the arc starts a quarter-turn and a half-arc back to sit on the collar */
+  rim.rotation.set(Math.PI / 2, 0, -Math.PI / 2 - ARC / 2);
+  rim.position.set(0, -1.02, -.06);
+  g.add(cOut, cIn, rim);
+  return g;
+}
+
+/* --- arms */
+const R_SH = v3(-1.45, -2.1, 0), R_EL = v3(-1.9, -3.35, -.3), R_WR = v3(-1.32, -4.3, .34);
+const L_SH = v3(1.45, -1.98, 0), L_EL = v3(1.9, -3.3, -.12), L_WR = v3(1.6, -4.32, .3);
+
+function buildArms(M) {
+  const g = new THREE.Group();
+  /* right: a fat quilted sleeve, the hand jammed in his pocket */
+  /* one sleeve, bending through the elbow: fabric has no ball joints */
+  g.add(mesh(tubeGeometry([R_SH, R_SH.clone().lerp(R_EL, .55).add(v3(-.05, 0, 0)), R_EL, R_EL.clone().lerp(R_WR, .5), R_WR],
+    (t, th) => lerp(.38, .27, t) * (1 + .012 * Math.pow(Math.abs(Math.sin(t * Math.PI * 12)), .5)), 28, 96), M.sleeve));
+  g.add(ball(R_SH, .4, M.sleeve));
+  const rFore = R_WR.clone().sub(R_EL);
+  g.add(mesh(tubeGeometry([R_WR.clone().addScaledVector(rFore, -.08), R_WR.clone().addScaledVector(rFore, .06)],
+    t => .29 + .01 * Math.sin(t * 80), 24, 16), M.rib));
+
+  /* left: sleeveless — the whole chrome arm, red at every joint */
+  g.add(ball(L_SH, .42, M.chromeDark));
+  g.add(ringAt(L_SH.clone().add(v3(.08, -.18, 0)), v3(.25, -1, -.05), .38, .035, M.neon));
+  g.add(mesh(tubeGeometry([L_SH, L_SH.clone().lerp(L_EL, .5).add(v3(.05, 0, 0)), L_EL], t => lerp(.31, .26, t), 28, 40), M.chrome));
+  g.add(ball(L_EL, .3, M.chromeDark));
+  g.add(ringAt(L_EL, L_WR.clone().sub(L_SH), .3, .03, M.neon));
+  g.add(mesh(tubeGeometry([L_EL, L_EL.clone().lerp(L_WR, .5), L_WR], t => lerp(.27, .21, t), 28, 40), M.chrome));
+  /* pistons along the forearm */
+  const fore = L_WR.clone().sub(L_EL).normalize(), side = v3(0, 0, 1).cross(fore).normalize();
+  [-1, 1].forEach(s => {
+    const a = L_EL.clone().addScaledVector(side, s * .24).addScaledVector(fore, .25);
+    const b = L_WR.clone().addScaledVector(side, s * .19).addScaledVector(fore, -.12);
+    g.add(mesh(tubeGeometry([a, b], () => .035, 8, 6), M.chromeDark));
+  });
+  /* panel seams, lit */
+  for (const t of [.3, .65]) g.add(ringAt(L_SH.clone().lerp(L_EL, t), L_EL.clone().sub(L_SH), lerp(.31, .26, t) + .004, .008, M.neonSoft));
+  for (const t of [.35, .7]) g.add(ringAt(L_EL.clone().lerp(L_WR, t), fore, lerp(.27, .21, t) + .004, .008, M.neonSoft));
+  g.add(ringAt(L_WR, fore, .22, .03, M.neon));
+
+  /* the hand: palm, and four fingers curled over the belt */
+  const palm = L_WR.clone().addScaledVector(fore, .22).add(v3(-.04, 0, .06));
+  g.add(ball(palm, .2, M.chromeDark, [1, 1.25, .7]));
+  for (let i = 0; i < 4; i++) {
+    const k = v3(-.11 + i * .075, 0, 0);
+    const base = palm.clone().add(v3(k.x, -.18, .1));
+    const tip = base.clone().add(v3(-.06, -.12, -.16));
+    g.add(mesh(tubeGeometry([base, base.clone().add(v3(-.02, -.1, .02)), tip], t => .042 - .01 * t, 10, 10), M.chrome));
+    g.add(ball(base, .046, M.chromeDark));
+  }
+  const th0 = palm.clone().add(v3(-.18, -.02, .06));
+  g.add(mesh(tubeGeometry([th0, th0.clone().add(v3(-.08, -.08, .08)), th0.clone().add(v3(-.1, -.2, .06))], t => .05 - .012 * t, 10, 10), M.chrome));
+  return g;
+}
+
+/* --- hips, belt, legs, boots */
+const R_HIP = v3(-.6, -4.5, -.02), R_KN = v3(-.62, -6.3, -.02), R_AN = v3(-.5, -7.98, -.08);   /* the weight leg slants in under him */
+const L_HIP = v3(.6, -4.7, 0), L_KN = v3(1.02, -6.15, .82), L_AN = v3(1.62, -7.98, .95);     /* the loose one kicked out, knee bent */
+
+function bootSDF(x, y, z) {
+  let d = sdCap(x, y, z, 0, -.3, 0, 0, .5, -.04, .34);                     /* shaft          */
+  d = smin(d, sdRB(x, y, z, 0, -.38, .36, .37, .16, .72, .14), .14);        /* a squared foot */
+  d = smin(d, sdRB(x, y, z, 0, -.33, .92, .33, .13, .22, .12), .08);        /* toe box        */
+  return Math.max(d, -(y + .52));
+}
+function soleSDF(x, y, z) {
+  const qx = Math.abs(x) - .37, qy = Math.abs(y + .58) - .045, qz = Math.abs(z - .44) - .72;
+  const o = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
+  return o - .05;
+}
+
+function buildLegs(M) {
+  const g = new THREE.Group();
+  /* hips, tucked under the jacket's hem */
+  const hips = projectSphere((x, y, z) => Math.max(sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), y + 3.9), 120, 90, v3(0, -4.5, 0), 3);
+  g.add(mesh(hips.geo, M.pants));
+
+  const leg = (H, K, A, s) => {
+    /* baggy, with folds that drift around the leg and bunch over the boot */
+    const fold = (t, th) => .035 * Math.sin(th * 3 + t * 9 + s) + .02 * Math.sin(th * 5 - t * 13);
+    /* hip to boot in one length of cloth, bending at the knee */
+    const top = A.clone().add(v3(0, .44, -.02));
+    g.add(mesh(tubeGeometry([H, H.clone().lerp(K, .5).add(v3(s * .05, 0, 0)), K, K.clone().lerp(top, .5), top],
+      (t, th) => lerp(.46, .27, t) + fold(t, th) * lerp(.5, .3, t) + .04 * smooth(.88, 1, t) * Math.abs(Math.sin(t * 80)), 32, 110), M.pants));
+    /* knee pad */
+    const kd = K.clone().sub(H).normalize(), front = v3(0, 0, 1).sub(kd.clone().multiplyScalar(kd.z)).normalize();
+    const pad = ball(K.clone().addScaledVector(front, .3), .22, M.strap, [1, 1.2, .4]);
+    pad.lookAt(K.clone().addScaledVector(front, 2));
+    g.add(pad);
+    /* cargo pocket on the outside of the thigh, and a strap with a red buckle */
+    const mid = H.clone().lerp(K, .5), out = v3(s, 0, 0);
+    const pk = ball(mid.clone().addScaledVector(out, .38), .26, M.pants, [.3, 1, .8]);
+    g.add(pk);
+    const strapAt = H.clone().lerp(K, .3);
+    g.add(ringAt(strapAt, K.clone().sub(H), .46, .035, M.strap));
+    const rb = mesh(new THREE.BoxGeometry(.1, .1, .04), M.neon, false);
+    rb.position.copy(strapAt).addScaledVector(out, .47);
+    g.add(rb);
+  };
+  leg(R_HIP, R_KN, R_AN, -1);
+  leg(L_HIP, L_KN, L_AN, 1);
+
+  /* chunky boots: right planted straight, left turned out */
+  const boot = projectSphere(bootSDF, 96, 72, v3(0, -.1, .25), 2.2);
+  const sole = projectSphere(soleSDF, 72, 54, v3(0, -.58, .44), 2);
+  const soleLine = [];
+  for (let i = 0; i <= 64; i++) {
+    const a = i / 64 * Math.PI * 2;
+    soleLine.push(surfaceAlong(soleSDF, v3(0, -.53, .44), v3(Math.sin(a), 0, Math.cos(a)), 2).add(v3(0, .002, 0)));
+  }
+  const lineGeo = tubeGeometry(soleLine, () => .016, 6, 128);
+  [[R_AN, -.2], [L_AN, .75]].forEach(([A, yaw]) => {
+    const b = new THREE.Group();
+    b.position.set(A.x, FLOOR_Y + .635, A.z);
+    b.rotation.y = yaw;
+    b.scale.setScalar(.86);
+    b.position.y = FLOOR_Y + .635 * .86;
+    b.add(mesh(boot.geo, M.boot), mesh(sole.geo, M.sole), mesh(lineGeo, M.neon, false));
+    g.add(b);
+  });
+  return g;
+}
+
+function buildBelt(M) {
+  const g = new THREE.Group();
+  /* belt: a strap round the waist, chrome buckle, a strip of red */
+  const belt = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = i / 48 * Math.PI * 2;
+    belt.push(surfaceAlong((x, y, z) => sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), v3(0, -4.2, 0), v3(Math.sin(a), 0, Math.cos(a)), 3).add(v3(0, 0, 0)));
+  }
+  belt.pop();
+  g.add(mesh(tubeGeometry(belt.concat([belt[0]]), () => .075, 10, 120), M.strap));
+  const buckle = mesh(new THREE.BoxGeometry(.42, .24, .06), M.chrome);
+  buckle.position.copy(surfaceAlong((x, y, z) => sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), v3(0, -4.2, 0), v3(0, 0, 1), 3)).add(v3(0, 0, .07));
+  const strip = mesh(new THREE.BoxGeometry(.26, .04, .02), M.neon, false);
+  strip.position.copy(buckle.position).add(v3(0, 0, .04));
+  g.add(buckle, strip);
+
+  return g;
+}
+
+/* a floor to stand on: it fades out before it can make a horizon */
+function buildFloor() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'), gr = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.35, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
+  const fade = new THREE.CanvasTexture(c);
+  /* matte: a low camera skims the floor, and any specular at that angle turns it to a pale disc */
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshLambertMaterial({
+    color: hdr(.012, .012, .014), alphaMap: fade, transparent: true, depthWrite: false
+  }));
+  m.rotation.x = -Math.PI / 2; m.position.set(0, FLOOR_Y, .5);
+  m.receiveShadow = true;
+  return m;
+}
+
+function buildBody(env) {
+  const M = bodyMaterials(env);
+  const upper = new THREE.Group(), lower = new THREE.Group();
+  upper.add(buildJacket(M), buildArms(M), buildBelt(M));
+  lower.add(buildLegs(M), buildFloor());
+  return { upper: upper, lower: lower };
+}
+
+/* The pose. Everything above the waist hangs off a pivot there — leaned back,
+   turned toward the camera, his left shoulder up against his dropped right
+   hip — and the head hangs off the neck: chin up, cocked. */
+const POSE = {
+  waist: v3(0, -4.3, 0), upper: { x: -.1, y: .13, z: .075 },
+  neck: v3(0, -1.25, 0), head: { x: -.12, y: .08, z: -.15 }
+};
+function pivotGroup(pivot, rot) {
+  const outer = new THREE.Group();
+  outer.position.copy(pivot); outer.rotation.set(rot.x, rot.y, rot.z);
+  const inner = new THREE.Group();
+  inner.position.copy(pivot).negate();
+  outer.add(inner);
+  return { outer: outer, inner: inner };
 }
 
 /* ========================================================= 5 · lights */
 function buildLights(visorZ) {
   const key = new THREE.DirectionalLight(0xffffff, 2.2);
-  key.position.set(-2.8, 3.6, 2.4);
+  key.position.set(-9.8, 12.6, 8.4);                /* same direction, far enough to frame the whole figure */
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  const sc = key.shadow.camera; sc.left = sc.bottom = -2.2; sc.right = sc.top = 2.2; sc.near = .5; sc.far = 12;
+  key.shadow.mapSize.set(4096, 4096);
+  const sc = key.shadow.camera; sc.left = -7; sc.right = 7; sc.top = 6; sc.bottom = -9; sc.near = 4; sc.far = 40;
   key.shadow.bias = -.0004; key.shadow.normalBias = .02; key.shadow.radius = 3;
   scene.add(key);
 
@@ -877,7 +1226,7 @@ function buildLights(visorZ) {
   /* the bar lights what is right below it */
   const red = new THREE.PointLight(0xff2a24, 2.6, 1.6, 2);
   red.position.set(0, .06, visorZ + .18);
-  scene.add(red);
+  HEAD.group.add(red);                              /* it rides with the visor */
 }
 
 /* ================================================== 6 · post-processing */
@@ -996,8 +1345,12 @@ function resizePost() {
    turns the head on top of either, and springs back when let go. */
 const SHOTS = {
   close: { yaw: 1.32, pitch: .02, dist: 3.3, base: new THREE.Vector3(0, -.42, .7), shift: 0 },
-  wide:  { yaw: .95, pitch: .07, dist: 7.4, base: new THREE.Vector3(0, -.2, .4), shift: 1.35 }
+  wide:  { yaw: .95, pitch: .07, dist: 7.4, base: new THREE.Vector3(0, -.2, .4), shift: 1.35 },
+  full:  { yaw: .5, pitch: -.04, dist: 25, base: new THREE.Vector3(0, -3.7, .2), shift: 2.6 }
 };
+/* the scroll, in two acts: the exhale, then the reveal */
+const ACT1 = () => sat(SCROLL.sp / .5);
+const ACT2 = () => smooth(.56, .92, SCROLL.sp);
 const SCROLL = { p: 0, sp: 0 };
 const RIG = { dYaw: 0, dPitch: 0, tdYaw: 0, tdPitch: 0, dragging: false };
 const _right = new THREE.Vector3(), _target = new THREE.Vector3();
@@ -1020,11 +1373,12 @@ function applyCamera(dt) {
   if (!RIG.dragging) { RIG.tdYaw = damp(RIG.tdYaw, 0, 1.6, dt); RIG.tdPitch = damp(RIG.tdPitch, 0, 1.6, dt); }
   RIG.dYaw = damp(RIG.dYaw, RIG.tdYaw, 8, dt);
   RIG.dPitch = damp(RIG.dPitch, RIG.tdPitch, 8, dt);
-  const a = SHOTS.close, b = SHOTS.wide, u = smooth(0, .55, SCROLL.sp);
-  _target.lerpVectors(a.base, b.base, u);
-  shotPose(lerp(a.yaw, b.yaw, u) + RIG.dYaw, lerp(a.pitch, b.pitch, u) + RIG.dPitch,
-    lerp(a.dist, b.dist, u) + tallFix() * 2.4, _target, lerp(a.shift, b.shift, u) * (1 - tallFix() * .8),
-    camera.position, _target);
+  const a = SHOTS.close, b = SHOTS.wide, c = SHOTS.full, u = smooth(0, .55, ACT1()), w = ACT2(), tf = tallFix();
+  _target.lerpVectors(a.base, b.base, u).lerp(c.base, w);
+  const yaw = lerp(lerp(a.yaw, b.yaw, u), c.yaw, w), pitch = lerp(lerp(a.pitch, b.pitch, u), c.pitch, w);
+  const dist = lerp(lerp(a.dist, b.dist, u), c.dist, w) + tf * lerp(2.4, 12, w);
+  const shift = lerp(lerp(a.shift, b.shift, u), c.shift, w) * (1 - tf * .85);
+  shotPose(yaw + RIG.dYaw, pitch + RIG.dPitch, dist, _target, shift, camera.position, _target);
   camera.lookAt(_target);
 }
 
@@ -1067,7 +1421,7 @@ function wireControls() {
    is only perfectly legible once the camera has arrived. Scrolling back
    draws it all back in. */
 const WORD_VS = [
-  'uniform float uP; uniform float uT; uniform float uPx;',
+  'uniform float uP; uniform float uT; uniform float uPx; uniform float uFade;',
   'attribute vec3 aStart; attribute vec3 aMid; attribute float aR;',
   'varying float vA; varying float vK; varying float vSeed;',
   'vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }',
@@ -1077,8 +1431,9 @@ const WORD_VS = [
   '  vec3 p = bez(aStart, aMid, position, e);',
   '  float turb = sin(e * 3.14159);',                                  /* wild mid-flight, calm once set */
   '  p += vec3(sin(uT * 1.3 + aR * 40.0), cos(uT * 1.1 + aR * 31.0), sin(uT * 0.9 + aR * 23.0)) * (0.07 * turb + 0.005);',
+  '  p += vec3(sin(aR * 50.0) * 0.6, 1.4 + aR * 1.2, cos(aR * 37.0) * 0.5) * uFade * uFade;',   /* drifts up and apart */
   '  vec4 mv = modelViewMatrix * vec4(p, 1.0);',
-  '  vA = smoothstep(0.0, 0.06, k);',
+  '  vA = smoothstep(0.0, 0.06, k) * (1.0 - uFade);',
   '  gl_PointSize = vA > 0.0 ? uPx * mix(0.11, 0.024, e) / -mv.z : 0.0;',
   '  gl_Position = projectionMatrix * mv;',
   '  vK = e; vSeed = aR;',
@@ -1159,7 +1514,7 @@ function buildWord(family) {
   g.setAttribute('aMid', new THREE.BufferAttribute(mid, 3));
   g.setAttribute('aR', new THREE.BufferAttribute(r, 1));
   WORD.mat = new THREE.ShaderMaterial({
-    uniforms: { uP: { value: WORD.mat ? WORD.mat.uniforms.uP.value : 0 }, uT: { value: 0 }, uPx: { value: CIG.smokeMat ? CIG.smokeMat.uniforms.uPx.value : 1000 } },
+    uniforms: { uFade: { value: 0 }, uP: { value: WORD.mat ? WORD.mat.uniforms.uP.value : 0 }, uT: { value: 0 }, uPx: { value: CIG.smokeMat ? CIG.smokeMat.uniforms.uPx.value : 1000 } },
     vertexShader: WORD_VS, fragmentShader: WORD_FS, transparent: true, depthWrite: false
   });
   const pts = new THREE.Points(g, WORD.mat);
@@ -1189,13 +1544,24 @@ function resize() {
 function start() {
   initGL();
   const env = buildEnvironment();
+  const UP = pivotGroup(POSE.waist, POSE.upper), HD = pivotGroup(POSE.neck, POSE.head);
+  scene.add(UP.outer); UP.inner.add(HD.outer);
+  HEAD.group = HD.inner;
   const head = buildHead(env);
-  scene.add(head);
-  scene.add(buildEars(env));
-  HEAD.fur = buildFur(); scene.add(HEAD.fur);
-  HEAD.wisps = buildWisps(); scene.add(HEAD.wisps);
-  const visor = buildVisor(env); scene.add(visor);
-  scene.add(buildShirt());
+  HEAD.group.add(head, buildEars(env));
+  HEAD.fur = buildFur(); HEAD.group.add(HEAD.fur);
+  HEAD.wisps = buildWisps(); HEAD.group.add(HEAD.wisps);
+  const visor = buildVisor(env); HEAD.group.add(visor);
+  let tb = performance.now();
+  const body = buildBody(env);
+  UP.inner.add(body.upper); scene.add(body.lower);
+  console.info('[face] body', Math.round(performance.now() - tb), 'ms');
+  scene.updateMatrixWorld(true);
+  /* the shots were framed on an upright head: carry them to where it is now */
+  ['close', 'wide'].forEach(k => {
+    SHOTS[k].base.applyMatrix4(HEAD.group.matrixWorld);
+    SHOTS[k].yaw += POSE.upper.y + POSE.head.y;
+  });
   buildCigarette();
   scene.add(buildSmoke());
   scene.add(buildExhale());
@@ -1219,7 +1585,7 @@ function start() {
     /* A drag every nine seconds: draw on the filter (lips purse, cheeks
        hollow, ember flares), hold, then let it out through the lips. */
     const CYCLE = 9, ct = tt % CYCLE;
-    const sp = SCROLL.sp;
+    const sp = ACT1(), act2 = ACT2();
     const scrolled = smooth(0, .03, sp);                /* once scrolling, the scroll breathes for him */
     const cycleOn = REDUCE ? 0 : 1 - scrolled;
     const inhale = cycleOn * smooth(0, 1.1, ct) * (1 - smooth(1.6, 2.1, ct));
@@ -1236,8 +1602,11 @@ function start() {
       CIG.exhaleMat.uniforms.uT.value = tt;
       CIG.exhaleMat.uniforms.uStart.value = scrolled > .5 ? -99 : Math.floor(tt / CYCLE) * CYCLE + 2.2;
     }
-    if (WORD.mat) { WORD.mat.uniforms.uP.value = smooth(.06, .62, sp); WORD.mat.uniforms.uT.value = tt; }
-    TAG.style.opacity = smooth(.58, .72, sp);
+    if (WORD.mat) {
+      WORD.mat.uniforms.uP.value = smooth(.06, .62, sp); WORD.mat.uniforms.uT.value = tt;
+      WORD.mat.uniforms.uFade.value = smooth(.5, .66, SCROLL.sp);
+    }
+    TAG.style.opacity = smooth(.58, .72, sp) * (1 - smooth(.5, .58, SCROLL.sp));
     CUE.style.opacity = 1 - smooth(.01, .06, sp);
     renderer.setRenderTarget(POST.scene);
     renderer.render(scene, camera);
