@@ -1,31 +1,35 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { Figtree, Inter, Instrument_Serif } from "next/font/google"
+import localFont from "next/font/local"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
 
 import { ThemeProvider } from "@/components/theme-provider"
 
-const figtree = Figtree({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
+const figtree = localFont({
+  src: "../public/fonts/Figtree-Variable.ttf",
+  weight: "300 900",
   variable: "--font-figtree",
   display: "swap",
+  fallback: ["system-ui", "sans-serif"],
 })
 
-const inter = Inter({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-  variable: "--font-inter",
-  display: "swap",
-})
-
-const instrumentSerif = Instrument_Serif({
-  subsets: ["latin"],
-  weight: ["400"],
-  style: ["normal", "italic"],
+const instrumentSerif = localFont({
+  src: [
+    { path: "../public/fonts/InstrumentSerif-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../public/fonts/InstrumentSerif-Italic.ttf", weight: "400", style: "italic" },
+  ],
   variable: "--font-instrument-serif",
   display: "swap",
+  fallback: ["Georgia", "serif"],
+})
+
+const newsreader = localFont({
+  src: "../public/fonts/Newsreader-Variable.ttf",
+  weight: "200 800",
+  variable: "--font-logo",
+  display: "swap",
+  fallback: ["Georgia", "serif"],
 })
 
 export const viewport: Viewport = {
@@ -69,15 +73,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&family=Instrument+Serif:ital@0;1&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className={`${figtree.variable} ${inter.variable} ${instrumentSerif.variable}`}>
+      <body className={`${figtree.variable} ${instrumentSerif.variable} ${newsreader.variable}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

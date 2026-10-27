@@ -1,31 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Self-hosted webfonts: guaranteed instant render & eliminates CDN timeouts */
-@font-face {
-  font-family: 'Instrument Serif';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/InstrumentSerif-Regular.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: 'Instrument Serif';
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-  src: url('/fonts/InstrumentSerif-Italic.ttf') format('truetype');
-}
-
-@font-face {
-  font-family: 'Figtree';
-  font-style: normal;
-  font-weight: 300 900;
-  font-display: swap;
-  src: url('/fonts/Figtree-Variable.ttf') format('truetype');
-}
-
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -63,9 +38,6 @@
   --sidebar-accent-foreground: oklch(0 0 0); /* Black text on sidebar accent */
   --sidebar-border: oklch(1 0 0); /* White sidebar borders */
   --sidebar-ring: oklch(0.65 0.2 270); /* Violet for sidebar focus */
-  --font-instrument-serif: "Instrument Serif", serif; /* Instrument Serif font family configuration */
-  --font-figtree: "Figtree", sans-serif; /* Figtree font family configuration */
-  --font-inter: "Inter", sans-serif; /* Inter font family configuration */
 }
 
 .dark {
@@ -102,8 +74,6 @@
   --sidebar-accent-foreground: oklch(1 0 0);
   --sidebar-border: oklch(0.3 0 0);
   --sidebar-ring: oklch(0.7 0.25 270);
-  --font-instrument-serif: "Instrument Serif", serif;
-  --font-figtree: "Figtree", sans-serif;
 }
 
 @theme inline {
@@ -153,19 +123,19 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'Figtree', var(--font-figtree), sans-serif;
+    font-family: var(--font-figtree), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
   }
 }
 
 .instrument,
 .font-serif {
-  font-family: 'Instrument Serif', var(--font-instrument-serif), Georgia, serif !important;
+  font-family: var(--font-instrument-serif), Georgia, serif;
 }
 
-.font-sans {
-  font-family: 'Figtree', var(--font-figtree), sans-serif !important;
-}
-
-.font-inter {
-  font-family: "Inter", var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+/* "m-" wordmark */
+.logo-mark {
+  font-family: var(--font-logo), Georgia, serif;
+  font-weight: 400;
+  font-variation-settings: "opsz" 72;
 }

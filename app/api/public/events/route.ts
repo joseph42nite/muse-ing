@@ -51,7 +51,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ matchedEvent: matched ?? null })
   }
 
-  const events = all(`${baseSelect} ORDER BY e.date ASC`)
+  // Optional cap (landing page): soonest upcoming events, falling back to all dates.
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "", 10) || 0, 50)
+  let events: any[]
+  if (limit > 0) {
+    const today = new Date().toISOString().slice(0, 10)
+    events = all(`${baseSelect} WHERE e.event_date_only >= ? ORDER BY e.date ASC LIMIT ?`, today, limit)
+    if (events.length === 0) events = all(`${baseSelect} ORDER BY e.date ASC LIMIT ?`, limit)
+  } else {
+    events = all(`${baseSelect} ORDER BY e.date ASC`)
+  }
   const artists = all(`
     SELECT
       u.id,
