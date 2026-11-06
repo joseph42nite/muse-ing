@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
+import { Archivo } from "next/font/google"
 import { GeistMono } from "geist/font/mono"
 import "./globals.css"
 
@@ -30,6 +31,14 @@ const newsreader = localFont({
   variable: "--font-logo",
   display: "swap",
   fallback: ["Georgia", "serif"],
+})
+
+// Heavy, extra-wide uppercase titles on the landing
+const archivo = Archivo({
+  subsets: ["latin"],
+  axes: ["wdth"],
+  variable: "--font-display",
+  display: "swap",
 })
 
 export const viewport: Viewport = {
@@ -73,7 +82,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${figtree.variable} ${instrumentSerif.variable} ${newsreader.variable}`}>
+      <body className={`${figtree.variable} ${instrumentSerif.variable} ${newsreader.variable} ${archivo.variable}`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="dark"

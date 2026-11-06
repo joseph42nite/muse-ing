@@ -2,126 +2,224 @@
 
 import * as THREE from "three"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useFrame } from "@react-three/fiber"
-import { clamp01, ember, mouth, scroll, smooth } from "./store"
+import { useFrame, useThree } from "@react-three/fiber"
+import { ember, MONKEY_SCALE, mouth, PROFILE_SHIFT, sampleCamera, scroll, smooth, WORDMARK_SHOT } from "./store"
 
-const N = 260
+const S = MONKEY_SCALE
 
-function spriteTexture() {
-  const c = document.createElement("canvas")
-  c.width = c.height = 64
-  const g = c.getContext("2d")!
-  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32)
-  gr.addColorStop(0, "rgba(255,255,255,0.9)")
-  gr.addColorStop(1, "rgba(255,255,255,0)")
-  g.fillStyle = gr
-  g.fillRect(0, 0, 64, 64)
-  return new THREE.CanvasTexture(c)
+function mulberry32(a: number) {
+  return function () {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
 }
 
-/** Drifting cigarette smoke; thicker puffs during the first exhale. */
+const NOISE = /* glsl */ `
+  float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }
+`
+
+const SMOKE_VS = /* glsl */ `
+  uniform float uT; uniform vec3 uTip; uniform float uPx;
+  attribute float aSeed; attribute float aOff;
+  varying float vA; varying float vSeed; varying float vAge;
+  void main(){
+    float life = 6.5;
+    float age = fract(uT / life + aOff);
+    float t = age * life;
+    vec3 p = uTip;
+    p.y += (t * 0.09 + t * t * 0.006) * ${S.toFixed(4)};
+    p.x += (t * 0.075 + sin(t * 0.8 + aSeed * 6.28) * 0.016 * t) * ${S.toFixed(4)};
+    p.z += (t * 0.02 + cos(t * 0.6 + aSeed * 12.0) * 0.016 * t) * ${S.toFixed(4)};
+    float sw = (0.006 + t * 0.022) * ${S.toFixed(4)};
+    p.x += sin(t * 1.7 + aSeed * 40.0) * sw;
+    p.z += cos(t * 1.3 + aSeed * 23.0) * sw;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_PointSize = uPx * (0.016 + t * 0.045) * ${S.toFixed(4)} / -mv.z;
+    gl_Position = projectionMatrix * mv;
+    vA = smoothstep(0.0, 0.08, age) * (1.0 - smoothstep(0.25, 1.0, age));
+    vSeed = aSeed; vAge = age;
+  }
+`
+
+const EXHALE_VS = /* glsl */ `
+  uniform float uT; uniform float uStart; uniform float uScrollAge; uniform vec3 uMouth; uniform float uPx;
+  attribute float aSeed; attribute float aOff;
+  varying float vA; varying float vSeed; varying float vAge;
+  void main(){
+    float life = 3.2;
+    float age = uScrollAge > -50.0 ? (uScrollAge - aOff * 1.0) : (uT - (uStart + aOff * 1.0));
+    float k = clamp(age / life, 0.0, 1.0);
+    vec3 dir = normalize(vec3((aSeed - 0.5) * 0.7, -0.2 + aSeed * 0.15, 1.0));
+    vec3 p = uMouth + dir * 0.45 * ${S.toFixed(4)} * (1.0 - exp(-max(age, 0.0) * 1.7));
+    p += vec3(0.05 * age, 0.04 * age + 0.03 * age * age, 0.0) * ${S.toFixed(4)};
+    float sw = (0.01 + max(age, 0.0) * 0.05) * ${S.toFixed(4)};
+    p.x += sin(age * 1.9 + aSeed * 30.0) * sw;
+    p.y += cos(age * 1.5 + aSeed * 17.0) * sw * 0.6;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    vA = (age < 0.0 || age > life) ? 0.0 : smoothstep(0.0, 0.12, age) * (1.0 - smoothstep(0.25, 1.0, k));
+    gl_PointSize = vA > 0.0 ? uPx * (0.035 + max(age, 0.0) * 0.085) * ${S.toFixed(4)} / -mv.z : 0.0;
+    gl_Position = projectionMatrix * mv;
+    vSeed = aSeed; vAge = k;
+  }
+`
+
+const SMOKE_FS = /* glsl */ `
+  uniform float uAlpha;
+  varying float vA; varying float vSeed; varying float vAge;
+  ${NOISE}
+  void main(){
+    vec2 pc = gl_PointCoord - 0.5;
+    float r = length(pc);
+    if (r > 0.5) discard;
+    float a = vSeed * 6.2831 + vAge * 2.5;
+    vec2 q = mat2(cos(a), -sin(a), sin(a), cos(a)) * pc;
+    float f = n(q * 3.0 + vSeed * 17.0) * 0.6 + n(q * 7.0 + vSeed * 5.0) * 0.4;
+    float alpha = smoothstep(0.5, 0.0, r) * smoothstep(0.32, 0.8, f) * vA * uAlpha;
+    gl_FragColor = vec4(0.6, 0.6, 0.64, alpha);
+  }
+`
+
+function puffGeometry(N: number, seed: number, spread: boolean) {
+  const r = mulberry32(seed)
+  const pos = new Float32Array(N * 3)
+  const sd = new Float32Array(N)
+  const off = new Float32Array(N)
+  for (let i = 0; i < N; i++) {
+    sd[i] = r()
+    off[i] = spread ? i / N + r() / N : r()
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute("position", new THREE.BufferAttribute(pos, 3))
+  g.setAttribute("aSeed", new THREE.BufferAttribute(sd, 1))
+  g.setAttribute("aOff", new THREE.BufferAttribute(off, 1))
+  return g
+}
+
+const pxPerUnit = (state: { gl: THREE.WebGLRenderer; camera: THREE.Camera }) =>
+  state.gl.domElement.height /
+  (2 * Math.tan(THREE.MathUtils.degToRad((state.camera as THREE.PerspectiveCamera).fov) / 2))
+
+/** The cigarette's thin rising stream and the breath he pushes out of his lips (both on the 9s smoking cycle and on scroll). */
 export function Smoke() {
-  const geo = useRef<THREE.BufferGeometry>(null)
-  const sim = useMemo(
+  const stream = useRef<THREE.ShaderMaterial>(null)
+  const breath = useRef<THREE.ShaderMaterial>(null)
+  const streamGeo = useMemo(() => puffGeometry(150, 7, true), [])
+  const breathGeo = useMemo(() => puffGeometry(90, 19, false), [])
+  const streamU = useMemo(
     () => ({
-      pos: new Float32Array(N * 3).fill(-99),
-      vel: Array.from({ length: N }, () => new THREE.Vector3()),
-      life: Float32Array.from({ length: N }, () => Math.random()),
+      uT: { value: 0 },
+      uTip: { value: new THREE.Vector3() },
+      uPx: { value: 1000 },
+      uAlpha: { value: 0.14 },
     }),
     []
   )
-  const map = useMemo(() => spriteTexture(), [])
+  const breathU = useMemo(
+    () => ({
+      uT: { value: 0 },
+      uStart: { value: -99 },
+      uScrollAge: { value: -99 },
+      uMouth: { value: new THREE.Vector3() },
+      uPx: { value: 1000 },
+      uAlpha: { value: 0.16 },
+    }),
+    []
+  )
 
-  useFrame(() => {
+  useFrame((state) => {
     const t = scroll.value
-    const active = t < 0.66
-    const burst = t > 0.14 && t < 0.28
-    const src = burst ? mouth : ember
-    const { pos, vel, life } = sim
-    for (let i = 0; i < N; i++) {
-      life[i] += 0.006
-      if (life[i] > 1) {
-        if (active && (burst || Math.random() < 0.05)) {
-          const s = burst ? 0.05 : 0.012
-          pos[i * 3] = src.x
-          pos[i * 3 + 1] = src.y
-          pos[i * 3 + 2] = src.z
-          if (burst) {
-            // the exhaled cloud drifts out toward where the word is forming
-            const tz = WORD.z + (Math.random() - 0.5) * WORD.width
-            const ty = WORD.y + (Math.random() - 0.5) * 0.7
-            vel[i].set((WORD.x - src.x) / 110, (ty - src.y) / 110, (tz - src.z) / 110).add({ x: (Math.random() - 0.5) * 0.004, y: (Math.random() - 0.5) * 0.004, z: (Math.random() - 0.5) * 0.004 } as THREE.Vector3)
-          } else {
-            vel[i].set((Math.random() - 0.5) * s * 1.5, 0.004 + Math.random() * 0.01, 0.008 + Math.random() * s)
-          }
-          life[i] = 0
-        } else {
-          pos[i * 3 + 1] = -99
-          life[i] = 0.99
-        }
-      }
-      pos[i * 3] += vel[i].x
-      pos[i * 3 + 1] += vel[i].y
-      pos[i * 3 + 2] += vel[i].z
+    const tt = state.clock.elapsedTime
+    const px = pxPerUnit(state)
+    const s = stream.current?.uniforms
+    const b = breath.current?.uniforms
+    if (s) {
+      s.uT.value = tt
+      s.uTip.value.set(ember.x, ember.y, ember.z)
+      s.uPx.value = px
+      s.uAlpha.value = 0.14 * (1 - smooth(0.80, 0.84, t))
     }
-    if (geo.current) geo.current.attributes.position.needsUpdate = true
+    if (b) {
+      const CYCLE = 9
+      const scrolled = smooth(0, 0.02, t)
+      b.uT.value = tt
+      b.uStart.value = scrolled > 0.5 ? -99 : Math.floor(tt / CYCLE) * CYCLE + 2.2
+      b.uScrollAge.value = t >= 0.03 && t <= 0.36 ? ((t - 0.03) / 0.18) * 3.6 : -99
+      b.uMouth.value.set(mouth.x, mouth.y, mouth.z)
+      b.uPx.value = px
+    }
   })
 
   return (
-    <points frustumCulled={false}>
-      <bufferGeometry ref={geo}>
-        <bufferAttribute attach="attributes-position" args={[sim.pos, 3]} />
-      </bufferGeometry>
-      <pointsMaterial size={0.6} map={map} transparent opacity={0.28} depthWrite={false} color={0x9a86c8} sizeAttenuation />
-    </points>
+    <>
+      <points geometry={streamGeo} frustumCulled={false} renderOrder={100}>
+        <shaderMaterial
+          ref={stream}
+          uniforms={streamU}
+          vertexShader={SMOKE_VS}
+          fragmentShader={SMOKE_FS}
+          transparent
+          depthWrite={false}
+        />
+      </points>
+      <points geometry={breathGeo} frustumCulled={false} renderOrder={101}>
+        <shaderMaterial
+          ref={breath}
+          uniforms={breathU}
+          vertexShader={EXHALE_VS}
+          fragmentShader={SMOKE_FS}
+          transparent
+          depthWrite={false}
+        />
+      </points>
+    </>
   )
 }
 
-const vert = /* glsl */ `
-  uniform float uMix; uniform float uFade; uniform float uTime; uniform float uPx; uniform vec3 uMouth; uniform vec3 uCenter; uniform float uScale;
-  attribute vec3 aStart; attribute vec3 aEnd; attribute float aRand; attribute float aDelay;
-  varying float vA; varying float vM; varying float vR;
-  void main() {
-    // each puff leaves the mouth at its own moment (the word is written m to g) and takes a while to arrive
-    float m = clamp((uMix - aDelay * 0.4) / 0.6, 0.0, 1.0);
-    float e = m * m * (3.0 - 2.0 * m);
-    vec3 target = uCenter + (aEnd - uCenter) * uScale;
-    vec3 p = mix(uMouth + aStart, target, e);
-    // billow: a rising, swirling stream that eases as the puff reaches its letter
-    float fly = sin(m * 3.14159);
-    float ph = aRand * 40.0 + uTime * 1.6;
-    p.y += fly * (0.35 + aRand * 0.4);
-    p.x += cos(ph) * fly * 0.22;
-    p.z += sin(ph * 0.8) * fly * 0.22;
-    // the letters stay smoke: they keep curling and slowly rise
-    float live = 0.03 + 0.05 * (1.0 - e);
-    p += vec3(sin(uTime * 1.1 + aRand * 40.0), cos(uTime * 0.9 + aRand * 30.0) * 0.8 + 0.2, sin(uTime * 0.8 + aRand * 20.0)) * live;
+const WORD_VS = /* glsl */ `
+  uniform float uP; uniform float uT; uniform float uPx; uniform float uFade;
+  uniform vec3 uMouth;
+  attribute vec3 aStartJ; attribute vec3 aMidJ; attribute float aF; attribute float aR;
+  varying float vA; varying float vK; varying float vSeed;
+  vec3 bez(vec3 a, vec3 b, vec3 c, float t){ return mix(mix(a, b, t), mix(b, c, t), t); }
+  void main(){
+    float k = clamp((uP - aR * 0.45) / 0.55, 0.0, 1.0);
+    float e = k * k * (3.0 - 2.0 * k);
+    vec3 start = uMouth + aStartJ;
+    vec3 outp = uMouth + vec3(0.0, -0.05 * ${S.toFixed(4)}, 0.40 * ${S.toFixed(4)});
+    vec3 mid = mix(outp, position, 0.3 + aF * 0.25) + aMidJ;
+    vec3 p = bez(start, mid, position, e);
+    float turb = sin(e * 3.14159);
+    p += vec3(sin(uT * 1.3 + aR * 40.0), cos(uT * 1.1 + aR * 31.0), sin(uT * 0.9 + aR * 23.0)) * ((0.07 * turb + 0.005) * ${S.toFixed(4)});
+    p += vec3(sin(aR * 50.0) * 0.6, 1.4 + aR * 1.2, cos(aR * 37.0) * 0.5) * ${S.toFixed(4)} * uFade * uFade;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
-    gl_PointSize = uPx * uScale * (0.8 + aRand * 0.8) * mix(2.0, 0.95, e) / -mv.z;
+    vA = smoothstep(0.0, 0.06, k) * (1.0 - uFade);
+    gl_PointSize = vA > 0.0 ? uPx * mix(0.11, 0.024, e) * ${S.toFixed(4)} / -mv.z : 0.0;
     gl_Position = projectionMatrix * mv;
-    vA = uFade * smoothstep(0.0, 0.05, m) * mix(0.2, 0.9, e);
-    vM = e;
-    vR = aRand;
-  }
-`
-const frag = /* glsl */ `
-  varying float vA; varying float vM; varying float vR;
-  void main() {
-    // soft, unlit smoke puff: a feathered disc, grey-lilac, never bright enough to bloom
-    vec2 c = gl_PointCoord - 0.5;
-    float d = length(c) * 2.0;
-    if (d > 1.0) discard;
-    float feather = pow(1.0 - d, 1.1);
-    vec3 shade = mix(vec3(0.40, 0.36, 0.54), vec3(0.62, 0.58, 0.74), vM * 0.7 + vR * 0.25);
-    gl_FragColor = vec4(shade, vA * feather);
+    vK = e; vSeed = aR;
   }
 `
 
-const WORD = { x: 1.4, y: 2.3, z: 2.7, width: 3.9 }
+const WORD_FS = /* glsl */ `
+  varying float vA; varying float vK; varying float vSeed;
+  ${NOISE}
+  void main(){
+    vec2 pc = gl_PointCoord - 0.5; float r = length(pc);
+    if (r > 0.5) discard;
+    float wisp = mix(smoothstep(0.25, 0.75, n(pc * 4.0 + vSeed * 13.0)), 1.0, vK);
+    float a = smoothstep(0.5, 0.05, r) * wisp * vA * mix(0.055, 0.62, vK * vK);
+    vec3 c = mix(vec3(0.6, 0.6, 0.64), vec3(0.93, 0.92, 0.9), vK);
+    gl_FragColor = vec4(c, a);
+  }
+`
 
-function buildWordmark(family: string) {
-  const W = 1024
-  const H = 280
+function sampleWord(family: string, maxPts: number) {
+  const W = 1600
+  const H = 420
   const c = document.createElement("canvas")
   c.width = W
   c.height = H
@@ -129,99 +227,161 @@ function buildWordmark(family: string) {
   g.fillStyle = "#fff"
   g.textAlign = "center"
   g.textBaseline = "middle"
-  g.font = `210px ${family}`
-  g.fillText("muse-ing", W / 2, H / 2 + 8)
-  const data = g.getImageData(0, 0, W, H).data
-  const pts: [number, number][] = []
-  for (let y = 0; y < H; y += 1) {
-    for (let x = 0; x < W; x += 1) {
-      if (data[(y * W + x) * 4 + 3] > 128) pts.push([x, y])
+  g.font = `330px ${family}`
+  g.fillText("muse-ing", W / 2, H / 2 + 10)
+  const d = g.getImageData(0, 0, W, H).data
+  const pts: number[] = []
+  let minX = W
+  let maxX = 0
+  for (let y = 0; y < H; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      if (d[(y * W + x) * 4 + 3] > 140) {
+        pts.push(x, y)
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+      }
     }
   }
-  for (let i = pts.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[pts[i], pts[j]] = [pts[j], pts[i]]
+  const rnd = mulberry32(5)
+  const idx = Array.from({ length: pts.length / 2 }, (_, i) => i)
+  for (let i = idx.length - 1; i > 0; i--) {
+    const j = (rnd() * (i + 1)) | 0
+    const tmp = idx[i]
+    idx[i] = idx[j]
+    idx[j] = tmp
   }
-  const count = Math.min(pts.length, 16000)
-  const scale = WORD.width / W
-  const start = new Float32Array(count * 3)
-  const end = new Float32Array(count * 3)
-  const rnd = new Float32Array(count)
-  const delay = new Float32Array(count)
-  for (let i = 0; i < count; i++) {
-    const [px, py] = pts[i]
-    end[i * 3] = WORD.x
-    end[i * 3 + 1] = WORD.y - (py - H / 2) * scale
-    end[i * 3 + 2] = WORD.z - (px - W / 2) * scale
-    const r = Math.random()
-    rnd[i] = r
-    delay[i] = Math.min(1, 0.92 * (px / W) + 0.08 * Math.random())
-    start[i * 3] = (Math.random() - 0.5) * 0.12
-    start[i * 3 + 1] = (Math.random() - 0.5) * 0.08
-    start[i * 3 + 2] = Math.random() * 0.15
+  const n = Math.min(maxPts, idx.length)
+  const out = new Float32Array(n * 2)
+  const cx = (minX + maxX) / 2
+  const span = Math.max(1, maxX - minX)
+  for (let i = 0; i < n; i++) {
+    const k = idx[i]
+    out[i * 2] = (pts[k * 2] - cx) / span
+    out[i * 2 + 1] = -(pts[k * 2 + 1] - H / 2) / span
   }
-  return { start, end, rnd, delay, count }
+  return out
 }
 
-/** The exhale: smoke particles drift out then settle into the "muse-ing" wordmark. */
+function buildWordGeometry(family: string, fov: number, aspect: number) {
+  const wide = sampleCamera(WORDMARK_SHOT)
+  const cam = new THREE.Vector3(wide.p[0], wide.p[1], wide.p[2])
+  const tgt = new THREE.Vector3(wide.l[0], wide.l[1], wide.l[2])
+  const fwd = tgt.clone().sub(cam).normalize()
+  const right = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize()
+  const up = new THREE.Vector3().crossVectors(right, fwd).normalize()
+  const dist = cam.distanceTo(tgt)
+  const D = dist - 1.6 * S
+  const halfH = D * Math.tan(THREE.MathUtils.degToRad(fov) / 2)
+  const halfW = halfH * aspect
+  const tall = aspect < 0.85
+  const centre = cam
+    .clone()
+    .addScaledVector(fwd, D)
+    // On portrait screens the stage slides this shot left by PROFILE_SHIFT; start right by as much so the word stays centred
+    .addScaledVector(right, tall ? 2 * PROFILE_SHIFT * halfW : -0.42 * halfW)
+    .addScaledVector(up, tall ? 0.62 * halfH : 0.12 * halfH)
+  const width = tall ? 1.7 * halfW : 0.76 * halfW
+
+  const uv = sampleWord(family, 9000)
+  const N = uv.length / 2
+  const end = new Float32Array(N * 3)
+  const startJ = new Float32Array(N * 3)
+  const midJ = new Float32Array(N * 3)
+  const f = new Float32Array(N)
+  const r = new Float32Array(N)
+  const rnd = mulberry32(23)
+  const e = new THREE.Vector3()
+  for (let i = 0; i < N; i++) {
+    e.copy(centre)
+      .addScaledVector(right, uv[i * 2] * width)
+      .addScaledVector(up, uv[i * 2 + 1] * width)
+      .addScaledVector(fwd, (rnd() - 0.5) * 0.04 * S)
+    end.set([e.x, e.y, e.z], i * 3)
+    startJ.set([(rnd() - 0.5) * 0.04 * S, (rnd() - 0.5) * 0.03 * S, 0], i * 3)
+    f[i] = rnd()
+    midJ.set([(rnd() - 0.5) * 0.9 * S, (0.1 + rnd() * 0.7) * S, (rnd() - 0.5) * 0.7 * S], i * 3)
+    r[i] = Math.min(1, Math.max(0, (uv[i * 2] + 0.5) * 0.55 + rnd() * 0.45))
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute("position", new THREE.BufferAttribute(end, 3))
+  g.setAttribute("aStartJ", new THREE.BufferAttribute(startJ, 3))
+  g.setAttribute("aMidJ", new THREE.BufferAttribute(midJ, 3))
+  g.setAttribute("aF", new THREE.BufferAttribute(f, 1))
+  g.setAttribute("aR", new THREE.BufferAttribute(r, 1))
+  return g
+}
+
+/** The exhale that becomes the name: every particle leaves the lips on its own clock and settles onto the wide-shot plane. */
 export function Wordmark() {
-  const [data, setData] = useState<ReturnType<typeof buildWordmark> | null>(null)
+  const [geo, setGeo] = useState<THREE.BufferGeometry | null>(null)
   const mat = useRef<THREE.ShaderMaterial>(null)
+  const { camera, size } = useThree()
+  const aspect = size.width / Math.max(1, size.height)
+  const fov = (camera as THREE.PerspectiveCamera).fov || 28
 
   useEffect(() => {
     let cancelled = false
-    const probe = document.querySelector(".instrument") as HTMLElement | null
-    const family = probe ? getComputedStyle(probe).fontFamily : "Georgia, serif"
+    const family = '"Instrument Serif", Georgia, serif'
     const run = async () => {
       try {
-        await document.fonts.load(`210px ${family}`, "muse-ing")
+        if (typeof FontFace !== "undefined") {
+          const ff = new FontFace("Instrument Serif", "url(/fonts/InstrumentSerif-Regular.ttf)", {
+            style: "normal",
+            weight: "400",
+          })
+          const loaded = await ff.load()
+          document.fonts.add(loaded)
+        }
+        await document.fonts.load('330px "Instrument Serif"', "muse-ing")
       } catch {
-        /* fall back to whatever is available */
+        /* fallback */
       }
-      if (!cancelled) setData(buildWordmark(family))
+      if (!cancelled) {
+        setGeo((prev) => {
+          prev?.dispose()
+          return buildWordGeometry(family, fov, aspect)
+        })
+      }
     }
     run()
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [fov, aspect])
 
   const uniforms = useMemo(
-    () => ({ uMix: { value: 0 }, uFade: { value: 1 }, uTime: { value: 0 }, uPx: { value: 120 }, uMouth: { value: new THREE.Vector3() }, uCenter: { value: new THREE.Vector3(WORD.x, WORD.y, WORD.z) }, uScale: { value: 1 } }),
+    () => ({
+      uP: { value: 0 },
+      uT: { value: 0 },
+      uPx: { value: 1000 },
+      uFade: { value: 0 },
+      uMouth: { value: new THREE.Vector3() },
+    }),
     []
   )
 
   useFrame((state) => {
-    // R3F copies the uniforms prop onto the material, so drive the material's own copy.
     const u = mat.current?.uniforms
     if (!u) return
     const t = scroll.value
-    u.uMix.value = clamp01((t - 0.15) / 0.095)
+    u.uP.value = smooth(0.03, 0.22, t)
+    u.uT.value = state.clock.elapsedTime
+    u.uPx.value = pxPerUnit(state)
+    u.uFade.value = smooth(0.27, 0.32, t)
     u.uMouth.value.set(mouth.x, mouth.y, mouth.z)
-    u.uFade.value = 1 - smooth(0.355, 0.405, t)
-    u.uTime.value = state.clock.elapsedTime
-    u.uPx.value = state.size.height * 0.06
-    // keep the whole word in frame on narrow screens (about 4.9 units from the held camera)
-    u.uScale.value = THREE.MathUtils.clamp((3.37 * state.size.width / state.size.height * 0.8) / WORD.width, 0.4, 1)
   })
 
-  if (!data) return null
+  if (!geo) return null
   return (
-    <points frustumCulled={false}>
-      <bufferGeometry>
-        <bufferAttribute attach="attributes-position" args={[data.end, 3]} />
-        <bufferAttribute attach="attributes-aStart" args={[data.start, 3]} />
-        <bufferAttribute attach="attributes-aEnd" args={[data.end, 3]} />
-        <bufferAttribute attach="attributes-aRand" args={[data.rnd, 1]} />
-        <bufferAttribute attach="attributes-aDelay" args={[data.delay, 1]} />
-      </bufferGeometry>
+    <points geometry={geo} frustumCulled={false} renderOrder={102}>
       <shaderMaterial
         ref={mat}
-        vertexShader={vert}
-        fragmentShader={frag}
         uniforms={uniforms}
+        vertexShader={WORD_VS}
+        fragmentShader={WORD_FS}
         transparent
         depthWrite={false}
+        toneMapped={false}
       />
     </points>
   )

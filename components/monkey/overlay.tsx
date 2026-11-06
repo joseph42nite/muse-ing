@@ -2,8 +2,8 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { ArrowRight, MapPin, Mic2 } from "lucide-react"
-import { scroll, smooth, SMASH, win } from "./store"
+import { ArrowRight, ArrowUpRight, MapPin, Menu, Mic2, X } from "lucide-react"
+import { look, LOOKS, scroll, smooth, SMASH, win } from "./store"
 
 interface OverlayEvent {
   id: string
@@ -16,11 +16,15 @@ interface OverlayEvent {
 
 type Inquiry = "reserve" | "host" | "artist"
 
-const SCENES = ["The grin", "The exhale", "The other side", "The outfit", "The guitar", "The smash"]
-const sceneIndex = (t: number) => (t < 0.15 ? 0 : t < 0.3 ? 1 : t < 0.5 ? 2 : t < 0.68 ? 3 : t < 0.84 ? 4 : 5)
+const SCENES = ["The grin", "The exhale", "The strut", "The gigs", "The smash"]
+const sceneIndex = (t: number) => (t < 0.12 ? 0 : t < 0.3 ? 1 : t < 0.58 ? 2 : t < 0.78 ? 3 : 4)
 
-const glass =
-  "rounded-2xl border border-white/10 bg-[#14131a]/75 backdrop-blur-md shadow-[0_20px_60px_-12px_rgba(0,0,0,0.6)]"
+// Scroll windows for each block of copy, matched to the camera path in store.ts
+const STRUT = [0.37, 0.41, 0.52, 0.56] as const
+const GIGS = [0.6, 0.65, 0.75, 0.79] as const
+
+const dateLabel = (d: string | null) =>
+  d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Soon"
 
 export default function Overlay({ jump }: { jump: (p: number) => void }) {
   const refs = useRef<Record<string, HTMLElement | null>>({})
@@ -30,6 +34,27 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
+  const [lookIdx, setLookIdx] = useState(0)
+  const [menu, setMenu] = useState(false)
+
+  const wear = (step: number) =>
+    setLookIdx((i) => {
+      const n = (i + step + LOOKS.length) % LOOKS.length
+      look.index = n
+      return n
+    })
+
+  // L switches the look while he is on the runway
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "l" || e.metaKey || e.ctrlKey || e.altKey) return
+      if ((e.target as HTMLElement)?.closest?.("input, textarea, select")) return
+      if (win(scroll.value, STRUT[0], STRUT[1], GIGS[2], GIGS[3]) < 0.5) return
+      wear(e.shiftKey ? -1 : 1)
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   useEffect(() => {
     let off = false
@@ -56,22 +81,24 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       const el = refs.current[key]
       if (!el) return
       el.style.opacity = String(v)
+      el.style.setProperty("--p", String(v))
       el.style.visibility = v < 0.01 ? "hidden" : "visible"
       el.style.pointerEvents = v > 0.5 ? "auto" : "none"
     }
     const loop = () => {
       const t = scroll.value
-      set("cue", 1 - smooth(0.02, 0.07, t))
-      set("s2", win(t, 0.16, 0.2, 0.3, 0.34))
-      set("s3", win(t, 0.43, 0.48, 0.56, 0.6))
-      set("s4", win(t, 0.61, 0.65, 0.68, 0.72))
-      set("s5", win(t, 0.75, 0.79, 0.86, 0.9))
-      set("flash", win(t, SMASH.crack[0], SMASH.crack[1], SMASH.crack[1], 0.975) * 0.85)
+      set("hero", 1 - smooth(0.04, 0.1, t))
+      set("s2", win(t, 0.13, 0.17, 0.25, 0.29))
+      set("s3", win(t, ...STRUT))
+      set("s4", win(t, ...GIGS))
+      set("look", win(t, STRUT[0], STRUT[1], GIGS[2], GIGS[3]))
+      set("flash", win(t, SMASH.crack[0], SMASH.crack[1], SMASH.crack[1], SMASH.form[0] + 0.01) * 0.85)
       set("form", smooth(SMASH.form[0], SMASH.form[1], t))
+      set("chrome", 1 - smooth(SMASH.windUp[0], SMASH.strike[0], t))
       const label = refs.current.label
       if (label) {
         const i = sceneIndex(t)
-        const txt = `0${i + 1} / 06 · ${SCENES[i]}`
+        const txt = `0${i + 1} / 0${SCENES.length} · ${SCENES[i]}`
         if (label.textContent !== txt) label.textContent = txt
       }
       const bar = refs.current.bar
@@ -109,14 +136,19 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
     }
   }
 
-  const field =
-    "w-full bg-transparent border-b border-white/60 py-2.5 text-sm text-white placeholder:text-white/80 focus:outline-none focus:border-white"
+  const go = (p: number, then?: () => void) => {
+    setMenu(false)
+    then?.()
+    jump(p)
+  }
+
+  const field = "field-noir"
   const tab = (k: Inquiry, label: string) => (
     <button
       type="button"
       onClick={() => setInquiry(k)}
-      className={`rounded-full px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] transition ${
-        inquiry === k ? "bg-white text-[#D92323]" : "text-white/85 hover:text-white"
+      className={`micro rounded-full px-4 py-2 transition ${
+        inquiry === k ? "bg-[#F2A33A] text-[#14100a]" : "text-[#F4EFE6]/60 hover:text-[#F4EFE6]"
       }`}
     >
       {label}
@@ -130,68 +162,141 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         muse-ing
       </span>
 
-      {/* Header */}
-      <header className="pointer-events-auto absolute inset-x-0 top-0 flex items-start justify-between px-8 pt-6 sm:px-12 sm:pt-8 md:px-16">
-        <button type="button" onClick={() => jump(0)} aria-label="Back to start" className="logo-mark text-5xl leading-none sm:text-6xl">
+      {/* Header: logo left, a quiet tag in the middle, artist login and the menu right */}
+      <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-5 sm:px-8 sm:pt-6">
+        <button type="button" onClick={() => go(0)} aria-label="Back to start" className="logo-mark text-4xl leading-none sm:text-5xl">
           <span>m</span>
           <span className="text-[#F2A33A]">-</span>
         </button>
-        <nav aria-label="Primary" className="flex items-center gap-6 text-[11px] font-semibold uppercase tracking-[0.16em]">
-          <Link href="/events" className="text-[#F4EFE6]/80 transition-colors hover:text-[#F2A33A]">
-            Events
+        <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/55 max-md:hidden">Live music · Real-time setlists</p>
+        <div className="flex items-center gap-2">
+          <Link href="/login" className="pill-dark micro max-sm:hidden">
+            Artist login <Mic2 className="h-3 w-3 text-[#F2A33A]" />
           </Link>
-          <button type="button" onClick={() => jump(0.79)} className="text-[#F4EFE6]/80 transition-colors hover:text-[#F2A33A]">
-            Artists
+          <button
+            type="button"
+            onClick={() => setMenu((m) => !m)}
+            aria-label={menu ? "Close menu" : "Open menu"}
+            aria-expanded={menu}
+            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-[#F2A33A]"
+          >
+            {menu ? <X className="h-3.5 w-3.5" /> : <Menu className="h-3.5 w-3.5" />}
           </button>
-          <button type="button" onClick={() => jump(1)} className="text-[#F4EFE6]/80 transition-colors hover:text-[#F2A33A]">
-            Book / Host
-          </button>
-          <Link href="/login" className="inline-flex items-center gap-1.5 text-[#F2A33A] transition-opacity hover:opacity-80">
-            <Mic2 className="h-3.5 w-3.5" /> Artist login
-          </Link>
-        </nav>
+        </div>
+        {menu && (
+          <nav
+            aria-label="Primary"
+            className="absolute right-5 top-16 flex w-56 flex-col rounded-2xl border border-white/10 bg-[#0b0a0e]/92 p-2 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)] backdrop-blur-md sm:right-8"
+          >
+            {[
+              ["Upcoming gigs", () => go(0.68)],
+              ["Book or host", () => go(1, () => setInquiry("reserve"))],
+              ["Join as artist", () => go(1, () => setInquiry("artist"))],
+            ].map(([l, f]) => (
+              <button key={l as string} type="button" onClick={f as () => void} className="title-x rounded-xl px-3 py-2.5 text-left text-[15px] transition hover:bg-white/5 hover:text-[#F2A33A]">
+                {l as string}
+              </button>
+            ))}
+            <Link href="/events" className="title-x rounded-xl px-3 py-2.5 text-[15px] transition hover:bg-white/5 hover:text-[#F2A33A]">
+              All events
+            </Link>
+            <Link href="/login" className="title-x rounded-xl px-3 py-2.5 text-[15px] text-[#F2A33A] transition hover:bg-white/5">
+              Artist login
+            </Link>
+          </nav>
+        )}
       </header>
 
-      {/* Scroll cue */}
-      <div ref={reg("cue")} className="absolute bottom-10 left-1/2 -translate-x-1/2 text-center text-[11px] font-semibold uppercase tracking-[0.2em]">
-        Scroll
-        <div className="mx-auto mt-2 h-8 w-px bg-[#F2A33A]" />
-      </div>
-
-      {/* Scene 2: tagline */}
-      <div ref={reg("s2")} className="absolute bottom-16 left-8 max-w-sm sm:left-12 md:left-16" style={{ opacity: 0 }}>
-        <p className="text-sm text-[#F4EFE6]/80">Hey, we&apos;re Muse-ing</p>
-        <p className="mt-1 text-2xl font-medium tracking-tight">A live music experience</p>
-        <p className="mt-3 text-[13px] leading-relaxed text-[#F4EFE6]/70">
-          Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications.
+      {/* Scene 1: a giant title across the top over the worm's-eye close-up, a hairline and two fine columns */}
+      <section ref={reg("hero")} aria-label="Muse-ing" className="absolute inset-x-0 top-20 px-5 sm:top-24 sm:px-8">
+        <p className="title-x select-none text-center text-[17vw] leading-[0.8] sm:whitespace-nowrap sm:text-[10.6vw]" aria-hidden="true">
+          Live music
         </p>
-      </div>
+        <div className="mx-auto mt-3 h-px w-full bg-[#F4EFE6]/70 sm:mt-4" />
+        <div className="mt-3 flex justify-between gap-6 sm:mt-4 sm:justify-start sm:gap-[18vw]">
+          <p className="micro max-w-[150px] leading-[1.5] text-[#F4EFE6]">
+            Fully live and ready <span className="text-[#F4EFE6]/55">to redefine your night out</span>
+          </p>
+          <p className="micro max-w-[150px] leading-[1.5] text-[#F4EFE6]">
+            Discover <span className="text-[#F2A33A]">{events.length || "new"} upcoming gigs</span>{" "}
+            <span className="text-[#F4EFE6]/55">from artists near you</span>
+          </p>
+        </div>
+      </section>
 
-      {/* Scene 3: events */}
-      <section ref={reg("s3")} aria-label="Live events" className="absolute inset-0" style={{ opacity: 0 }}>
-        <div className="absolute bottom-16 left-8 max-w-md sm:left-12 md:left-16">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#F2A33A]">Currently hosted gigs</p>
-          <h2 className="mt-2 text-3xl font-medium leading-tight tracking-tight">Live events across venues</h2>
-          <p className="mt-2 text-[13px] text-[#F4EFE6]/70">Shape the setlist from your table, then book in a few taps.</p>
-          <Link
-            href="/events"
-            className="mt-4 inline-flex h-11 items-center gap-2 rounded-full bg-[#F2A33A] px-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#10122e] transition hover:bg-[#d98a22]"
-          >
-            Browse all events <ArrowRight className="h-4 w-4" />
+      {/* Scene 2: tagline under the smoke wordmark */}
+      <section ref={reg("s2")} aria-label="About" className="absolute bottom-24 left-5 max-w-[400px] sm:bottom-28 sm:left-[7vw]" style={{ opacity: 0 }}>
+        <div className="rise">
+          <div className="dots"><i /></div>
+          <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
+            A live music
+            <br />
+            experience
+          </h2>
+          <p className="fine mt-3 max-w-[260px]">
+            Connecting independent artists with live venue crowds through real-time setlists, requests and dedications.
+          </p>
+        </div>
+      </section>
+
+      {/* Scene 3: the strut, copy on the left while he walks right of centre */}
+      <section
+        ref={reg("s3")}
+        aria-label="At your table"
+        className="absolute left-5 top-1/2 max-w-[400px] -translate-y-1/2 max-sm:bottom-32 max-sm:top-auto max-sm:translate-y-0 sm:left-[7vw]"
+        style={{ opacity: 0 }}
+      >
+        <div className="rise">
+          <div className="dots"><i /></div>
+          <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
+            Your night,
+            <br />
+            your call
+          </h2>
+        </div>
+        <div className="rise-late">
+          <p className="fine mt-3 max-w-[260px]">
+            Upvote the songs you want next, send a shoutout from your table, and book tables and tickets with no middlemen.
+          </p>
+        </div>
+      </section>
+
+      {/* Scene 4: he walks up out of frame and the gigs line up under his feet */}
+      <section ref={reg("s4")} aria-label="Upcoming gigs" className="absolute inset-x-0 bottom-20 px-5 sm:bottom-24 sm:px-8" style={{ opacity: 0 }}>
+        <div className="rise flex items-end justify-between gap-4">
+          <div>
+            <div className="dots"><i /></div>
+            <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
+              Upcoming
+              <br />
+              gigs
+            </h2>
+          </div>
+          <Link href="/events" className="pill-dark micro shrink-0">
+            All events <ArrowUpRight className="h-3 w-3 text-[#F2A33A]" />
           </Link>
         </div>
-        <ul className="absolute right-8 top-28 flex w-[min(340px,34vw)] flex-col gap-3 sm:right-12 md:right-16">
-          {events.slice(0, 3).map((ev, i) => (
-            <li key={ev.id} style={{ transform: `rotate(${[-1.5, 1, -0.8][i]}deg)` }}>
-              <Link href={`/events/${ev.id}`} className={`${glass} block p-4 transition hover:border-[#F2A33A]/60`}>
-                <p className="truncate text-[11px] font-semibold uppercase tracking-[0.14em] text-[#F4EFE6]/60">{ev.artist_name || "Live"}</p>
-                <p className="mt-1 truncate text-base font-medium">{ev.title}</p>
-                <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[#F4EFE6]/70">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 shrink-0 text-[#F2A33A]" />
-                    <span className="truncate">{ev.location_name || "Venue to be announced"}</span>
-                  </span>
-                  <span className="shrink-0 font-semibold text-[#F4EFE6]">{ev.ticket_price > 0 ? `₹${ev.ticket_price}` : "Free"}</span>
+        <ul className="no-scrollbar rise-late mt-5 flex snap-x gap-2 overflow-x-auto sm:gap-3">
+          {events.slice(0, 6).map((ev, i) => (
+            <li key={ev.id} className="w-[46vw] shrink-0 snap-start sm:w-[calc((100%-3.75rem)/6)] sm:min-w-[150px]">
+              <Link
+                href={`/events/${ev.id}`}
+                className="group flex aspect-[4/5] flex-col justify-between rounded-md border border-white/10 bg-[#0b0a0e]/80 p-3 backdrop-blur-sm transition hover:border-[#F2A33A]/60"
+              >
+                <div className="flex items-start justify-between">
+                  <span className="micro text-[#F2A33A]">{dateLabel(ev.event_date_only)}</span>
+                  <span className="micro text-[#F4EFE6]/50">0{i + 1}</span>
+                </div>
+                <div>
+                  <p className="title-x line-clamp-3 text-[13px] leading-[1.05] group-hover:text-[#F2A33A]">{ev.title}</p>
+                  <p className="micro mt-2 truncate text-[#F4EFE6]/50">{ev.artist_name || "Live"}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
+                    <span className="flex min-w-0 items-center gap-1 text-[10px] text-[#F4EFE6]/60">
+                      <MapPin className="h-3 w-3 shrink-0 text-[#F2A33A]" />
+                      <span className="truncate">{ev.location_name || "TBA"}</span>
+                    </span>
+                    <span className="micro shrink-0">{ev.ticket_price > 0 ? `₹${ev.ticket_price}` : "Free"}</span>
+                  </div>
                 </div>
               </Link>
             </li>
@@ -199,68 +304,30 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         </ul>
       </section>
 
-      {/* Scene 4: outfit callouts */}
-      <div ref={reg("s4")} aria-hidden="true" className="absolute inset-0" style={{ opacity: 0 }}>
-        {[
-          { cls: "left-8 top-[28%] sm:left-[9vw]", t: "Live setlists", d: "Upvote the songs you want next" },
-          { cls: "right-8 top-[38%] text-right sm:right-[9vw]", t: "Dedications", d: "Send a shoutout from your table" },
-          { cls: "left-8 bottom-[22%] sm:left-[12vw]", t: "Direct booking", d: "Tables and tickets, no middlemen" },
-        ].map((c) => (
-          <div key={c.t} className={`absolute max-w-[220px] ${c.cls}`}>
-            <div className="mb-2 h-px w-12 bg-[#F2A33A] [margin-left:inherit]" />
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-[#F2A33A]">{c.t}</p>
-            <p className="mt-1 text-[13px] text-[#F4EFE6]/75">{c.d}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Scene 5: artist login */}
-      <section ref={reg("s5")} aria-label="For artists" className="absolute right-8 top-1/2 w-[min(380px,86vw)] -translate-y-1/2 sm:right-12 md:right-16" style={{ opacity: 0 }}>
-        <div className={`${glass} border-[#F2A33A]/50 p-6`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#F2A33A]">For artists</p>
-          <h2 className="mt-2 text-2xl font-medium leading-tight tracking-tight">This is your stage</h2>
-          <ul className="mt-3 space-y-1.5 text-[13px] text-[#F4EFE6]/75">
-            <li>Build and run your live setlist</li>
-            <li>See crowd requests and dedications in real time</li>
-            <li>Get paid for priority shoutouts</li>
-          </ul>
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link href="/login" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F2A33A] px-6 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#10122e] transition hover:bg-[#d98a22]">
-              <Mic2 className="h-4 w-4" /> Artist login
-            </Link>
-            <button
-              type="button"
-              onClick={() => {
-                setInquiry("artist")
-                jump(1)
-              }}
-              className="inline-flex h-11 items-center rounded-full border border-white/30 px-5 text-[11px] font-semibold uppercase tracking-[0.14em] transition hover:bg-white/10"
-            >
-              Join the roster
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Scene 6: impact flash, then the form behind the glass */}
+      {/* Scene 5: impact flash, then the form behind the glass */}
       <div ref={reg("flash")} className="absolute inset-0 bg-[#F2A33A]" style={{ opacity: 0 }} />
-      <section ref={reg("form")} aria-label="Book or host" className="absolute inset-0 flex items-center justify-center bg-[#0a0b24]/65 p-4" style={{ opacity: 0 }}>
-        <div className="max-h-[92vh] w-full max-w-[640px] overflow-y-auto rounded-3xl bg-[#D92323] px-6 py-8 text-white shadow-[0_30px_80px_-15px_rgba(228,38,44,0.55)] sm:px-14 sm:py-10">
-          <h2 className="text-center text-xl font-semibold uppercase tracking-[0.14em] sm:text-2xl">Book or host with us</h2>
-          <p className="mx-auto mt-2 max-w-md text-center text-xs leading-relaxed text-white/85">
+      <section ref={reg("form")} aria-label="Book or host" className="absolute inset-0 z-10 flex items-center justify-center bg-[#05050a]/55 p-4 pt-16 backdrop-blur-[2px]" style={{ opacity: 0 }}>
+        <div className="max-h-[86vh] w-full max-w-[640px] overflow-y-auto card-noir px-6 py-9 text-[#F4EFE6] sm:px-14 sm:py-12">
+          <div className="dots mx-auto w-fit"><i /></div>
+          <h2 className="title-x mt-4 text-center text-[32px] sm:text-[44px]">
+            Book or
+            <br />
+            host with us
+          </h2>
+          <p className="fine mx-auto mt-3 max-w-sm text-center">
             Reserve a table, host a crowd-setlist night at your venue, or join the roster as a performer.
           </p>
-          <div className="mx-auto mt-4 flex w-fit items-center gap-1 rounded-full border border-white/15 bg-black/20 p-1">
-            {tab("reserve", "Reserve event")}
-            {tab("host", "Host at venue")}
+          <div className="mx-auto mt-7 flex w-fit items-center gap-1 rounded-full border border-white/10 bg-black/30 p-1">
+            {tab("reserve", "Reserve")}
+            {tab("host", "Host")}
             {tab("artist", "Join as artist")}
           </div>
 
           {sent ? (
             <div className="py-10 text-center">
-              <p className="text-lg font-semibold uppercase tracking-wider">Thanks, {sent}</p>
+              <p className="title-x text-3xl">Thanks, {sent}</p>
               <p className="mt-2 text-sm text-white/90">We&apos;ve got your request and will be in touch shortly.</p>
-              <button type="button" onClick={() => setSent(null)} className="mt-5 rounded-full border border-white/40 px-5 py-2 text-xs uppercase tracking-wider hover:bg-white/10">
+              <button type="button" onClick={() => setSent(null)} className="btn-ghost mt-6">
                 Send another
               </button>
             </div>
@@ -272,9 +339,9 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
                 <input type="tel" aria-label="Phone" placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className={field} />
               </div>
               {inquiry === "reserve" && events.length > 0 && (
-                <select aria-label="Event" value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })} className={`${field} bg-[#D92323]`}>
+                <select aria-label="Event" value={form.eventId} onChange={(e) => setForm({ ...form, eventId: e.target.value })} className={`${field} bg-transparent`}>
                   {events.map((ev) => (
-                    <option key={ev.id} value={ev.id} className="bg-[#181615] text-white">
+                    <option key={ev.id} value={ev.id} className="bg-[#14131a] text-white">
                       {ev.title} ({ev.ticket_price > 0 ? `₹${ev.ticket_price}` : "Free"})
                     </option>
                   ))}
@@ -287,35 +354,53 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 className={field}
               />
-              {error && <p className="text-center text-xs font-medium text-amber-200">{error}</p>}
+              {error && <p className="text-center text-xs font-medium text-[#F2A33A]">{error}</p>}
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button type="submit" disabled={sending} className="h-11 bg-[#181615] px-10 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-black disabled:opacity-60">
+                <button type="submit" disabled={sending} className="btn-amber px-10 disabled:opacity-60">
                   {sending ? "Sending…" : "Send"}
                 </button>
                 {inquiry === "reserve" && form.eventId && (
-                  <Link href={`/book/${form.eventId}`} className="inline-flex h-11 items-center gap-1.5 border border-white/45 px-4 text-[11px] font-medium uppercase tracking-wider transition hover:bg-white/15">
+                  <Link href={`/book/${form.eventId}`} className="btn-ghost">
                     Direct ticket checkout <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 )}
               </div>
             </form>
           )}
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-white/20 pt-4 text-[11px] text-white/80">
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-[11px] text-[#F4EFE6]/50">
             <span>hello@museing.live</span>
             <span>Copyright © Muse-ing 2026</span>
-            <Link href="/venue-checkin" className="hover:text-white">
+            <Link href="/venue-checkin" className="hover:text-[#F2A33A]">
               Venue check-in
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Scene label and progress */}
-      <div className="absolute bottom-6 right-8 flex items-center gap-3 sm:right-12 md:right-16">
-        <span ref={reg("label")} className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#F4EFE6]/60" />
-        <div className="h-[2px] w-16 overflow-hidden bg-white/15">
-          <div ref={reg("bar")} className="h-full w-full origin-left bg-[#F2A33A]" />
+      {/* Bottom bar: scene label left, the look switch in the middle, the index right */}
+      <div ref={reg("chrome")} className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-5 pb-5 sm:px-8 sm:pb-6">
+        <div className="flex items-center gap-3">
+          <span ref={reg("label")} className="micro text-[#F4EFE6]/60 max-sm:hidden" />
+          <div className="h-px w-12 overflow-hidden bg-white/15 max-sm:hidden">
+            <div ref={reg("bar")} className="h-full w-full origin-left bg-[#F2A33A]" />
+          </div>
         </div>
+        <div ref={reg("look")} role="group" aria-label="Outfit" className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap" style={{ opacity: 0 }}>
+          <span className="micro text-[#F4EFE6]/55">Press</span>
+          <button
+            type="button"
+            onClick={() => wear(1)}
+            aria-label={`Switch look, now wearing ${LOOKS[lookIdx].name}`}
+            className="micro flex h-[30px] min-w-[96px] items-center justify-center gap-2 rounded-full bg-[#F4EFE6] px-4 text-[#0b0a0e] transition hover:bg-[#F2A33A]"
+          >
+            <span aria-live="polite">{LOOKS[lookIdx].name}</span>
+            <kbd className="rounded border border-black/25 px-1 font-sans text-[8.5px] max-sm:hidden">L</kbd>
+          </button>
+          <span className="micro text-[#F4EFE6]/55">to switch</span>
+        </div>
+        <Link href="/events" className="micro pointer-events-auto flex items-center gap-1 text-[#F4EFE6]/70 transition hover:text-[#F2A33A] max-sm:hidden">
+          Gig index <ArrowUpRight className="h-3 w-3" />
+        </Link>
       </div>
     </div>
   )

@@ -6,17 +6,29 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { EffectComposer, Bloom } from "@react-three/postprocessing"
 import Monkey from "./monkey"
 import { Smoke, Wordmark } from "./smoke"
-import { sampleCamera, scroll, smooth, SMASH, win } from "./store"
+import { FLOOR, PROFILE_SHIFT, profileFraming, sampleCamera, scroll, smooth, SMASH, walkFraming, win } from "./store"
 
 const GLASS_Z = 1.8
 
 function Rig() {
-  const { camera } = useThree()
+  const { camera, size } = useThree()
   useFrame((_, dt) => {
     scroll.value = THREE.MathUtils.damp(scroll.value, scroll.target, 4.5, Math.min(dt, 0.05))
     const { p, l } = sampleCamera(scroll.value)
     camera.position.set(p[0], p[1], p[2])
     camera.lookAt(l[0], l[1], l[2])
+
+    // Slide the frame without changing the perspective: on landscape screens he walks right of
+    // centre; on portrait ones the side profile is pulled in from the right edge
+    const shift =
+      size.width > size.height * 1.1
+        ? 0.14 * walkFraming(scroll.value)
+        : size.width < size.height * 0.85
+          ? -PROFILE_SHIFT * profileFraming(scroll.value)
+          : 0
+    const cam = camera as THREE.PerspectiveCamera
+    if (Math.abs(shift) > 0.001) cam.setViewOffset(size.width, size.height, -shift * size.width, 0, size.width, size.height)
+    else if (cam.view?.enabled) cam.clearViewOffset()
   })
   return null
 }
@@ -24,17 +36,25 @@ function Rig() {
 function Lights() {
   const rim = useRef<THREE.PointLight>(null)
   useFrame((state) => {
-    if (rim.current) rim.current.intensity = 26 + Math.sin(state.clock.elapsedTime * 2) * 3
+    if (rim.current) rim.current.intensity = 18 + Math.sin(state.clock.elapsedTime * 2) * 2
   })
   return (
     <>
-      <ambientLight intensity={0.55} color={0x5a5aa8} />
-      <directionalLight position={[-3, 7, 5]} intensity={1.3} color={0x9aa0ff} />
-      <directionalLight position={[4, 3, 6]} intensity={0.55} color={0xffb070} />
-      <directionalLight position={[-2, 3, -6]} intensity={1.6} color={0x8a6cff} />
-      <pointLight ref={rim} position={[-4, 2, -3]} color={0xb04aff} intensity={26} distance={16} decay={1.6} />
-      <pointLight position={[3, 1, 4]} color={0xffa040} intensity={14} distance={10} decay={1.8} />
-      <pointLight position={[0, 4, -4]} color={0x9aa0ff} intensity={8} distance={12} decay={1.8} />
+      <hemisphereLight args={[0x2a2a30, 0x050505, 0.45]} />
+      <directionalLight
+        position={[-9.8, 12.6, 8.4]}
+        intensity={2.2}
+        color={0xffffff}
+        castShadow
+        shadow-mapSize={[2048, 2048]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
+      />
+      <directionalLight position={[3, 0.2, 3]} intensity={0.32} color={0xc9d2ff} />
+      <directionalLight position={[-3.2, 1.2, -3]} intensity={1.3} color={0xffffff} />
+      <directionalLight position={[3.4, 2, -2.8]} intensity={1.6} color={0xffffff} />
+      <pointLight ref={rim} position={[-4, 2, -3]} color={0xb04aff} intensity={18} distance={16} decay={1.6} />
+      <pointLight position={[3, 1, 4]} color={0xffa040} intensity={8} distance={10} decay={1.8} />
     </>
   )
 }
@@ -159,12 +179,12 @@ function City() {
   }, [])
   return (
     <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -3.0, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR, 0]} receiveShadow>
         <planeGeometry args={[90, 90]} />
         <meshStandardMaterial color={0x1d1a4a} roughness={0.28} metalness={0.55} />
       </mesh>
       {towers.map((t, i) => (
-        <group key={i} position={[t.x, -3, t.z]} rotation={[0, t.rot, 0]}>
+        <group key={i} position={[t.x, FLOOR, t.z]} rotation={[0, t.rot, 0]}>
           {t.tiers.map((tier, j) => (
             <mesh key={j} geometry={tier.geo} material={mat} position={[0, tier.y + tier.h / 2, 0]} />
           ))}
@@ -184,7 +204,7 @@ function Lamp({ x, z, lit = false }: { x: number; z: number; lit?: boolean }) {
   const iron = useMemo(() => new THREE.MeshStandardMaterial({ color: 0x0d0c24, roughness: 0.5, metalness: 0.5 }), [])
   const glow = useMemo(() => new THREE.MeshStandardMaterial({ color: 0xffc266, emissive: 0xffa23a, emissiveIntensity: 3, toneMapped: false }), [])
   return (
-    <group position={[x, -3, z]}>
+    <group position={[x, FLOOR, z]}>
       <mesh material={iron} position={[0, 0.2, 0]}>
         <cylinderGeometry args={[0.28, 0.4, 0.4, 10]} />
       </mesh>
@@ -273,12 +293,13 @@ function Rain() {
   )
 }
 
-/** Stacked vertical shop signs that flicker on behind the monkey in scene 5. */
+/** Stacked vertical shop signs that flicker on behind the monkey as the camera swings round for the smash. */
 function NeonSign() {
   const group = useRef<THREE.Group>(null)
   useFrame((state) => {
     const t = scroll.value
-    const on = win(t, 0.7, 0.76, 0.9, 0.93)
+    const on = win(t, 0.76, 0.8, 0.86, 0.89)
+    if (group.current) group.current.visible = on > 0.01
     const flick = on > 0.2 ? 0.85 + Math.sin(state.clock.elapsedTime * 38) * 0.15 * (on < 0.95 ? 1 : 0.3) : 0
     group.current?.traverse((o) => {
       const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined
@@ -395,8 +416,9 @@ function Glass() {
 export default function Stage({ onReady }: { onReady?: () => void }) {
   return (
     <Canvas
+      shadows
       dpr={[1, 1.75]}
-      camera={{ fov: 38, near: 0.1, far: 80, position: [2.7, 1.45, 1.9] }}
+      camera={{ fov: 28, near: 0.1, far: 80, position: [2.09, 1.20, 1.35] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
       onCreated={() => onReady?.()}
     >
@@ -418,7 +440,7 @@ export default function Stage({ onReady }: { onReady?: () => void }) {
       <NeonSign />
       <Glass />
       <EffectComposer multisampling={4}>
-        <Bloom intensity={1.0} luminanceThreshold={0.75} luminanceSmoothing={0.2} mipmapBlur />
+        <Bloom intensity={0.85} luminanceThreshold={0.95} luminanceSmoothing={0.2} mipmapBlur />
       </EffectComposer>
     </Canvas>
   )
