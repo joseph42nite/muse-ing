@@ -44,60 +44,63 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07070b] flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[radial-gradient(120%_80%_at_50%_0%,#5a0910_0%,#1a0507_55%,#070709_100%)] px-5 py-10 text-[#F4EFE6]">
+      {/* The landing's folded mark, huge and faint behind the card */}
+      <p aria-hidden className="title-x pointer-events-none absolute -bottom-[4vw] left-1/2 -translate-x-1/2 select-none whitespace-nowrap text-[42vw] leading-[0.8] opacity-[0.05]">
+        M-
+      </p>
 
-      <div className="w-full max-w-md bg-white/[0.04] backdrop-blur-xl border border-white/10 rounded-2xl p-6 sm:p-8 relative z-10 shadow-2xl">
-        <div className="mb-6">
-          <Link
-            href="/"
-            className="inline-flex items-center text-white/70 hover:text-white text-sm font-light mb-5 transition-colors"
+      <Link
+        href="/"
+        className="micro absolute left-5 top-6 flex items-center gap-1.5 text-[#F4EFE6]/70 transition hover:text-white sm:left-8 sm:top-8"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" />
+        Muse-ing
+      </Link>
+
+      <div className="card-noir relative z-10 w-full max-w-[440px] px-6 py-9 sm:px-10 sm:py-11">
+        <div className="dots"><i /></div>
+        <p className="micro mt-5 flex items-center gap-2 text-[#F4EFE6]/60">
+          <Mic2 className="h-3.5 w-3.5" />
+          Artist &amp; partner portal
+        </p>
+        <h1 className="title-x mt-3 text-[34px] sm:text-[42px]">
+          Artist
+          <br />
+          login
+        </h1>
+        <p className="fine mt-4 text-[13px]!">
+          See where you&apos;re playing next, build your pre-gig setlist, take the room&apos;s requests live and put the lyrics on
+          the big screen.
+        </p>
+
+        {/* One-click demo artist */}
+        <div className="mt-7 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
+          <div className="min-w-0">
+            <p className="micro flex items-center gap-1.5 text-[#F4EFE6]">
+              <Sparkles className="h-3.5 w-3.5" />
+              Try the demo artist
+            </p>
+            <p className="mt-1 truncate text-[11px] text-[#F4EFE6]/55">Arjun Mehta · Live at Toit Indiranagar</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setEmail("artist@museing.com")
+              setPassword("artist123")
+              doLogin("artist@museing.com", "artist123")
+            }}
+            disabled={isLoading}
+            className="btn-ghost h-9! shrink-0 px-4! text-[10px]! disabled:opacity-60"
           >
-            <ArrowLeft className="w-4 h-4 mr-1.5" />
-            Back to Events
-          </Link>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs mb-3">
-            <Mic2 className="w-3.5 h-3.5" />
-            Artist & Partner Portal
-          </div>
-          <h1 className="text-3xl font-light text-white mb-1.5">Artist Login</h1>
-          <p className="text-white/60 text-sm">
-            Sign in to view your scheduled gig location, manage your pre-gig playlist, confirm 3-song audience requests, and connect HDMI Karaoke.
-          </p>
+            1-click login
+          </button>
         </div>
 
-        {/* One-Click Demo Artist Login Banner */}
-        <div className="mb-6 p-3.5 rounded-xl bg-gradient-to-r from-purple-500/15 via-fuchsia-500/10 to-amber-500/15 border border-purple-400/30">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium text-white flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Try Demo Artist Account
-              </p>
-              <p className="text-[11px] text-white/60 mt-0.5">
-                Arjun Mehta • Live at Toit Indiranagar
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setEmail("artist@museing.com")
-                setPassword("artist123")
-                doLogin("artist@museing.com", "artist123")
-              }}
-              disabled={isLoading}
-              className="px-3.5 py-2 rounded-lg bg-white text-black text-xs font-medium hover:bg-white/90 transition cursor-pointer shrink-0"
-            >
-              1-Click Artist Login
-            </button>
-          </div>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
           <div>
-            <label htmlFor="email" className="block text-white/80 text-xs font-medium mb-1.5">
-              Email Address
+            <label htmlFor="email" className="micro block text-[#F4EFE6]/55">
+              Email
             </label>
             <input
               id="email"
@@ -105,13 +108,14 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="artist@museing.com"
-              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 focus:outline-none focus:border-purple-400 transition-colors text-sm"
+              className="field-noir"
+              autoComplete="email"
               required
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-white/80 text-xs font-medium mb-1.5">
+            <label htmlFor="password" className="micro block text-[#F4EFE6]/55">
               Password
             </label>
             <input
@@ -120,26 +124,23 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full px-4 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 focus:outline-none focus:border-purple-400 transition-colors text-sm"
+              className="field-noir"
+              autoComplete="current-password"
               required
             />
           </div>
 
-          {error && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-2.5">{error}</p>}
+          {error && <p className="rounded-xl border border-[#ff9a9a]/25 bg-[#ff9a9a]/10 p-2.5 text-xs text-[#ff9a9a]">{error}</p>}
 
-          <button
-            type="submit"
-            className="w-full px-6 py-3 rounded-xl bg-white text-black font-medium text-sm transition-all duration-300 hover:bg-white/90 cursor-pointer mt-2"
-            disabled={isLoading}
-          >
-            {isLoading ? "Signing in..." : "Sign in to Dashboard"}
+          <button type="submit" className="btn-light mt-2 w-full justify-center disabled:opacity-60" disabled={isLoading}>
+            {isLoading ? "Signing in…" : "Sign in to your dashboard"}
           </button>
         </form>
 
-        <p className="text-center text-white/60 text-xs mt-6">
+        <p className="mt-7 border-t border-white/10 pt-5 text-center text-xs text-[#F4EFE6]/55">
           New performing artist?{" "}
-          <Link href="/auth/sign-up" className="text-purple-300 hover:text-white underline underline-offset-4 transition-colors">
-            Create an Artist Account
+          <Link href="/auth/sign-up" className="text-[#F4EFE6] underline underline-offset-4 transition hover:text-white">
+            Create an artist account
           </Link>
         </p>
       </div>
