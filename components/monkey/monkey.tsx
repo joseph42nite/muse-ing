@@ -2388,7 +2388,7 @@ function buildRig(
   root.updateMatrixWorld(true)
   const restLow = Math.min(...markers.map((m) => m.matrixWorld.elements[13]))
 
-  return { hips: hips.outer, legs: legRig, arms: armRig, skirt, markers, restLow, plant: { boot: -1, z: 0 } }
+  return { hips: hips.outer, legs: legRig, arms: armRig, skirt, markers, restLow, plant: { boot: -1, z: [] as number[] } }
 }
 
 type Rig = ReturnType<typeof buildRig>
@@ -2403,6 +2403,25 @@ const rotY = (a: number) => new THREE.Quaternion().setFromAxisAngle(Y_AXIS, a)
 /** Unit direction hanging down, pitched forward by `pitch` (radians) with a sideways lean. */
 const hang = (side: number, pitch: number) => v3(side, -Math.cos(pitch), Math.sin(pitch)).normalize()
 const aim = (from: THREE.Vector3, to: THREE.Vector3) => new THREE.Quaternion().setFromUnitVectors(from, to)
+
+/**
+ * How far the toes point up off the floor (radians) at leg phase `si`, as a foot rolls through
+ * a step: it lands on the heel toes-up, rolls flat and stays flat while the body passes over,
+ * peels the heel up to push off the toes, hangs toes-down as it kicks back, then reaches
+ * forward toes-up for the next heel strike.
+ */
+function footPitch(si: number) {
+  const TWO_PI = Math.PI * 2
+  const p = (((si + Math.PI / 2) % TWO_PI) + TWO_PI) % TWO_PI / TWO_PI
+  const STRIKE = 0.28
+  const PUSH = -0.55
+  if (p >= 0.5) {
+    const u = (p - 0.5) / 0.5
+    return STRIKE * (1 - smooth(0, 0.18, u)) + PUSH * Math.pow(smooth(0.5, 1, u), 1.5)
+  }
+  const v = p / 0.5
+  return PUSH + (STRIKE - PUSH) * smooth(0.12, 0.85, v) - 0.15 * Math.sin(Math.PI * Math.min(1, v / 0.3))
+}
 
 /**
  * Pose the walk at gait phase `ph`, blended in by `w` (0 = sculpted pose, 1 = full walk), after
@@ -2428,8 +2447,8 @@ function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
     const qHip = aim(L.thighRest, hang(lat, pitch))
     const qShin = aim(L.shinRest, hang(lat, pitch - bend))
     const qKnee = qHip.clone().invert().multiply(qShin)
-    // Toes lift to meet the floor heel-first, and point down as the foot kicks back
-    const toesUp = sn > 0 ? 0.22 * sn : 0.5 * sn - 0.5 * Math.pow(Math.max(0, Math.cos(si + 0.9)), 2)
+    // Heel strike, flat foot, heel rise and toe-off, then toes down through the kick back
+    const toesUp = footPitch(si)
     const qFoot = rotY(-yaw).multiply(rotX(-toesUp)).multiply(rotY(-BOOT_YAW[L.i] + L.s * 0.1))
     const qAnkle = qShin.clone().invert().multiply(qFoot)
     L.hip.quaternion.slerpQuaternions(QI, qHip, w)
@@ -2455,24 +2474,26 @@ function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
   // Drop the hips until the lowest heel or toe touches the floor again
   rig.hips.updateMatrixWorld(true)
   let low = Infinity
-  const bootLow = [Infinity, Infinity]
-  const bootZ = [0, 0]
+  let contact = 0
+  const z: number[] = []
   rig.markers.forEach((m, k) => {
     // Two contact markers per boot, heel then toe
-    const b = k >> 1
     const y = m.matrixWorld.elements[13]
-    low = Math.min(low, y)
-    bootLow[b] = Math.min(bootLow[b], y)
-    bootZ[b] += m.matrixWorld.elements[14] / 2
+    z[k] = m.matrixWorld.elements[14]
+    if (y < low) {
+      low = y
+      contact = k
+    }
   })
   rig.hips.position.y += (rig.restLow - low) / rootScale
 
   // He walks on the spot, so the planted boot sweeps backwards under him; move the world with
-  // it so that boot stays put on the floor and he reads as walking rather than gliding
-  const stance = bootLow[0] <= bootLow[1] ? 0 : 1
-  if (rig.plant.boot === stance) travel.z += (bootZ[stance] - rig.plant.z) * w
+  // whichever point of it is on the floor (the heel as it lands, the toe as it pushes off) so
+  // that point stays put and he reads as walking rather than gliding
+  const stance = contact >> 1
+  if (rig.plant.boot === stance && rig.plant.z.length) travel.z += (z[contact] - rig.plant.z[contact]) * w
   rig.plant.boot = stance
-  rig.plant.z = bootZ[stance]
+  rig.plant.z = z
 }
 
 /** The rotation taking the frame (a, plane normal na) onto (b, plane normal nb). */

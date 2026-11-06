@@ -1,7 +1,8 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+import Footer from "./footer"
 import Overlay from "./overlay"
 import { clamp01, scroll } from "./store"
 
@@ -21,6 +22,9 @@ function canWebGL() {
 export default function Experience() {
   const [hasWebGL, setHasWebGL] = useState(false)
   const [ready, setReady] = useState(false)
+  const runway = useRef<HTMLDivElement>(null)
+  // The scroll story runs over the runway only; the footer scrolls in after it ends
+  const runwayMax = () => (runway.current?.offsetHeight ?? document.documentElement.scrollHeight) - window.innerHeight
 
   useEffect(() => {
     const ok = canWebGL()
@@ -30,7 +34,7 @@ export default function Experience() {
 
   useEffect(() => {
     const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight
+      const max = runwayMax()
       scroll.target = max > 0 ? clamp01(window.scrollY / max) : 0
     }
     onScroll()
@@ -44,12 +48,13 @@ export default function Experience() {
   }, [])
 
   const jump = useCallback((p: number) => {
-    const max = document.documentElement.scrollHeight - window.innerHeight
+    const max = runwayMax()
     window.scrollTo({ top: max * clamp01(p), behavior: "smooth" })
   }, [])
 
   return (
-    <div className="relative bg-[#070709]" style={{ height: `${SCROLL_LENGTH_VH}vh` }}>
+    <>
+    <div ref={runway} className="relative bg-[#070709]" style={{ height: `${SCROLL_LENGTH_VH}vh` }}>
       <div className="sticky top-0 h-screen w-screen overflow-hidden">
         {hasWebGL && <Stage onReady={() => setReady(true)} />}
         <Overlay jump={jump} />
@@ -62,5 +67,7 @@ export default function Experience() {
         </div>
       </div>
     </div>
+    <Footer jump={jump} />
+    </>
   )
 }

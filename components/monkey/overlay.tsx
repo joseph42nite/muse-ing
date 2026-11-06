@@ -115,7 +115,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   useEffect(() => {
     let off = false
     const load = async (when: string) => {
-      const r = await fetch(`/api/public/events/search?limit=12&when=${when}`)
+      const r = await fetch(`/api/public/events/search?limit=24&when=${when}`)
       return r.ok ? ((await r.json()) as { events: OverlayEvent[] }).events : []
     }
     load("upcoming")
@@ -133,6 +133,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
 
   useEffect(() => {
     let raf = 0
+    let rowAt = -1
     const set = (key: string, v: number) => {
       shown[key] = v
       const el = refs.current[key]
@@ -156,6 +157,13 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         const i = sceneIndex(t)
         const txt = `0${i + 1} / 0${SCENES.length} · ${SCENES[i]}`
         if (label.textContent !== txt) label.textContent = txt
+      }
+      // While the gigs hold, scrolling slides the whole row past so every gig gets seen
+      const row = refs.current.row
+      const along = smooth(GIGS[1] - 0.01, GIGS[2], t)
+      if (row && Math.abs(along - rowAt) > 1e-4) {
+        row.scrollLeft = along * (row.scrollWidth - row.clientWidth)
+        rowAt = along
       }
       const bar = refs.current.bar
       if (bar) bar.style.transform = `scaleX(${Math.max(0.01, t)})`
@@ -204,7 +212,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       type="button"
       onClick={() => setInquiry(k)}
       className={`micro rounded-full px-4 py-2 transition ${
-        inquiry === k ? "bg-[#F2A33A] text-[#14100a]" : "text-[#F4EFE6]/60 hover:text-[#F4EFE6]"
+        inquiry === k ? "bg-[#F4EFE6] text-[#0b0a0e]" : "text-[#F4EFE6]/60 hover:text-[#F4EFE6]"
       }`}
     >
       {label}
@@ -224,7 +232,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
             onClick={() => setMenu((m) => !m)}
             aria-label={menu ? "Close menu" : "Open menu"}
             aria-expanded={menu}
-            className="grid h-10 w-10 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-[#F2A33A]"
+            className="grid h-10 w-10 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-white"
           >
             {menu ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
@@ -239,14 +247,14 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
               ["Book or host", () => go(1, () => setInquiry("reserve"))],
               ["Join as artist", () => go(1, () => setInquiry("artist"))],
             ].map(([l, f]) => (
-              <button key={l as string} type="button" onClick={f as () => void} className="title-x rounded-xl px-3 py-2.5 text-left text-[15px] transition hover:bg-white/5 hover:text-[#F2A33A]">
+              <button key={l as string} type="button" onClick={f as () => void} className="title-x rounded-xl px-3 py-2.5 text-left text-[15px] transition hover:bg-white/5 hover:text-white">
                 {l as string}
               </button>
             ))}
-            <Link href="/events" className="title-x rounded-xl px-3 py-2.5 text-[15px] transition hover:bg-white/5 hover:text-[#F2A33A]">
+            <Link href="/events" className="title-x rounded-xl px-3 py-2.5 text-[15px] transition hover:bg-white/5 hover:text-white">
               All events
             </Link>
-            <Link href="/login" className="title-x flex items-center gap-2 rounded-xl px-3 py-2.5 text-[15px] text-[#F2A33A] transition hover:bg-white/5">
+            <Link href="/login" className="title-x flex items-center gap-2 rounded-xl px-3 py-2.5 text-[15px] text-[#F4EFE6] transition hover:bg-white/5">
               Artist login <Mic2 className="h-3.5 w-3.5" />
             </Link>
           </nav>
@@ -266,7 +274,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
             Fully live and ready <span className="text-[#F4EFE6]/55">to redefine your night out</span>
           </p>
           <p className="micro max-w-[150px] leading-[1.5] text-[#F4EFE6]">
-            Discover <span className="text-[#F2A33A]">{events.length || "new"} upcoming gigs</span>{" "}
+            Discover <span className="text-[#F4EFE6]">{events.length || "new"} upcoming gigs</span>{" "}
             <span className="text-[#F4EFE6]/55">from artists near you</span>
           </p>
         </div>
@@ -329,26 +337,26 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
             </h2>
           </div>
           <Link href="/events" className="pill-dark micro shrink-0">
-            All events <ArrowUpRight className="h-3 w-3 text-[#F2A33A]" />
+            All events <ArrowUpRight className="h-3 w-3 text-[#F4EFE6]" />
           </Link>
         </div>
-        <ul className="no-scrollbar rise-late mt-5 flex snap-x gap-2 overflow-x-auto sm:gap-3">
-          {events.slice(0, 6).map((ev, i) => (
-            <li key={ev.id} className="w-[46vw] shrink-0 snap-start sm:w-[calc((100%-3.75rem)/6)] sm:min-w-[150px]">
+        <ul ref={reg("row")} className="no-scrollbar rise-late mt-5 flex gap-2 overflow-x-auto sm:gap-3">
+          {events.map((ev, i) => (
+            <li key={ev.id} className="w-[40vw] shrink-0 sm:w-[calc((100%-3.75rem)/6)] sm:min-w-[150px]">
               <Link
                 href={`/events/${ev.id}`}
-                className="group flex aspect-[4/5] flex-col justify-between rounded-md border border-white/10 bg-[#0b0a0e]/80 p-3 backdrop-blur-sm transition hover:border-[#F2A33A]/60"
+                className="group flex aspect-[4/5] flex-col justify-between rounded-md border border-white/10 bg-[#0b0a0e]/80 p-3 backdrop-blur-sm transition hover:border-white/50"
               >
                 <div className="flex items-start justify-between">
-                  <span className="micro text-[#F2A33A]">{dateLabel(ev.event_date_only)}</span>
-                  <span className="micro text-[#F4EFE6]/50">0{i + 1}</span>
+                  <span className="micro text-[#F4EFE6]">{dateLabel(ev.event_date_only)}</span>
+                  <span className="micro text-[#F4EFE6]/50">{String(i + 1).padStart(2, "0")}</span>
                 </div>
                 <div>
-                  <p className="title-x line-clamp-3 text-[13px] leading-[1.05] group-hover:text-[#F2A33A]">{ev.title}</p>
+                  <p className="title-x line-clamp-3 text-[13px] leading-[1.05] group-hover:text-white">{ev.title}</p>
                   <p className="micro mt-2 truncate text-[#F4EFE6]/50">{ev.artist_name || "Live"}</p>
                   <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-2">
                     <span className="flex min-w-0 items-center gap-1 text-[10px] text-[#F4EFE6]/60">
-                      <MapPin className="h-3 w-3 shrink-0 text-[#F2A33A]" />
+                      <MapPin className="h-3 w-3 shrink-0 text-[#F4EFE6]" />
                       <span className="truncate">{ev.location_name || "TBA"}</span>
                     </span>
                     <span className="micro shrink-0">{ev.ticket_price > 0 ? `₹${ev.ticket_price}` : "Free"}</span>
@@ -361,7 +369,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       </section>
 
       {/* Scene 5: impact flash, then the form behind the glass */}
-      <div ref={reg("flash")} className="absolute inset-0 bg-[#F2A33A]" style={{ opacity: 0 }} />
+      <div ref={reg("flash")} className="absolute inset-0 bg-white" style={{ opacity: 0 }} />
       <section ref={reg("form")} aria-label="Book or host" className="absolute inset-0 z-10 flex items-center justify-center bg-[#05050a]/55 p-4 pt-16 backdrop-blur-[2px]" style={{ opacity: 0 }}>
         <div className="max-h-[86vh] w-full max-w-[640px] overflow-y-auto card-noir px-6 py-9 text-[#F4EFE6] sm:px-14 sm:py-12">
           <div className="dots mx-auto w-fit"><i /></div>
@@ -408,9 +416,9 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
                 onChange={(e) => setForm({ ...form, message: e.target.value })}
                 className={field}
               />
-              {error && <p className="text-center text-xs font-medium text-[#F2A33A]">{error}</p>}
+              {error && <p className="text-center text-xs font-medium text-[#F4EFE6]">{error}</p>}
               <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-                <button type="submit" disabled={sending} className="btn-amber px-10 disabled:opacity-60">
+                <button type="submit" disabled={sending} className="btn-light px-10 disabled:opacity-60">
                   {sending ? "Sending…" : "Send"}
                 </button>
                 {inquiry === "reserve" && form.eventId && (
@@ -421,13 +429,6 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
               </div>
             </form>
           )}
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-4 text-[11px] text-[#F4EFE6]/50">
-            <span>hello@museing.live</span>
-            <span>Copyright © Muse-ing 2026</span>
-            <Link href="/venue-checkin" className="hover:text-[#F2A33A]">
-              Venue check-in
-            </Link>
-          </div>
         </div>
       </section>
 
@@ -436,10 +437,10 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         <div className="flex items-center gap-3">
           <span ref={reg("label")} className="micro text-[#F4EFE6]/60 max-sm:hidden" />
           <div className="h-px w-12 overflow-hidden bg-white/15 max-sm:hidden">
-            <div ref={reg("bar")} className="h-full w-full origin-left bg-[#F2A33A]" />
+            <div ref={reg("bar")} className="h-full w-full origin-left bg-[#F4EFE6]" />
           </div>
         </div>
-        <Link href="/events" className="micro pointer-events-auto flex items-center gap-1 text-[#F4EFE6]/70 transition hover:text-[#F2A33A] max-sm:hidden">
+        <Link href="/events" className="micro pointer-events-auto flex items-center gap-1 text-[#F4EFE6]/70 transition hover:text-white max-sm:hidden">
           Gig index <ArrowUpRight className="h-3 w-3" />
         </Link>
       </div>
