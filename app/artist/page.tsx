@@ -110,15 +110,15 @@ function SetlistSongRow({
         isCurrentlyPlaying
           ? "bg-[#D92323]/8 border-[#D92323]/40 shadow-sm ring-2 ring-[#D92323]/20"
           : isMarkedDone
-          ? "bg-white/50 border-emerald-300/60 opacity-80 hover:opacity-100"
+          ? "bg-white/50 border-emerald-400/30 opacity-80 hover:opacity-100"
           : isPaidDedication
-          ? "bg-amber-50/80 border-amber-300/80 hover:bg-amber-50"
-          : "bg-white border-[#181615]/10 hover:border-[#181615]/25 hover:shadow-xs"
+          ? "bg-[#F4EFE6]/[0.07] border-[#F4EFE6]/40 hover:bg-white/10"
+          : "bg-[#161318] border-white/10 hover:border-white/30 hover:shadow-xs"
       }`}
     >
       {/* Left: Rank + Thumbnail + Title/Artist + Badges */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <span className="text-xs font-black text-[#5C5650] w-5 text-center shrink-0">
+        <span className="text-xs font-black text-[#F4EFE6]/60 w-5 text-center shrink-0">
           {index + 1}
         </span>
 
@@ -150,15 +150,15 @@ function SetlistSongRow({
           <div className="flex items-center gap-2 flex-wrap">
             <p
               className={`text-xs sm:text-sm font-extrabold truncate ${
-                isMarkedDone ? "line-through text-[#5C5650]" : "text-[#181615]"
+                isMarkedDone ? "line-through text-[#F4EFE6]/60" : "text-[#F4EFE6]"
               }`}
             >
               {song.song_title}
             </p>
 
             {isMarkedDone && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-extrabold flex items-center gap-0.5 shrink-0">
-                <Check className="w-2.5 h-2.5 text-emerald-600" />
+              <span className="px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 text-[9px] font-extrabold flex items-center gap-0.5 shrink-0">
+                <Check className="w-2.5 h-2.5 text-emerald-400" />
                 Played
               </span>
             )}
@@ -171,13 +171,13 @@ function SetlistSongRow({
             )}
 
             {isPaidDedication && (
-              <span className="px-1.5 py-0.5 rounded bg-amber-400 text-amber-950 text-[9px] font-black shrink-0">
+              <span className="px-1.5 py-0.5 rounded bg-[#F4EFE6] text-[#0b0a0e] text-[9px] font-black shrink-0">
                 ₹50 VIP
               </span>
             )}
           </div>
 
-          <p className="text-[11px] text-[#5C5650] truncate">
+          <p className="text-[11px] text-[#F4EFE6]/60 truncate">
             {song.original_artist || (song.source_type === "artist_playlist" ? "Setlist Track" : song.requester_name ? `Requested by ${song.requester_name}` : "Live Track")}
           </p>
         </div>
@@ -201,7 +201,7 @@ function SetlistSongRow({
           <button
             type="button"
             onClick={() => handleLoadSongIntoKaraoke(song)}
-            className="px-3.5 py-1.5 rounded-full bg-[#181615] hover:bg-[#D92323] text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs cursor-pointer transition shrink-0 group/play"
+            className="px-3.5 py-1.5 rounded-full bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-extrabold flex items-center gap-1.5 shadow-xs cursor-pointer transition shrink-0 group/play"
             title="Play YouTube Video next to song"
           >
             <Play className="w-3.5 h-3.5 fill-current group-hover/play:scale-110 transition-transform" />
@@ -215,8 +215,8 @@ function SetlistSongRow({
           onClick={() => handleMarkPlayed(song.id)}
           className={`p-1.5 rounded-xl border transition cursor-pointer shrink-0 ${
             isMarkedDone
-              ? "bg-emerald-50 border-emerald-300 text-emerald-600 hover:bg-emerald-100"
-              : "border-[#181615]/15 hover:border-emerald-600 hover:text-emerald-600 text-[#5C5650]"
+              ? "bg-emerald-400/10 border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/20"
+              : "border-white/12 hover:border-emerald-600 hover:text-emerald-300 text-[#F4EFE6]/60"
           }`}
           title={isMarkedDone ? "Already marked as Done (click to toggle)" : "Mark as Done"}
         >
@@ -227,12 +227,12 @@ function SetlistSongRow({
         <button
           type="button"
           onClick={() => handleToggleSongUpvote(song.id)}
-          className="flex items-center gap-1 text-[11px] font-semibold text-[#5C5650] hover:text-[#D92323] cursor-pointer"
+          className="flex items-center gap-1 text-[11px] font-semibold text-[#F4EFE6]/60 hover:text-[#ff7a7a] cursor-pointer"
           title="Upvote"
         >
           <Heart
             className={`w-3.5 h-3.5 ${
-              (song.upvotes || 0) > 0 ? "fill-[#D92323] text-[#D92323]" : "text-neutral-300"
+              (song.upvotes || 0) > 0 ? "fill-[#D92323] text-[#ff7a7a]" : "text-neutral-300"
             }`}
           />
           <span>{song.upvotes || 0}</span>
@@ -243,7 +243,7 @@ function SetlistSongRow({
           <button
             type="button"
             onClick={() => handleDeletePlaylistSong(song.id)}
-            className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#D92323] transition cursor-pointer p-1"
+            className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#ff7a7a] transition cursor-pointer p-1"
             title="Remove from Playlist"
           >
             <Trash2 className="w-3.5 h-3.5" />
@@ -252,7 +252,7 @@ function SetlistSongRow({
 
         {/* 5. Three Lines Reorder Handle: Hold & drag anywhere to reorder queue */}
         <div
-          className="flex items-center gap-1 pl-1.5 border-l border-[#181615]/10 text-neutral-400 shrink-0"
+          className="flex items-center gap-1 pl-1.5 border-l border-white/10 text-neutral-400 shrink-0"
           title="Hold and drag to reorder setlist queue"
         >
           <div
@@ -261,12 +261,12 @@ function SetlistSongRow({
               dragControls.start(e)
             }}
             style={{ touchAction: "none" }}
-            className="flex flex-col items-center justify-center gap-[3px] py-1.5 px-2 rounded-lg hover:bg-[#181615]/10 active:scale-110 active:bg-[#D92323]/15 text-[#5C5650] hover:text-[#181615] cursor-grab active:cursor-grabbing transition select-none group/handle"
+            className="flex flex-col items-center justify-center gap-[3px] py-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-110 active:bg-[#D92323]/15 text-[#F4EFE6]/60 hover:text-white cursor-grab active:cursor-grabbing transition select-none group/handle"
             title="Hold and drag to move anywhere in setlist"
           >
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#181615] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#181615] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#181615] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
           </div>
 
           {/* Quick Nudge Buttons */}
@@ -278,7 +278,7 @@ function SetlistSongRow({
                 handleMoveSong(song.id, "up")
               }}
               disabled={index === 0}
-              className="p-0.5 rounded hover:bg-[#181615]/10 text-neutral-400 hover:text-[#181615] disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+              className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
               title="Push up in setlist"
             >
               <ChevronUp className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ function SetlistSongRow({
                 handleMoveSong(song.id, "down")
               }}
               disabled={index === totalCount - 1}
-              className="p-0.5 rounded hover:bg-[#181615]/10 text-neutral-400 hover:text-[#181615] disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+              className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
               title="Push down in setlist"
             >
               <ChevronDown className="w-3.5 h-3.5" />
@@ -344,6 +344,9 @@ export default function ArtistDashboardPage() {
   // Auto-mark Done on YouTube Video End or Near-End
   const autoMarkedIdsRef = useRef<Set<string>>(new Set())
   const ytPlayerRef = useRef<any>(null)
+  const lastPlaybackReportRef = useRef(0)
+  const activeKaraokeSongRef = useRef<any>(null)
+  activeKaraokeSongRef.current = activeKaraokeSong
   const [doneToast, setDoneToast] = useState<{ id: string; title: string } | null>(null)
   const [playlistViewFilter, setPlaylistViewFilter] = useState<"playlist" | "requests" | "dedications" | "all">("playlist")
   const [currentDateStr, setCurrentDateStr] = useState<string>("")
@@ -752,6 +755,17 @@ export default function ArtistDashboardPage() {
           if (typeof cur === "number" && typeof dur === "number" && dur > 5 && cur >= dur - 4) {
             triggerAutoMarkDone()
           }
+          const songId = activeKaraokeSongRef.current?.id
+          const now = Date.now()
+          if (songId && typeof cur === "number" && now - lastPlaybackReportRef.current > 2000) {
+            lastPlaybackReportRef.current = now
+            const state = typeof ytPlayerRef.current.getPlayerState === "function" ? ytPlayerRef.current.getPlayerState() : -1
+            fetch("/api/artist/dashboard", {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "report_playback", request_id: songId, position: cur, playing: state === 1 }),
+            }).catch(() => {})
+          }
         }
       } catch {
         // ignore
@@ -962,22 +976,16 @@ export default function ArtistDashboardPage() {
   if (needsAuth) {
     return (
       <div
-        className="min-h-screen bg-[#F4EFE6] text-[#181615] flex items-center justify-center p-4"
+        className="min-h-screen bg-[radial-gradient(120%_80%_at_50%_0%,#5a0910_0%,#1a0507_55%,#070709_100%)] text-[#F4EFE6] flex items-center justify-center p-4"
         style={{ fontFamily: "var(--font-inter), sans-serif" }}
       >
-        <div className="max-w-sm w-full bg-[#FAF7F2] border-2 border-[#181615] rounded-[28px] p-8 text-center space-y-5 shadow-2xl">
+        <div className="max-w-sm w-full bg-[#121014]/90 border border-white/10 rounded-[28px] p-8 text-center space-y-5 shadow-2xl">
           <Link href="/" className="inline-flex items-center justify-center select-none">
-            <span
-              className="text-5xl font-normal leading-none tracking-tight"
-              style={{ fontFamily: "var(--font-instrument-serif), serif" }}
-            >
-              <span className="text-[#181615]">m</span>
-              <span className="text-[#D92323]">-</span>
-            </span>
+            <span className="title-x text-[40px]">M-</span>
           </Link>
           <div className="space-y-1">
-            <h1 className="text-xl font-bold text-[#181615]">Artist Portal</h1>
-            <p className="text-xs text-[#5C5650]">Sign in to open your live stage console.</p>
+            <h1 className="title-x text-[24px]">Artist portal</h1>
+            <p className="text-xs text-[#F4EFE6]/60">Sign in to open your live stage console.</p>
           </div>
           <div className="space-y-2">
             <button
@@ -989,7 +997,7 @@ export default function ArtistDashboardPage() {
             </button>
             <Link
               href="/login"
-              className="block w-full py-2.5 px-4 rounded-full bg-white border border-[#181615]/15 text-[#181615] text-xs font-semibold hover:border-[#181615] transition"
+              className="block w-full py-2.5 px-4 rounded-full bg-[#161318] border border-white/12 text-[#F4EFE6] text-xs font-semibold hover:border-[#F4EFE6]/60 transition"
             >
               Sign In
             </Link>
@@ -1141,7 +1149,7 @@ export default function ArtistDashboardPage() {
 
   return (
     <div
-      className="min-h-screen w-full bg-[#FAF7F2] text-[#181615] flex flex-col justify-between select-none"
+      className="min-h-screen w-full bg-[#0b0a0e] text-[#F4EFE6] flex flex-col justify-between select-none"
       style={{ fontFamily: "var(--font-inter), sans-serif" }}
     >
       <MuseLoadingScreen isLoading={false} minDurationMs={2600} />
@@ -1149,7 +1157,7 @@ export default function ArtistDashboardPage() {
       {/* ═══════════════════════════════════════════════════════════════════
           1. SINGLE TOP HEADER (Untouched Brand Header: m- + HDMI / Profile / Sign Out)
       ═══════════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#181615]/10 px-6 sm:px-10 py-3.5 flex items-center justify-between gap-3">
+      <header className="sticky top-0 z-30 bg-[#0b0a0e]/90 backdrop-blur-md border-b border-white/10 px-6 sm:px-10 py-3.5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-4">
           <Link
             href="/"
@@ -1157,13 +1165,7 @@ export default function ArtistDashboardPage() {
             className="group flex items-center transition-transform duration-300 hover:scale-105 cursor-pointer select-none"
             title="Muse-ing Home"
           >
-            <span
-              className="instrument text-4xl sm:text-5xl font-normal leading-none tracking-tight"
-              style={{ fontFamily: "var(--font-instrument-serif), serif" }}
-            >
-              <span className="text-[#181615]">m</span>
-              <span className="text-[#D92323]">-</span>
-            </span>
+            <span className="title-x text-[26px] sm:text-[30px]">M-</span>
           </Link>
         </div>
 
@@ -1171,25 +1173,25 @@ export default function ArtistDashboardPage() {
           <button
             type="button"
             onClick={handleConnectHdmiScreen}
-            className="px-4 py-2 rounded-full bg-[#181615] hover:bg-[#D92323] text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+            className="px-4 py-2 rounded-full bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
-            <Tv className="w-3.5 h-3.5 text-amber-300" />
+            <Tv className="w-3.5 h-3.5 text-[#F4EFE6]" />
             <span>{hdmiConnected ? "HDMI Screen Active" : "Connect HDMI Screen"}</span>
           </button>
 
           <button
             type="button"
             onClick={() => setShowProfileModal(true)}
-            className="px-3.5 py-2 rounded-full bg-white border border-[#181615]/15 hover:border-[#181615] text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition"
+            className="px-3.5 py-2 rounded-full bg-[#161318] border border-white/12 hover:border-[#F4EFE6]/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition"
           >
-            <UserCheck className="w-3.5 h-3.5 text-[#181615]" />
+            <UserCheck className="w-3.5 h-3.5 text-[#F4EFE6]" />
             <span>Profile</span>
           </button>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="p-2 rounded-full bg-white border border-[#181615]/15 text-[#5C5650] hover:text-[#D92323] hover:border-[#D92323]/30 transition cursor-pointer"
+            className="p-2 rounded-full bg-[#161318] border border-white/12 text-[#F4EFE6]/60 hover:text-[#ff7a7a] hover:border-[#D92323]/30 transition cursor-pointer"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />
@@ -1206,11 +1208,11 @@ export default function ArtistDashboardPage() {
         {/* ─────────────────────────────────────────────────────────────
             LEFT SIDEBAR (Warm Cream #F4EFE6 — No Duplicate Logo)
         ───────────────────────────────────────────────────────────── */}
-        <aside className="w-full lg:w-[240px] xl:w-[260px] shrink-0 border-b lg:border-b-0 lg:border-r border-[#181615]/10 px-6 py-6 flex flex-col justify-between bg-[#F4EFE6]">
+        <aside className="w-full lg:w-[240px] xl:w-[260px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/10 px-6 py-6 flex flex-col justify-between bg-[#0e0c10]">
           <div className="space-y-7">
             {/* Queue Filter Group -> 3 Buttons: Setlist, Shows, Bank */}
             <div className="space-y-1">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-[#5C5650] mb-2">
+              <p className="px-2.5 micro text-[#F4EFE6]/60 mb-2">
                 Queue Filter
               </p>
               {[
@@ -1229,8 +1231,8 @@ export default function ArtistDashboardPage() {
                     }}
                     className={`w-full px-3 py-2.5 rounded-xl text-xs flex items-center justify-between transition cursor-pointer ${
                       active
-                        ? "bg-[#D92323]/12 text-[#D92323] font-bold"
-                        : "text-[#5C5650] hover:text-[#181615] hover:bg-[#181615]/5 font-medium"
+                        ? "bg-[#D92323]/12 text-[#ff7a7a] font-bold"
+                        : "text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium"
                     }`}
                   >
                     <span className="flex items-center gap-2.5">
@@ -1245,7 +1247,7 @@ export default function ArtistDashboardPage() {
 
             {/* Stage Shortcuts Group */}
             <div className="space-y-1">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-[#5C5650] mb-2">
+              <p className="px-2.5 micro text-[#F4EFE6]/60 mb-2">
                 Stage Links
               </p>
               {activeGig && (
@@ -1253,18 +1255,18 @@ export default function ArtistDashboardPage() {
                   href={`/live/${activeGig.id}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="w-full px-3 py-2 rounded-xl text-xs text-[#5C5650] hover:text-[#181615] hover:bg-[#181615]/5 font-medium flex items-center gap-2.5 transition"
+                  className="w-full px-3 py-2 rounded-xl text-xs text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium flex items-center gap-2.5 transition"
                 >
-                  <ExternalLink className="w-3.5 h-3.5 text-[#D92323]" />
+                  <ExternalLink className="w-3.5 h-3.5 text-[#ff7a7a]" />
                   <span>Audience View</span>
                 </Link>
               )}
               <button
                 type="button"
                 onClick={() => setQrOpen(true)}
-                className="w-full px-3 py-2 rounded-xl text-xs text-[#5C5650] hover:text-[#181615] hover:bg-[#181615]/5 font-medium flex items-center gap-2.5 transition cursor-pointer"
+                className="w-full px-3 py-2 rounded-xl text-xs text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium flex items-center gap-2.5 transition cursor-pointer"
               >
-                <QrCode className="w-3.5 h-3.5 text-[#181615]" />
+                <QrCode className="w-3.5 h-3.5 text-[#F4EFE6]" />
                 <span>Table QR</span>
               </button>
             </div>
@@ -1272,13 +1274,13 @@ export default function ArtistDashboardPage() {
             {/* Tonight's Playlist Quick List */}
             <div className="space-y-2 pt-1">
               <div className="flex items-center justify-between px-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#5C5650]">
+                <span className="micro text-[#F4EFE6]/60">
                   Playlists
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowAddPlaylistForm((v) => !v)}
-                  className="w-5 h-5 rounded-full bg-white border border-[#181615]/15 hover:bg-[#D92323] hover:text-white hover:border-[#D92323] flex items-center justify-center text-[#181615] transition cursor-pointer"
+                  className="w-5 h-5 rounded-full bg-[#161318] border border-white/12 hover:bg-[#D92323] hover:text-white hover:border-[#D92323] flex items-center justify-center text-[#F4EFE6] transition cursor-pointer"
                   title="Add Song"
                 >
                   <Plus className="w-3 h-3" />
@@ -1290,9 +1292,9 @@ export default function ArtistDashboardPage() {
                   <div
                     key={song.id}
                     onClick={() => handleLoadSongIntoKaraoke(song)}
-                    className="px-2.5 py-1.5 rounded-lg hover:bg-white/80 flex items-center justify-between gap-1 cursor-pointer group transition"
+                    className="px-2.5 py-1.5 rounded-lg hover:bg-white/10 flex items-center justify-between gap-1 cursor-pointer group transition"
                   >
-                    <span className="text-xs text-[#5C5650] group-hover:text-[#181615] font-medium truncate">
+                    <span className="text-xs text-[#F4EFE6]/60 group-hover:text-white font-medium truncate">
                       {song.song_title}
                     </span>
                     <button
@@ -1301,7 +1303,7 @@ export default function ArtistDashboardPage() {
                         e.stopPropagation()
                         handleDeletePlaylistSong(song.id)
                       }}
-                      className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#D92323]"
+                      className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#ff7a7a]"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -1315,13 +1317,13 @@ export default function ArtistDashboardPage() {
         {/* ─────────────────────────────────────────────────────────────
             RIGHT MAIN STAGE AREA (Full Width Laptop Spread)
         ───────────────────────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col bg-[#FAF7F2] overflow-hidden">
+        <main className="flex-1 flex flex-col bg-[#0b0a0e] overflow-hidden">
           
-          {/* 1. HERO BANNER IN MUSE BRAND COLORS (#181615 Charcoal + #D92323 Crimson) */}
+          {/* 1. HERO BANNER IN THE STUDIO REDS */}
           <div
             className="relative px-8 sm:px-12 pt-6 pb-12 text-white overflow-hidden"
             style={{
-              background: "linear-gradient(120deg, #181615 0%, #3B1212 52%, #A61B1B 100%)",
+              background: "radial-gradient(120% 140% at 75% 0%, #8f0d16 0%, #5a0910 35%, #1a0507 75%, #0b0a0e 100%)",
             }}
           >
             {/* Right Cutout Portrait */}
@@ -1363,23 +1365,22 @@ export default function ArtistDashboardPage() {
 
             {/* Artist Title */}
             <div className="relative z-10 space-y-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70 block">
-                ARTIST
-              </span>
-              <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-white leading-none">
+              <div className="dots"><i /></div>
+              <span className="micro block pt-1 text-white/65">Artist</span>
+              <h1 className="title-x text-[40px] sm:text-[58px]">
                 {artist?.name?.split("&")[0]?.trim() || "Arjun Mehta"}
               </h1>
             </div>
           </div>
 
           {/* 2. ROUNDED SHEET OVERLAPPING BANNER */}
-          <div className="relative z-20 -mt-5 rounded-t-[28px] bg-[#FAF7F2] px-8 sm:px-12 pt-6 pb-8 flex-1 flex flex-col justify-between">
+          <div className="relative z-20 -mt-5 rounded-t-[28px] bg-[#0b0a0e] px-8 sm:px-12 pt-6 pb-8 flex-1 flex flex-col justify-between">
             
             {/* Quick Add Song Popover Form */}
             {showAddPlaylistForm && (
               <form
                 onSubmit={handleAddPlaylistSong}
-                className="mb-5 p-3.5 rounded-2xl bg-white border border-[#181615]/15 flex flex-wrap items-center gap-2.5 shadow-xs"
+                className="mb-5 p-3.5 rounded-2xl bg-[#161318] border border-white/12 flex flex-wrap items-center gap-2.5 shadow-xs"
               >
                 <input
                   type="text"
@@ -1387,21 +1388,21 @@ export default function ArtistDashboardPage() {
                   value={playlistTitle}
                   onChange={(e) => setPlaylistTitle(e.target.value)}
                   placeholder="Song Title *"
-                  className="flex-1 min-w-[160px] px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                  className="flex-1 min-w-[160px] px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                 />
                 <input
                   type="text"
                   value={playlistArtist}
                   onChange={(e) => setPlaylistArtist(e.target.value)}
                   placeholder="Artist"
-                  className="w-40 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                  className="w-40 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                 />
                 <input
                   type="text"
                   value={playlistYoutubeUrl}
                   onChange={(e) => setPlaylistYoutubeUrl(e.target.value)}
                   placeholder="YouTube URL (Optional)"
-                  className="w-52 px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                  className="w-52 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                 />
                 <button
                   type="submit"
@@ -1413,7 +1414,7 @@ export default function ArtistDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddPlaylistForm(false)}
-                  className="p-1.5 text-[#5C5650] hover:text-[#181615]"
+                  className="p-1.5 text-[#F4EFE6]/60 hover:text-white"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -1426,38 +1427,38 @@ export default function ArtistDashboardPage() {
             {activeTab === "music" && (
               <div className="space-y-6 flex-1">
                 {/* A. PLAYLIST HEADER & VIEW CONTROLS */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/80 p-4 sm:p-5 rounded-2xl border border-[#181615]/10 shadow-xs">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#121014]/80 p-4 sm:p-5 rounded-2xl border border-white/10 shadow-xs">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2.5 flex-wrap">
-                      <ListMusic className="w-5 h-5 text-[#D92323]" />
-                      <h2 className="text-base sm:text-lg font-black text-[#181615] tracking-tight">
+                      <ListMusic className="w-5 h-5 text-[#ff7a7a]" />
+                      <h2 className="title-x text-[18px] sm:text-[22px]">
                         Today&apos;s Playlist
                       </h2>
 
                       {/* Today's Date Badge */}
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#181615] text-white text-[11px] font-bold flex items-center gap-1.5 shadow-2xs">
-                        <Calendar className="w-3 h-3 text-amber-400" />
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[11px] font-bold flex items-center gap-1.5 shadow-2xs">
+                        <Calendar className="w-3 h-3 text-[#F4EFE6]" />
                         <span>{currentDateStr || "Today"}</span>
                       </span>
 
-                      <span className="px-2 py-0.5 rounded-full bg-[#181615]/10 text-[#181615] text-[11px] font-bold">
+                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#F4EFE6] text-[11px] font-bold">
                         {artistPlaylist.length} Songs
                       </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-600" />
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 text-[11px] font-bold flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
                         {artistPlaylist.filter((s: any) => s.status === "played").length} Played
                       </span>
                     </div>
 
                     {/* Show Name & Location */}
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[#5C5650] flex-wrap">
-                      <span className="text-[#181615] font-extrabold flex items-center gap-1">
-                        <Disc3 className="w-3.5 h-3.5 text-[#D92323]" />
+                    <div className="flex items-center gap-2 text-xs font-semibold text-[#F4EFE6]/60 flex-wrap">
+                      <span className="text-[#F4EFE6] font-extrabold flex items-center gap-1">
+                        <Disc3 className="w-3.5 h-3.5 text-[#ff7a7a]" />
                         <span>{activeGig?.title || "Unplugged Live Night"}</span>
                       </span>
-                      <span className="text-[#5C5650]/40">•</span>
-                      <span className="flex items-center gap-1 text-[#5C5650]">
-                        <MapPin className="w-3.5 h-3.5 text-[#D92323]" />
+                      <span className="text-[#F4EFE6]/35">•</span>
+                      <span className="flex items-center gap-1 text-[#F4EFE6]/60">
+                        <MapPin className="w-3.5 h-3.5 text-[#ff7a7a]" />
                         <span>{activeGig?.location_name || "Indiranagar, Bengaluru"}</span>
                       </span>
                     </div>
@@ -1475,9 +1476,9 @@ export default function ArtistDashboardPage() {
                     {/* Songs List */}
                     <div className="space-y-2">
                       {filteredTab1Songs.length === 0 ? (
-                        <div className="bg-white/80 rounded-2xl p-8 text-center space-y-3 border border-[#181615]/10">
-                          <Music className="w-8 h-8 text-[#5C5650]/40 mx-auto" />
-                          <p className="text-xs font-bold text-[#5C5650]">
+                        <div className="bg-[#121014]/80 rounded-2xl p-8 text-center space-y-3 border border-white/10">
+                          <Music className="w-8 h-8 text-[#F4EFE6]/35 mx-auto" />
+                          <p className="text-xs font-bold text-[#F4EFE6]/60">
                             No songs found for this filter.
                           </p>
                           <button
@@ -1518,16 +1519,16 @@ export default function ArtistDashboardPage() {
 
                     {/* Incoming Song Batches grouped by person/batch */}
                     {pendingBatches.length > 0 && (
-                      <div className="pt-4 border-t border-[#181615]/10 space-y-3">
+                      <div className="pt-4 border-t border-white/10 space-y-3">
                         <div className="flex items-center justify-between">
-                          <h3 className="text-xs font-black uppercase tracking-wider text-[#181615] flex items-center gap-1.5">
-                            <Radio className="w-3.5 h-3.5 text-[#D92323]" />
+                          <h3 className="micro text-[#F4EFE6] flex items-center gap-1.5">
+                            <Radio className="w-3.5 h-3.5 text-[#ff7a7a]" />
                             <span>Incoming Song Batches ({pendingBatches.length})</span>
                           </h3>
                           <button
                             type="button"
                             onClick={() => setActiveTab("batches")}
-                            className="text-xs font-bold text-[#D92323] hover:underline cursor-pointer"
+                            className="text-xs font-bold text-[#ff7a7a] hover:underline cursor-pointer"
                           >
                             View All Batches →
                           </button>
@@ -1546,23 +1547,23 @@ export default function ArtistDashboardPage() {
                                 key={batch.id}
                                 className={`rounded-2xl p-3.5 transition ${
                                   isGolden
-                                    ? "bg-gradient-to-br from-amber-50 via-amber-100/70 to-yellow-50 border-2 border-amber-400 shadow-sm ring-2 ring-amber-300/40"
-                                    : "bg-white border border-[#181615]/12 shadow-2xs hover:border-[#181615]/25"
+                                    ? "bg-[#F4EFE6]/[0.07] border-2 border-[#F4EFE6]/50 shadow-sm ring-2 ring-[#F4EFE6]/30"
+                                    : "bg-[#161318] border border-white/10 shadow-2xs hover:border-white/30"
                                 }`}
                               >
                                 {/* Header: Requester name + VIP badge + Pass/Delete Batch */}
-                                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#181615]/10">
+                                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10">
                                   <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-black text-[#181615]">
+                                    <span className="text-xs font-black text-[#F4EFE6]">
                                       {batch.requester_name || "Audience Member"}
                                     </span>
                                     {isGolden && (
-                                      <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black shadow-xs flex items-center gap-1">
-                                        <Sparkles className="w-2.5 h-2.5 fill-amber-950" />
+                                      <span className="px-2 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[10px] font-black shadow-xs flex items-center gap-1">
+                                        <Sparkles className="w-2.5 h-2.5 fill-[#0b0a0e]" />
                                         ₹50 Golden Dedication
                                       </span>
                                     )}
-                                    <span className="text-[10px] font-semibold text-[#5C5650]">
+                                    <span className="text-[10px] font-semibold text-[#F4EFE6]/60">
                                       Pick 1 of {pendingSongs.length}
                                     </span>
                                   </div>
@@ -1570,7 +1571,7 @@ export default function ArtistDashboardPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleDeclineBatch(batch.id)}
-                                    className="text-[11px] font-bold text-neutral-400 hover:text-red-600 transition cursor-pointer px-1.5 py-0.5 rounded"
+                                    className="text-[11px] font-bold text-neutral-400 hover:text-red-400 transition cursor-pointer px-1.5 py-0.5 rounded"
                                     title="Decline entire batch"
                                   >
                                     Pass Batch
@@ -1584,17 +1585,17 @@ export default function ArtistDashboardPage() {
                                       key={s.id}
                                       className={`p-2.5 rounded-xl flex items-center justify-between gap-3 transition ${
                                         isGolden
-                                          ? "bg-white/90 border border-amber-300/80 hover:bg-white shadow-2xs"
-                                          : "bg-[#FAF7F2] border border-[#181615]/10 hover:bg-white hover:border-[#181615]/20"
+                                          ? "bg-white/90 border border-[#F4EFE6]/40 hover:bg-white/10 shadow-2xs"
+                                          : "bg-white/[0.04] border border-white/10 hover:bg-white/10 hover:border-white/25"
                                       }`}
                                     >
                                       {/* Clean song name & artist */}
                                       <div className="min-w-0 flex-1">
-                                        <p className="text-xs sm:text-sm font-extrabold text-[#181615] truncate">
+                                        <p className="text-xs sm:text-sm font-extrabold text-[#F4EFE6] truncate">
                                           {s.song_title}
                                         </p>
                                         {s.original_artist && (
-                                          <p className="text-[10px] sm:text-[11px] text-[#5C5650] truncate">
+                                          <p className="text-[10px] sm:text-[11px] text-[#F4EFE6]/60 truncate">
                                             {s.original_artist}
                                           </p>
                                         )}
@@ -1607,8 +1608,8 @@ export default function ArtistDashboardPage() {
                                           onClick={() => handleConfirmAudienceSong(s.id)}
                                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-xs ${
                                             isGolden
-                                              ? "bg-amber-500 hover:bg-amber-600 text-amber-950 font-black"
-                                              : "bg-[#181615] hover:bg-[#D92323] text-white"
+                                              ? "bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] font-black"
+                                              : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e]"
                                           }`}
                                           title="Pick this song for setlist"
                                         >
@@ -1619,7 +1620,7 @@ export default function ArtistDashboardPage() {
                                         <button
                                           type="button"
                                           onClick={() => handleDeclineSong(s.id)}
-                                          className="p-1.5 rounded-xl border border-[#181615]/15 hover:border-red-400 text-neutral-400 hover:text-red-600 transition cursor-pointer"
+                                          className="p-1.5 rounded-xl border border-white/12 hover:border-red-400 text-neutral-400 hover:text-red-400 transition cursor-pointer"
                                           title="Delete song"
                                         >
                                           <Trash2 className="w-3.5 h-3.5" />
@@ -1641,7 +1642,7 @@ export default function ArtistDashboardPage() {
                       Plays Video Next to Song + Auto-Marks as Done on Finish
                   ───────────────────────────────────────────────────────────── */}
                   <div className="lg:col-span-5 sticky top-20 space-y-4">
-                    <div className="bg-white rounded-3xl p-5 border border-[#181615]/12 shadow-sm space-y-4">
+                    <div className="bg-[#161318] rounded-3xl p-5 border border-white/10 shadow-sm space-y-4">
                       
                       {/* Video Player Header */}
                       <div className="flex items-center justify-between gap-2">
@@ -1652,12 +1653,12 @@ export default function ArtistDashboardPage() {
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D92323] opacity-75" />
                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#D92323]" />
                               </span>
-                              <span className="text-xs font-black uppercase tracking-wider text-[#D92323]">
+                              <span className="text-xs font-black uppercase tracking-wider text-[#ff7a7a]">
                                 Now Playing
                               </span>
                             </div>
                           ) : (
-                            <span className="text-xs font-bold uppercase tracking-wider text-[#5C5650]">
+                            <span className="micro text-[#F4EFE6]/60">
                               YouTube Player
                             </span>
                           )}
@@ -1666,22 +1667,22 @@ export default function ArtistDashboardPage() {
 
                       {/* Song Title & Original Artist */}
                       <div>
-                        <h3 className="text-base font-black text-[#181615] leading-tight truncate">
+                        <h3 className="title-x text-[16px] truncate">
                           {activeKaraokeSong?.song_title || "Select a Song from Playlist"}
                         </h3>
-                        <p className="text-xs text-[#5C5650] truncate mt-0.5">
+                        <p className="text-xs text-[#F4EFE6]/60 truncate mt-0.5">
                           {activeKaraokeSong?.original_artist || "Click 'Play Video' next to any song to watch and perform"}
                         </p>
                         {activeKaraokeSong?.status === "played" && (
-                          <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-                            <Check className="w-3 h-3 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-md bg-emerald-400/15 text-emerald-300 text-[10px] font-bold">
+                            <Check className="w-3 h-3 text-emerald-400" />
                             Completed & Marked as Done
                           </span>
                         )}
                       </div>
 
                       {/* Interactive YouTube Player Embed */}
-                      <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-md relative border border-[#181615]/10">
+                      <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-md relative border border-white/10">
                         <iframe
                           id="stage-active-player"
                           onLoad={registerYouTubeIframeListener}
@@ -1717,7 +1718,7 @@ export default function ArtistDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleLoadSongIntoKaraoke(nextPlaylistSong)}
-                              className="px-3 py-1.5 rounded-xl bg-white text-emerald-950 text-xs font-black hover:bg-emerald-50 transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1"
+                              className="px-3 py-1.5 rounded-xl bg-[#161318] text-emerald-200 text-xs font-black hover:bg-emerald-400/15 transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1"
                             >
                               <Play className="w-3 h-3 fill-current" />
                               <span>Play Next</span>
@@ -1740,11 +1741,11 @@ export default function ArtistDashboardPage() {
                           <button
                             type="button"
                             onClick={() => setMuteKaraokeAudio((m) => !m)}
-                            className="p-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-[#5C5650] hover:text-[#181615] transition cursor-pointer"
+                            className="p-2 rounded-xl bg-white/[0.04] border border-white/12 text-[#F4EFE6]/60 hover:text-white transition cursor-pointer"
                             title={muteKaraokeAudio ? "Unmute Video Audio" : "Mute Video Audio (Perform Live)"}
                           >
                             {muteKaraokeAudio ? (
-                              <VolumeX className="w-3.5 h-3.5 text-[#D92323]" />
+                              <VolumeX className="w-3.5 h-3.5 text-[#ff7a7a]" />
                             ) : (
                               <Volume2 className="w-3.5 h-3.5" />
                             )}
@@ -1753,10 +1754,10 @@ export default function ArtistDashboardPage() {
                           <button
                             type="button"
                             onClick={handleConnectHdmiScreen}
-                            className="px-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 hover:border-[#181615] text-[#181615] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/12 hover:border-[#F4EFE6]/60 text-[#F4EFE6] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
                             title="Cast to LED / Stage Screen via HDMI"
                           >
-                            <Tv className="w-3.5 h-3.5 text-amber-600" />
+                            <Tv className="w-3.5 h-3.5 text-[#F4EFE6]/80" />
                             <span>LED Screen</span>
                           </button>
                         </div>
@@ -1764,7 +1765,7 @@ export default function ArtistDashboardPage() {
 
                       {/* Up Next Card (Dynamically Pushes Most Upvoted Song to the Artist) */}
                       {nextPlaylistSong && (
-                        <div className="p-3 rounded-2xl bg-[#FAF7F2] border border-[#181615]/10 flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-3 shadow-2xs">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-neutral-900 shrink-0">
                               {getSongThumbnail(nextPlaylistSong) ? (
@@ -1787,31 +1788,31 @@ export default function ArtistDashboardPage() {
 
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-[#D92323] flex items-center gap-0.5">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#ff7a7a] flex items-center gap-0.5">
                                   <Sparkles className="w-2.5 h-2.5" />
                                   Up Next in Setlist
                                 </span>
                                 {todayPlaylistSongs.findIndex((s: any) => s.id === nextPlaylistSong.id) >= 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#181615]/10 text-[#181615] text-[9px] font-black">
+                                  <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[#F4EFE6] text-[9px] font-black">
                                     Slot #{todayPlaylistSongs.findIndex((s: any) => s.id === nextPlaylistSong.id) + 1}
                                   </span>
                                 )}
                                 {(nextPlaylistSong.upvotes || 0) > 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#D92323]/10 text-[#D92323] text-[9px] font-black flex items-center gap-0.5">
+                                  <span className="px-1.5 py-0.2 rounded-full bg-[#D92323]/20 text-[#ff7a7a] text-[9px] font-black flex items-center gap-0.5">
                                     <Heart className="w-2.5 h-2.5 fill-current" />
                                     {nextPlaylistSong.upvotes} Votes
                                   </span>
                                 )}
                                 {nextPlaylistSong.dedication_payment_status === "paid" && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-amber-400 text-amber-950 text-[9px] font-black">
+                                  <span className="px-1.5 py-0.2 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[9px] font-black">
                                     ₹50 VIP
                                   </span>
                                 )}
                               </div>
-                              <p className="text-xs font-black text-[#181615] truncate">
+                              <p className="text-xs font-black text-[#F4EFE6] truncate">
                                 {nextPlaylistSong.song_title}
                               </p>
-                              <p className="text-[10px] text-[#5C5650] truncate">
+                              <p className="text-[10px] text-[#F4EFE6]/60 truncate">
                                 {nextPlaylistSong.original_artist || "Setlist Track"}
                               </p>
                             </div>
@@ -1820,7 +1821,7 @@ export default function ArtistDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleLoadSongIntoKaraoke(nextPlaylistSong)}
-                            className="px-3 py-1.5 rounded-xl bg-[#181615] hover:bg-[#D92323] text-white text-xs font-bold flex items-center gap-1 transition cursor-pointer shrink-0 shadow-xs"
+                            className="px-3 py-1.5 rounded-xl bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-bold flex items-center gap-1 transition cursor-pointer shrink-0 shadow-xs"
                             title={`Play ${nextPlaylistSong.song_title}`}
                           >
                             <Play className="w-3 h-3 fill-current" />
@@ -1830,21 +1831,21 @@ export default function ArtistDashboardPage() {
                       )}
 
                       {/* YouTube Search & Video Picker (No need to leave app to copy/paste) */}
-                      <div className="pt-3 border-t border-[#181615]/10 space-y-2.5">
+                      <div className="pt-3 border-t border-white/10 space-y-2.5">
                         <div className="flex items-center justify-between gap-2 flex-wrap">
                           <div className="flex items-center gap-1.5">
-                            <Youtube className="w-4 h-4 text-[#D92323]" />
-                            <span className="text-[11px] font-black uppercase tracking-wider text-[#181615]">
+                            <Youtube className="w-4 h-4 text-[#ff7a7a]" />
+                            <span className="text-[11px] font-black uppercase tracking-wider text-[#F4EFE6]">
                               Search YouTube
                             </span>
                             {ytApiConnected === true ? (
-                              <span className="px-1.5 py-0.2 rounded-md bg-emerald-100 text-emerald-800 text-[9px] font-black flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span className="px-1.5 py-0.2 rounded-md bg-emerald-400/15 text-emerald-300 text-[9px] font-black flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/100 animate-pulse" />
                                 Live API
                               </span>
                             ) : ytApiConnected === false ? (
                               <span
-                                className="px-1.5 py-0.2 rounded-md bg-amber-100 text-amber-900 text-[9px] font-bold"
+                                className="px-1.5 py-0.2 rounded-md bg-[#F4EFE6]/15 text-[#F4EFE6] text-[9px] font-bold"
                                 title="Add YOUTUBE_API_KEY in .env.local for live web search"
                               >
                                 Catalog Mode
@@ -1855,7 +1856,7 @@ export default function ArtistDashboardPage() {
                             <button
                               type="button"
                               onClick={() => setShowYtResultsPanel(false)}
-                              className="text-[10px] font-bold text-[#5C5650] hover:text-[#181615] cursor-pointer"
+                              className="text-[10px] font-bold text-[#F4EFE6]/60 hover:text-white cursor-pointer"
                             >
                               Hide Results
                             </button>
@@ -1871,19 +1872,19 @@ export default function ArtistDashboardPage() {
                           className="flex gap-2"
                         >
                           <div className="relative flex-1">
-                            <Search className="w-3.5 h-3.5 text-[#5C5650] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                            <Search className="w-3.5 h-3.5 text-[#F4EFE6]/60 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                             <input
                               type="text"
                               value={ytSearchQuery}
                               onChange={(e) => setYtSearchQuery(e.target.value)}
                               placeholder="Search YouTube or paste URL..."
-                              className="w-full pl-8 pr-7 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs text-[#181615] focus:outline-none focus:border-[#D92323] transition"
+                              className="w-full pl-8 pr-7 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#D92323] transition"
                             />
                             {ytSearchQuery && (
                               <button
                                 type="button"
                                 onClick={() => setYtSearchQuery("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 cursor-pointer"
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-300 cursor-pointer"
                               >
                                 <X className="w-3 h-3" />
                               </button>
@@ -1906,7 +1907,7 @@ export default function ArtistDashboardPage() {
                         {/* Quick 1-Click Search Variation Chips */}
                         {activeKaraokeSong?.song_title && (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-[#5C5650] font-semibold">Try:</span>
+                            <span className="text-[10px] text-[#F4EFE6]/60 font-semibold">Try:</span>
                             <button
                               type="button"
                               onClick={() => {
@@ -1914,7 +1915,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-[#181615]/5 hover:bg-[#181615]/10 text-[10px] font-semibold text-[#181615] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Karaoke
                             </button>
@@ -1925,7 +1926,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-[#181615]/5 hover:bg-[#181615]/10 text-[10px] font-semibold text-[#181615] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Acoustic
                             </button>
@@ -1936,7 +1937,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-[#181615]/5 hover:bg-[#181615]/10 text-[10px] font-semibold text-[#181615] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Instrumental
                             </button>
@@ -1947,12 +1948,12 @@ export default function ArtistDashboardPage() {
                         {showYtResultsPanel && (
                           <div className="space-y-1.5 pt-1">
                             {isSearchingYt ? (
-                              <div className="p-4 text-center rounded-2xl bg-[#FAF7F2] border border-[#181615]/10 flex items-center justify-center gap-2 text-xs font-semibold text-[#5C5650]">
-                                <Loader2 className="w-4 h-4 animate-spin text-[#D92323]" />
+                              <div className="p-4 text-center rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center gap-2 text-xs font-semibold text-[#F4EFE6]/60">
+                                <Loader2 className="w-4 h-4 animate-spin text-[#ff7a7a]" />
                                 <span>Searching YouTube for &quot;{ytSearchQuery}&quot;...</span>
                               </div>
                             ) : ytSearchResults.length === 0 && ytSearchSubmitted ? (
-                              <div className="p-3 text-center rounded-2xl bg-[#FAF7F2] border border-[#181615]/10 text-xs text-[#5C5650]">
+                              <div className="p-3 text-center rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-[#F4EFE6]/60">
                                 No videos found. Try different keywords or paste a YouTube link.
                               </div>
                             ) : (
@@ -1965,8 +1966,8 @@ export default function ArtistDashboardPage() {
                                       onClick={() => handleSelectYouTubeVideo(video)}
                                       className={`p-2 rounded-xl flex items-center justify-between gap-2.5 border transition cursor-pointer group ${
                                         isLoaded
-                                          ? "bg-[#D92323]/10 border-[#D92323] text-[#181615] ring-1 ring-[#D92323]/30"
-                                          : "bg-[#FAF7F2] border-[#181615]/10 hover:border-[#D92323]/50 hover:bg-white"
+                                          ? "bg-[#D92323]/20 border-[#D92323] text-[#F4EFE6] ring-1 ring-[#D92323]/30"
+                                          : "bg-white/[0.04] border-white/10 hover:border-[#D92323]/50 hover:bg-white/10"
                                       }`}
                                     >
                                       <div className="flex items-center gap-2.5 min-w-0">
@@ -1983,10 +1984,10 @@ export default function ArtistDashboardPage() {
                                           )}
                                         </div>
                                         <div className="min-w-0">
-                                          <p className={`text-[11px] font-bold truncate ${isLoaded ? "text-[#D92323] font-black" : "text-[#181615]"}`}>
+                                          <p className={`text-[11px] font-bold truncate ${isLoaded ? "text-[#ff7a7a] font-black" : "text-[#F4EFE6]"}`}>
                                             {video.title}
                                           </p>
-                                          <p className="text-[10px] text-[#5C5650] truncate">
+                                          <p className="text-[10px] text-[#F4EFE6]/60 truncate">
                                             {video.channel || "YouTube"}
                                           </p>
                                         </div>
@@ -1999,7 +2000,7 @@ export default function ArtistDashboardPage() {
                                       ) : (
                                         <button
                                           type="button"
-                                          className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-[#181615] group-hover:bg-[#D92323] text-white transition shrink-0 flex items-center gap-1 shadow-2xs"
+                                          className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-[#F4EFE6] group-hover:bg-white/10 text-[#0b0a0e] transition shrink-0 flex items-center gap-1 shadow-2xs"
                                         >
                                           <Play className="w-2.5 h-2.5 fill-current" />
                                           <span>Play</span>
@@ -2025,15 +2026,15 @@ export default function ArtistDashboardPage() {
             {activeTab === "batches" && (
               <div className="space-y-4 flex-1">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h2 className="text-sm font-extrabold text-[#181615]">
+                  <h2 className="title-x text-[16px]">
                     PICK A SONG : Incoming 3-Song Batches ({pendingBatches.length})
                   </h2>
-                  <div className="flex items-center gap-1 bg-white border border-[#181615]/10 p-1 rounded-full">
+                  <div className="flex items-center gap-1 bg-[#161318] border border-white/10 p-1 rounded-full">
                     <button
                       type="button"
                       onClick={() => setPendingBatchFilter("all")}
                       className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
-                        pendingBatchFilter === "all" ? "bg-[#181615] text-white" : "text-[#5C5650]"
+                        pendingBatchFilter === "all" ? "bg-[#F4EFE6] text-[#0b0a0e]" : "text-[#F4EFE6]/60"
                       }`}
                     >
                       All ({pendingBatches.length})
@@ -2043,8 +2044,8 @@ export default function ArtistDashboardPage() {
                       onClick={() => setPendingBatchFilter("dedication")}
                       className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
                         pendingBatchFilter === "dedication"
-                          ? "bg-amber-400 text-[#181615]"
-                          : "text-amber-800"
+                          ? "bg-[#F4EFE6] text-[#F4EFE6]"
+                          : "text-[#F4EFE6]/80"
                       }`}
                     >
                       ₹50 Ready ({readyToPayBatchesCount})
@@ -2055,7 +2056,7 @@ export default function ArtistDashboardPage() {
                       className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
                         pendingBatchFilter === "regular"
                           ? "bg-[#D92323] text-white"
-                          : "text-[#5C5650]"
+                          : "text-[#F4EFE6]/60"
                       }`}
                     >
                       Standard ({regularBatchesCount})
@@ -2071,18 +2072,18 @@ export default function ArtistDashboardPage() {
                         key={batch.id}
                         className={`rounded-2xl p-4 space-y-3 transition ${
                           isGolden
-                            ? "bg-gradient-to-br from-amber-50 via-amber-100/70 to-yellow-50 border-2 border-amber-400 shadow-md ring-4 ring-amber-400/20"
-                            : "bg-white border border-[#181615]/12 shadow-2xs hover:border-[#181615]/20"
+                            ? "bg-[#F4EFE6]/[0.07] border-2 border-[#F4EFE6]/50 shadow-md ring-4 ring-[#F4EFE6]/20"
+                            : "bg-[#161318] border border-white/10 shadow-2xs hover:border-white/25"
                         }`}
                       >
-                        <div className="flex items-center justify-between pb-2 border-b border-[#181615]/10">
+                        <div className="flex items-center justify-between pb-2 border-b border-white/10">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-black text-[#181615]">
+                            <span className="text-xs font-black text-[#F4EFE6]">
                               {batch.requester_name || "Audience Member"}
                             </span>
                             {isGolden && (
-                              <span className="px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-amber-950 text-[10px] font-black shadow-xs flex items-center gap-1">
-                                <Sparkles className="w-2.5 h-2.5 fill-amber-950" />
+                              <span className="px-2 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[10px] font-black shadow-xs flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5 fill-[#0b0a0e]" />
                                 ₹50 Golden Dedication
                               </span>
                             )}
@@ -2090,7 +2091,7 @@ export default function ArtistDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleDeclineBatch(batch.id)}
-                            className="text-[11px] text-[#5C5650] hover:text-[#D92323] font-semibold cursor-pointer"
+                            className="text-[11px] text-[#F4EFE6]/60 hover:text-[#ff7a7a] font-semibold cursor-pointer"
                           >
                             Pass Batch
                           </button>
@@ -2104,16 +2105,16 @@ export default function ArtistDashboardPage() {
                                 key={s.id}
                                 className={`flex items-center justify-between gap-2 p-2.5 rounded-xl transition ${
                                   isGolden
-                                    ? "bg-white/95 border border-amber-300 hover:bg-white shadow-2xs"
-                                    : "bg-[#FAF7F2] border border-[#181615]/10 hover:border-[#181615]/20 hover:bg-white"
+                                    ? "bg-white/95 border border-[#F4EFE6]/40 hover:bg-white/10 shadow-2xs"
+                                    : "bg-white/[0.04] border border-white/10 hover:border-white/25 hover:bg-white/10"
                                 }`}
                               >
                                 <div className="min-w-0 pr-2">
-                                  <p className="text-xs sm:text-sm font-extrabold text-[#181615] truncate">
+                                  <p className="text-xs sm:text-sm font-extrabold text-[#F4EFE6] truncate">
                                     {idx + 1}. {s.song_title}
                                   </p>
                                   {s.original_artist && (
-                                    <p className="text-[11px] text-[#5C5650] truncate">
+                                    <p className="text-[11px] text-[#F4EFE6]/60 truncate">
                                       {s.original_artist}
                                     </p>
                                   )}
@@ -2124,8 +2125,8 @@ export default function ArtistDashboardPage() {
                                     onClick={() => handleConfirmAudienceSong(s.id)}
                                     className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1 shadow-xs ${
                                       isGolden
-                                        ? "bg-amber-500 hover:bg-amber-600 text-amber-950 font-black"
-                                        : "bg-[#181615] hover:bg-[#D92323] text-white"
+                                        ? "bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] font-black"
+                                        : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e]"
                                     }`}
                                   >
                                     <Check className="w-3.5 h-3.5 stroke-[2.5]" />
@@ -2134,7 +2135,7 @@ export default function ArtistDashboardPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleDeclineSong(s.id)}
-                                    className="p-1.5 rounded-xl border border-[#181615]/15 hover:border-red-400 text-neutral-400 hover:text-red-600 transition cursor-pointer"
+                                    className="p-1.5 rounded-xl border border-white/12 hover:border-red-400 text-neutral-400 hover:text-red-400 transition cursor-pointer"
                                     title="Delete song"
                                   >
                                     <Trash2 className="w-3.5 h-3.5" />
@@ -2175,7 +2176,7 @@ export default function ArtistDashboardPage() {
                       value={customYoutubeInput}
                       onChange={(e) => setCustomYoutubeInput(e.target.value)}
                       placeholder="Paste YouTube URL or ID"
-                      className="flex-1 px-3 py-2 rounded-xl bg-white border border-[#181615]/15 text-xs focus:outline-none"
+                      className="flex-1 px-3 py-2 rounded-xl bg-[#161318] border border-white/12 text-xs focus:outline-none"
                     />
                     <button
                       type="button"
@@ -2196,10 +2197,10 @@ export default function ArtistDashboardPage() {
               <div className="space-y-4 flex-1">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <div>
-                    <h2 className="text-sm sm:text-base font-extrabold text-[#181615]">
+                    <h2 className="title-x text-[16px] sm:text-[18px]">
                       All Shows ({gigs.length})
                     </h2>
-                    <p className="text-xs text-[#5C5650] mt-0.5">
+                    <p className="text-xs text-[#F4EFE6]/60 mt-0.5">
                       Review crowd engagement, upvotes, dedications, and live audience tips per show.
                     </p>
                   </div>
@@ -2227,74 +2228,74 @@ export default function ArtistDashboardPage() {
                         key={gig.id}
                         className={`rounded-2xl p-4 sm:p-5 border transition flex flex-col md:flex-row md:items-center justify-between gap-4 ${
                           isActive
-                            ? "bg-white border-2 border-[#D92323] shadow-sm ring-2 ring-[#D92323]/15"
-                            : "bg-white border-[#181615]/10 hover:border-[#181615]/25 shadow-2xs"
+                            ? "bg-[#161318] border-2 border-[#D92323] shadow-sm ring-2 ring-[#D92323]/15"
+                            : "bg-[#161318] border-white/10 hover:border-white/30 shadow-2xs"
                         }`}
                       >
                         {/* Left: Date + Title + Location + Active Status */}
                         <div className="space-y-1.5 min-w-0 md:max-w-md">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-black text-[#D92323] px-2 py-0.5 rounded-md bg-[#D92323]/10">
+                            <span className="font-mono text-xs font-black text-[#ff7a7a] px-2 py-0.5 rounded-md bg-[#D92323]/20">
                               {gig.event_date_only || "Tonight"}
                             </span>
                             {isActive && (
                               <span className="px-2 py-0.5 rounded-full bg-[#D92323] text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#161318] animate-pulse" />
                                 Current Active Stage
                               </span>
                             )}
                           </div>
 
-                          <h3 className="text-base font-extrabold text-[#181615] truncate">
+                          <h3 className="title-x text-[15px] truncate">
                             {gig.title}
                           </h3>
 
-                          <div className="flex items-center gap-1.5 text-xs text-[#5C5650] truncate">
-                            <MapPin className="w-3.5 h-3.5 text-[#D92323] shrink-0" />
+                          <div className="flex items-center gap-1.5 text-xs text-[#F4EFE6]/60 truncate">
+                            <MapPin className="w-3.5 h-3.5 text-[#ff7a7a] shrink-0" />
                             <span className="truncate">{gig.location_name}</span>
                           </div>
                         </div>
 
                         {/* Center: Real Stats Grid (Upvotes, Dedications, Tips) */}
-                        <div className="grid grid-cols-3 gap-2 sm:gap-3 py-2 md:py-0 border-y md:border-y-0 md:border-x border-[#181615]/10 md:px-6">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-3 py-2 md:py-0 border-y md:border-y-0 md:border-x border-white/10 md:px-6">
                           {/* 1. UPVOTES */}
-                          <div className="px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/8 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#5C5650]">
-                              <Heart className="w-3 h-3 text-[#D92323] fill-[#D92323]" />
+                          <div className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-center space-y-0.5 min-w-[85px]">
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#F4EFE6]/60">
+                              <Heart className="w-3 h-3 text-[#ff7a7a] fill-[#D92323]" />
                               <span>Upvotes</span>
                             </div>
-                            <p className="text-base sm:text-lg font-black text-[#181615]">
+                            <p className="text-base sm:text-lg font-black text-[#F4EFE6]">
                               {upvotesCount}
                             </p>
                           </div>
 
                           {/* 2. DEDICATIONS */}
-                          <div className="px-3 py-2 rounded-xl bg-amber-50/70 border border-amber-300/80 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-amber-900">
-                              <Sparkles className="w-3 h-3 text-amber-600 fill-amber-500" />
+                          <div className="px-3 py-2 rounded-xl bg-[#F4EFE6]/[0.06] border border-[#F4EFE6]/30 text-center space-y-0.5 min-w-[85px]">
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#F4EFE6]/80">
+                              <Sparkles className="w-3 h-3 text-[#F4EFE6]/80 fill-[#F4EFE6]" />
                               <span>Dedications</span>
                             </div>
-                            <p className="text-base sm:text-lg font-black text-amber-950">
+                            <p className="text-base sm:text-lg font-black text-[#F4EFE6]">
                               {dedicationsCount}
                             </p>
                             {dedicationsAmount > 0 && (
-                              <p className="text-[10px] font-bold text-amber-700">
+                              <p className="text-[10px] font-bold text-[#F4EFE6]/80">
                                 ₹{dedicationsAmount}
                               </p>
                             )}
                           </div>
 
                           {/* 3. TIPS */}
-                          <div className="px-3 py-2 rounded-xl bg-emerald-50/70 border border-emerald-300/80 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-900">
-                              <Wallet className="w-3 h-3 text-emerald-600" />
+                          <div className="px-3 py-2 rounded-xl bg-emerald-400/10/70 border border-emerald-400/40 text-center space-y-0.5 min-w-[85px]">
+                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                              <Wallet className="w-3 h-3 text-emerald-400" />
                               <span>Tips</span>
                             </div>
-                            <p className="text-base sm:text-lg font-black text-emerald-950">
+                            <p className="text-base sm:text-lg font-black text-emerald-200">
                               {tipsCount}
                             </p>
                             {tipsAmount > 0 && (
-                              <p className="text-[10px] font-bold text-emerald-700">
+                              <p className="text-[10px] font-bold text-emerald-300">
                                 ₹{tipsAmount}
                               </p>
                             )}
@@ -2313,7 +2314,7 @@ export default function ArtistDashboardPage() {
                             className={`px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.14em] cursor-pointer transition select-none active:scale-[0.98] ${
                               isActive
                                 ? "bg-[#D92323] text-white shadow-xs"
-                                : "bg-[#181615] hover:bg-[#D92323] text-white shadow-xs"
+                                : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] shadow-xs"
                             }`}
                           >
                             {isActive ? "Stage Active" : "Switch Stage"}
@@ -2322,7 +2323,7 @@ export default function ArtistDashboardPage() {
                           <Link
                             href={`/live/${gig.id}`}
                             target="_blank"
-                            className="p-2 rounded-full bg-[#FAF7F2] hover:bg-white border border-[#181615]/15 text-[#181615] transition shadow-2xs"
+                            className="p-2 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/12 text-[#F4EFE6] transition shadow-2xs"
                             title="Open public live venue URL"
                           >
                             <ExternalLink className="w-4 h-4" />
@@ -2343,23 +2344,23 @@ export default function ArtistDashboardPage() {
                 {/* Left: Money Coming In */}
                 <div className="lg:col-span-7 space-y-4">
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-2xl bg-[#181615] text-white p-4">
+                    <div className="rounded-2xl border border-white/10 bg-[linear-gradient(160deg,#8f0d16,#3a060b)] text-white p-4">
                       <span className="text-[10px] uppercase font-bold opacity-75">Total</span>
                       <p className="text-2xl font-extrabold mt-0.5">
                         ₹{earningsSummary.totalRevenue || 0}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-amber-50 border border-amber-300 p-4">
-                      <span className="text-[10px] uppercase font-bold text-amber-800">
+                    <div className="rounded-2xl bg-[#F4EFE6]/[0.06] border border-[#F4EFE6]/30 p-4">
+                      <span className="text-[10px] uppercase font-bold text-[#F4EFE6]/80">
                         Dedications
                       </span>
-                      <p className="text-2xl font-extrabold text-amber-950 mt-0.5">
+                      <p className="text-2xl font-extrabold text-[#F4EFE6] mt-0.5">
                         ₹{earningsSummary.dedicationRevenue || 0}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-emerald-50 border border-emerald-300 p-4">
-                      <span className="text-[10px] uppercase font-bold text-emerald-800">Tips</span>
-                      <p className="text-2xl font-extrabold text-emerald-950 mt-0.5">
+                    <div className="rounded-2xl bg-emerald-400/10 border border-emerald-400/40 p-4">
+                      <span className="text-[10px] uppercase font-bold text-emerald-300">Tips</span>
+                      <p className="text-2xl font-extrabold text-emerald-200 mt-0.5">
                         ₹{earningsSummary.tipRevenue || 0}
                       </p>
                     </div>
@@ -2369,15 +2370,15 @@ export default function ArtistDashboardPage() {
                     {transactions.map((tx: any) => (
                       <div
                         key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-xl bg-white border border-[#181615]/10 text-xs"
+                        className="flex items-center justify-between p-3 rounded-xl bg-[#161318] border border-white/10 text-xs"
                       >
                         <div>
-                          <span className="font-bold text-[#181615]">{tx.payer_name}</span>
-                          <span className="text-[#5C5650] ml-2">
+                          <span className="font-bold text-[#F4EFE6]">{tx.payer_name}</span>
+                          <span className="text-[#F4EFE6]/60 ml-2">
                             {tx.song_title || tx.note || "Tip"}
                           </span>
                         </div>
-                        <span className="font-mono font-extrabold text-emerald-700">
+                        <span className="font-mono font-extrabold text-emerald-300">
                           +₹{tx.amount}
                         </span>
                       </div>
@@ -2388,11 +2389,11 @@ export default function ArtistDashboardPage() {
                 {/* Right: Compact Bank & UPIPay Form */}
                 <form
                   onSubmit={handleSaveBankDetails}
-                  className="lg:col-span-5 space-y-2.5 bg-white p-4 rounded-2xl border border-[#181615]/12"
+                  className="lg:col-span-5 space-y-2.5 bg-[#161318] p-4 rounded-2xl border border-white/10"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-[#181615]">UPIPay &amp; Bank</span>
-                    <span className="text-[10px] font-mono text-emerald-700 font-bold">0% Fee</span>
+                    <span className="text-xs font-extrabold text-[#F4EFE6]">UPIPay &amp; Bank</span>
+                    <span className="text-[10px] font-mono text-emerald-300 font-bold">0% Fee</span>
                   </div>
                   <input
                     type="text"
@@ -2400,7 +2401,7 @@ export default function ArtistDashboardPage() {
                     value={upiId}
                     onChange={(e) => setUpiId(e.target.value)}
                     placeholder="UPI ID (e.g. arjunmehta@ybl) *"
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs font-mono focus:outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
                   />
                   <input
                     type="text"
@@ -2408,7 +2409,7 @@ export default function ArtistDashboardPage() {
                     value={payeeName}
                     onChange={(e) => setPayeeName(e.target.value)}
                     placeholder="Account Holder Name *"
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <input
@@ -2416,14 +2417,14 @@ export default function ArtistDashboardPage() {
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
                       placeholder="Bank Name"
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                     />
                     <input
                       type="text"
                       value={ifscCode}
                       onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
                       placeholder="IFSC Code"
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs font-mono focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
                     />
                   </div>
                   <input
@@ -2431,13 +2432,13 @@ export default function ArtistDashboardPage() {
                     value={accountNumber}
                     onChange={(e) => setAccountNumber(e.target.value)}
                     placeholder="Account Number"
-                    className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs font-mono focus:outline-none"
+                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
                   />
                   <div className="grid grid-cols-2 gap-2">
                     <select
                       value={upipayProvider}
                       onChange={(e) => setUpipayProvider(e.target.value as any)}
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
                     >
                       <option value="upi_direct">Direct UPI</option>
                       <option value="phonepe">PhonePe Biz</option>
@@ -2448,11 +2449,11 @@ export default function ArtistDashboardPage() {
                       value={upipayMerchantId}
                       onChange={(e) => setUpipayMerchantId(e.target.value)}
                       placeholder="Merchant ID"
-                      className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#181615]/15 text-xs font-mono focus:outline-none"
+                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
                     />
                   </div>
-                  {bankErrorMsg && <p className="text-[11px] text-[#D92323] font-bold">{bankErrorMsg}</p>}
-                  {bankSavedMsg && <p className="text-[11px] text-emerald-700 font-bold">{bankSavedMsg}</p>}
+                  {bankErrorMsg && <p className="text-[11px] text-[#ff7a7a] font-bold">{bankErrorMsg}</p>}
+                  {bankSavedMsg && <p className="text-[11px] text-emerald-300 font-bold">{bankSavedMsg}</p>}
                   <button
                     type="submit"
                     disabled={savingBank}
@@ -2460,7 +2461,7 @@ export default function ArtistDashboardPage() {
                   >
                     {savingBank ? "Saving..." : "Save Bank Details"}
                   </button>
-                  <code className="block text-[9px] font-mono text-[#5C5650] truncate">
+                  <code className="block text-[9px] font-mono text-[#F4EFE6]/60 truncate">
                     {previewUpiQr.upiUri}
                   </code>
                 </form>
@@ -2473,7 +2474,7 @@ export default function ArtistDashboardPage() {
       {/* ─────────────────────────────────────────────────────────
           BOTTOM FULL-WIDTH STICKY PLAYER BAR (Muse Brand Accents)
       ───────────────────────────────────────────────────────── */}
-      <footer className="sticky bottom-0 z-30 border-t border-[#181615]/10 bg-white px-6 sm:px-10 py-3 flex flex-wrap items-center justify-between gap-4">
+      <footer className="sticky bottom-0 z-30 border-t border-white/10 bg-[#0e0c10]/95 backdrop-blur-md px-6 sm:px-10 py-3 flex flex-wrap items-center justify-between gap-4">
         {/* Left: Song Art + Name + Heart */}
         <div className="flex items-center gap-3 min-w-[200px]">
           {currentStageSong && getSongThumbnail(currentStageSong) ? (
@@ -2489,12 +2490,12 @@ export default function ArtistDashboardPage() {
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <p className="text-xs font-extrabold text-[#181615] truncate">
+              <p className="text-xs font-extrabold text-[#F4EFE6] truncate">
                 {currentStageSong?.song_title || "Ready"}
               </p>
-              <Heart className="w-3 h-3 text-[#D92323] shrink-0" />
+              <Heart className="w-3 h-3 text-[#ff7a7a] shrink-0" />
             </div>
-            <p className="text-[11px] text-[#5C5650] truncate">
+            <p className="text-[11px] text-[#F4EFE6]/60 truncate">
               {currentStageSong?.original_artist || artist?.name || "Live"}
             </p>
           </div>
@@ -2502,14 +2503,14 @@ export default function ArtistDashboardPage() {
 
         {/* Center: Transport + Crimson Circle Play Button + Slim Progress Bar */}
         <div className="flex flex-col items-center gap-1.5 flex-1 max-w-lg">
-          <div className="flex items-center gap-4 text-[#5C5650]">
-            <Shuffle className="w-3.5 h-3.5 hover:text-[#181615] cursor-pointer" />
+          <div className="flex items-center gap-4 text-[#F4EFE6]/60">
+            <Shuffle className="w-3.5 h-3.5 hover:text-white cursor-pointer" />
             <button
               type="button"
               onClick={() => {
                 if (artistPlaylist.length > 0) handleLoadSongIntoKaraoke(artistPlaylist[0])
               }}
-              className="hover:text-[#181615] cursor-pointer"
+              className="hover:text-white cursor-pointer"
             >
               <SkipBack className="w-4 h-4 fill-current" />
             </button>
@@ -2537,16 +2538,16 @@ export default function ArtistDashboardPage() {
               onClick={() => {
                 if (artistPlaylist.length > 1) handleLoadSongIntoKaraoke(artistPlaylist[1])
               }}
-              className="hover:text-[#181615] cursor-pointer"
+              className="hover:text-white cursor-pointer"
             >
               <SkipForward className="w-4 h-4 fill-current" />
             </button>
-            <Repeat className="w-3.5 h-3.5 hover:text-[#181615] cursor-pointer" />
+            <Repeat className="w-3.5 h-3.5 hover:text-white cursor-pointer" />
           </div>
 
-          <div className="w-full flex items-center gap-2 text-[10px] text-[#5C5650] font-medium">
+          <div className="w-full flex items-center gap-2 text-[10px] text-[#F4EFE6]/60 font-medium">
             <span>{isKaraokePlaying ? "1:18" : "0:00"}</span>
-            <div className="flex-1 h-1 rounded-full bg-[#181615]/10 relative overflow-hidden">
+            <div className="flex-1 h-1 rounded-full bg-white/10 relative overflow-hidden">
               <div
                 className={`h-full bg-[#D92323] rounded-full ${
                   isKaraokePlaying ? "w-1/2" : "w-0"
@@ -2558,12 +2559,12 @@ export default function ArtistDashboardPage() {
         </div>
 
         {/* Right: Lyrics/HDMI + Mute + Volume Bar */}
-        <div className="flex items-center gap-3 text-[#5C5650]">
+        <div className="flex items-center gap-3 text-[#F4EFE6]/60">
           <button
             type="button"
             onClick={handleConnectHdmiScreen}
-            className={`hover:text-[#181615] cursor-pointer ${
-              hdmiConnected ? "text-[#D92323]" : ""
+            className={`hover:text-white cursor-pointer ${
+              hdmiConnected ? "text-[#ff7a7a]" : ""
             }`}
             title="HDMI Screen"
           >
@@ -2577,17 +2578,17 @@ export default function ArtistDashboardPage() {
               setMuteKaraokeAudio(nextMute)
               broadcastToLedScreen(karaokeVideoId, activeKaraokeSong, nextMute)
             }}
-            className="hover:text-[#181615] cursor-pointer"
+            className="hover:text-white cursor-pointer"
             title="Mute Audio"
           >
             {muteKaraokeAudio ? (
-              <VolumeX className="w-4 h-4 text-[#D92323]" />
+              <VolumeX className="w-4 h-4 text-[#ff7a7a]" />
             ) : (
               <Volume2 className="w-4 h-4" />
             )}
           </button>
 
-          <div className="w-16 h-1 rounded-full bg-[#181615]/15 overflow-hidden hidden sm:block">
+          <div className="w-16 h-1 rounded-full bg-white/15 overflow-hidden hidden sm:block">
             <div
               className={`h-full bg-[#D92323] ${muteKaraokeAudio ? "w-0" : "w-3/4"}`}
             />
@@ -2612,13 +2613,13 @@ export default function ArtistDashboardPage() {
 
       {showProfileModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 text-[#181615] shadow-2xl space-y-4">
+          <div className="w-full max-w-sm bg-[#161318] rounded-3xl p-6 text-[#F4EFE6] shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-[#181615]">Profile</h3>
+              <h3 className="title-x text-[20px]">Profile</h3>
               <button
                 type="button"
                 onClick={() => setShowProfileModal(false)}
-                className="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500"
+                className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-neutral-400"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2631,21 +2632,21 @@ export default function ArtistDashboardPage() {
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
                 placeholder="Artist Name"
-                className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
               />
               <input
                 type="text"
                 value={profileInsta}
                 onChange={(e) => setProfileInsta(e.target.value)}
                 placeholder="@instagram"
-                className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
               />
               <input
                 type="url"
                 value={profileAvatar}
                 onChange={(e) => setProfileAvatar(e.target.value)}
                 placeholder="Avatar URL"
-                className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
               />
               <button
                 type="submit"
@@ -2660,13 +2661,13 @@ export default function ArtistDashboardPage() {
 
       {showNewGigModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 text-[#181615] shadow-2xl space-y-4">
+          <div className="w-full max-w-sm bg-[#161318] rounded-3xl p-6 text-[#F4EFE6] shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-extrabold text-[#181615]">New Show</h3>
+              <h3 className="title-x text-[20px]">New show</h3>
               <button
                 type="button"
                 onClick={() => setShowNewGigModal(false)}
-                className="w-7 h-7 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-500"
+                className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-neutral-400"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -2679,7 +2680,7 @@ export default function ArtistDashboardPage() {
                 value={newGigTitle}
                 onChange={(e) => setNewGigTitle(e.target.value)}
                 placeholder="Show Title *"
-                className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
               />
               <input
                 type="text"
@@ -2687,7 +2688,7 @@ export default function ArtistDashboardPage() {
                 value={newGigLocation}
                 onChange={(e) => setNewGigLocation(e.target.value)}
                 placeholder="Venue *"
-                className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
               />
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -2695,14 +2696,14 @@ export default function ArtistDashboardPage() {
                   required
                   value={newGigDate}
                   onChange={(e) => setNewGigDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
                 />
                 <input
                   type="number"
                   value={newGigPrice}
                   onChange={(e) => setNewGigPrice(e.target.value)}
                   placeholder="Price (₹)"
-                  className="w-full px-3 py-2 rounded-xl bg-neutral-100 text-xs focus:outline-none"
+                  className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
                 />
               </div>
               <button
