@@ -1,300 +1,234 @@
-# Muse-ing Landing Page Design Specification (`design.md`)
+# Muse-ing landing page design
 
-> **Status:** Production-Ready & Verified  
-> **Framework:** Next.js 15 (App Router), React 19, Tailwind CSS v4, Framer Motion  
-> **Reference Inspiration:** [Pinterest Pin #1109504058196872790](https://in.pinterest.com/pin/1109504058196872790/) (Editorial Horizontal/Vertical Scroll Interactive Portfolio by `uiuxzaid`)
+The landing page at `/` is a scroll-driven 3D film. A cyber-veteran monkey in a black suit, sunglasses and a smoking cigarette plays a slung guitar in a red studio. As you scroll, the camera moves through five shots. Copy, the list of upcoming gigs and a booking form appear over the scene. A normal page footer follows the film.
 
----
-
-## 1. Executive Summary & Design Vision
-
-The Muse-ing landing page is an **editorial multi-axis kinetic showcase** that connects independent live performing artists with audiences and venue hosts. It bridges high-fashion print editorial minimalism (analog paper textures, generous whitespace, stark typography, museum picture frames) with fluid 60fps kinetic camera choreography.
-
-Unlike traditional static web pages, the viewport acts as a **continuous two-dimensional camera canvas (`300vw` wide by `200vh` tall)** that guides the visitor through an intentional narrative arc:
-1. **Section 01 — Brand Introduction (`muse-ing`):** Kinetic horizontal opening with fanned artist cards that disperse on scroll.
-2. **Section 02 — Live Gigs Across Venues (`events`):** Horizontal continuation into an organic constellation of venue cards over a massive red backdrop word.
-3. **Section 03 — Curated Performing Talent (`artists`):** A theatrical **vertical camera dive downward** revealing the artist roster with vertical 3D counter-parallax.
-4. **Section 04 — Booking & Venue Hosting Form:** Horizontal pan into a centered crimson red reservation and host inquiry card.
+The art direction follows a fashion-runway landing reference: low worm's-eye angles, a saturated red studio, and heavy extra-wide uppercase titles that decode in. Everything in the scene is Muse-ing's own: the character, the guitar, the smoke and the copy.
 
 ---
 
-## 2. Design Tokens & Visual Hierarchy
+## 1. Stack
 
-### 2.1 Color Palette
+| Layer | Choice |
+| --- | --- |
+| Framework | Next.js 16 (App Router, webpack dev). Read `node_modules/next/dist/docs/` before using Next APIs |
+| 3D | React Three Fiber, three 0.170, drei (`MeshReflectorMaterial`), `@react-three/postprocessing` (Bloom) |
+| Styling | Tailwind CSS v4 plus the landing classes in `app/globals.css` |
+| Display font | Archivo with the `wdth` axis, via `next/font/google` (`--font-display`) |
+| Icons | `lucide-react` |
 
-| Token Name | Hex Code | Tailwind / CSS Class | Purpose & Role |
-| :--- | :--- | :--- | :--- |
-| **Canvas Background** | `#F4EFE6` | `bg-[#F4EFE6]` | Warm tactile cream/ivory paper canvas; warm editorial aesthetic |
-| **Vignette Radial** | Radial Overlay | Custom inline CSS | Subtle center illumination (`rgba(255,252,245,0.6)`) to warm edge shade (`rgba(219,208,190,0.65)`) |
-| **Editorial Crimson** | `#D92323` | `text-[#D92323]`, `bg-[#D92323]` | Primary accent; giant serif background words (`muse-ing`, `events`, `artists`), active nav dots, section 4 form |
-| **Deep Charcoal Ink** | `#181615` | `text-[#181615]`, `bg-[#181615]` | High-contrast typography, primary buttons, borders, underlines, frame bases |
-| **Warm Graphite** | `#5C5650` | `text-[#5C5650]`, `text-[#181615]/75` | Body copy, venue locations, secondary captions, metadata |
-| **Card Canvas White** | `#FFFFFF` | `bg-white`, `border-white` | White polaroid frames, card backings, modal surfaces |
-| **Amber Gold Lip** | `#D4AF37` / `#B8860B` | In `/art-frame-offwhite-4-5.png` | Museum gallery bevel inner lip providing physical depth |
-| **Emerald Active** | `#10B981` | `bg-emerald-500` | Live indicator pulse, active setlist status |
-
-### 2.2 Typography Scale & Families
-
-| Family Name | CSS Variable / Utility | Weights | Roles |
-| :--- | :--- | :--- | :--- |
-| **Instrument Serif** | `var(--font-instrument-serif)`, `.instrument`, `font-serif` | `400` (Normal, Italic) | Giant background words (`text-[34vw]–[48vw]`), brand mark `m-`, display numbers, editorial headers |
-| **Figtree** | `var(--font-figtree)`, `font-sans` | `300`, `400`, `500`, `600`, `700` | Primary UI sans-serif; micro-intros, buttons, form inputs, metadata, filter pills |
-| **Geist Mono** | `font-mono` | `400`, `500` | Section indices (`01 / 04`), numeric indicators, price tags |
-
-#### Typographic Lockup Rules:
-- **Giant Words (`muse-ing`, `events`, `artists`):**
-  - Set in **lowercase** `Instrument Serif` with tight tracking (`tracking-[-0.04em]`) and compact leading (`leading-[0.76]`).
-  - Viewport-relative sizing: `text-[46vw] sm:text-[38vw] md:text-[34vw]` in Section 1, `text-[48vw] sm:text-[40vw] md:text-[36vw]` in Sections 2 & 3.
-  - Sits at `top-[46%] -translate-y-1/2` with optical baseline offsets so ascenders and descenders fit inside the screen height.
-- **Editorial Micro-Intros:**
-  - Line 1: Clean sans-serif (`text-base sm:text-lg md:text-xl font-normal text-[#181615]/85 tracking-normal font-sans`).
-  - Line 2: Editorial title (`text-xl sm:text-2xl md:text-[28px] font-medium text-[#181615] tracking-tight whitespace-nowrap`).
-  - Terminal Mark: A clean typographic bullet ` •` (no emojis).
-  - Underline Rule: Solid dark line (`w-full h-[2px] bg-[#181615] mt-1.5–2`) hugging the exact text width via `inline-block`.
+The page does not use Framer Motion. All motion comes from one damped scroll value, read every frame.
 
 ---
 
-## 3. Kinetic Multi-Axis Camera Architecture
+## 2. Page structure
 
-The landing page coordinates a **4-stage camera sequence** using a fixed `sticky top-0 h-screen w-screen` viewport stage with Framer Motion spring physics.
-
-```mermaid
-flowchart LR
-    A["Section 01: muse-ing (0vw, 0vh)"] -->|"Track X: 0vw → -100vw (Horizontal Pan)"| B["Section 02: events (100vw, 0vh)"]
-    B -->|"Track Y: 0vh → -100vh (Vertical Dive)"| C["Section 03: artists (100vw, 100vh)"]
-    C -->|"Track X: -100vw → -200vw (Horizontal Pan)"| D["Section 04: Form (200vw, 100vh)"]
+```
+<Experience>                         components/monkey/experience.tsx
+  <div runway  height: 560vh>        scroll length of the film
+    <div sticky h-screen>
+      <Stage/>                       WebGL canvas (client only, ssr: false)
+      <Overlay/>                     DOM copy, gigs, form and header
+      "Sculpting…" loader            fades out once the canvas is ready
+  <Footer/>                          normal document flow after the film
 ```
 
-### 3.1 Physics & Progress Engine
-- **Vertical Scroll Canvas Height:** `h-[520vh]` to give generous, unhurried scroll runway for all 4 stages.
-- **Spring Parameters:**
-  - `stiffness: 75`: Responsive, agile initiation on wheel start.
-  - `damping: 20`: Smooth, natural kinetic settling with zero jarring stops.
-  - `mass: 0.38`: Lightweight physical inertia.
-- **Trackpad & Wheel Interceptor:**
-  - Two-finger horizontal trackpad swipes (`deltaX`) are automatically bridged to window vertical scroll:
-    ```tsx
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) && Math.abs(e.deltaX) > 4) {
-      window.scrollBy({ top: e.deltaX, behavior: "auto" })
-    }
-    ```
-  - Keyboard navigation: `ArrowRight` and `ArrowDown` advance the page by `window.innerHeight * 0.45`; `ArrowLeft` and `ArrowUp` reverse it.
-
-### 3.2 Camera Coordinate Map & S-Curve Keyframes
-
-| Scroll Progress (`smoothProgress`) | Track X (`trackX`) | Track Y (`trackY`) | Active Section | Navigation State |
-| :--- | :--- | :--- | :--- | :--- |
-| **`0.00 – 0.10`** | `0vw` | `0vh` | `0` (MUSE-ING) | `01 / 04` • `SCROLL TO CONTINUE →` |
-| **`0.10 – 0.28`** | `0vw → -100vw` (S-Curve) | `0vh` | `0 → 1` (Midpoint `0.20`) | Horizontal pan right to Events |
-| **`0.28 – 0.38`** | `-100vw` | `0vh` | `1` (EVENTS) | `02 / 04` • `SCROLL DOWN TO ARTISTS ↓` |
-| **`0.38 – 0.66`** | `-100vw` | `0vh → -100vh` (7-point S-Curve) | `1 → 2` (Midpoint `0.52`) | **Velvet vertical camera dive downward** |
-| **`0.66 – 0.76`** | `-100vw` | `-100vh` | `2` (ARTISTS) | `03 / 04` • `SCROLL TO BOOKING →` |
-| **`0.76 – 0.94`** | `-100vw → -200vw` (S-Curve) | `-100vh` | `2 → 3` (Midpoint `0.84`) | Horizontal pan right to Form |
-| **`0.94 – 1.00`** | `-200vw` | `-100vh` | `3` (BOOK / HOST) | `04 / 04` • `BACK TO ← START` |
-
-#### 7-Point S-Curve Interpolation for Vertical Dive (`trackY`):
-```tsx
-const trackY = useTransform(
-  smoothProgress,
-  [0, 0.38, 0.42, 0.47, 0.52, 0.57, 0.62, 0.66, 1.0],
-  ["0vh", "0vh", "-6vh", "-24vh", "-50vh", "-76vh", "-94vh", "-100vh", "-100vh"]
-)
-```
-- Starts at zero velocity (`0vh` at `0.38`).
-- Smoothly accelerates through the midpoint (`-50vh` at `0.52`).
-- Gracefully decelerates into Section 3 with zero abrupt impact (`-100vh` at `0.66`).
+- **Scroll mapping:** `t = scrollY / (runway height − viewport height)`, clamped to 0..1. `t` is measured over the runway only, so scrolling into the footer doesn't move the film.
+- **Damping:** `scroll.target` holds the raw value. `scroll.value` follows it with `damp(…, 4.5)` and is what everything reads.
+- **Windows:** `win(t, a, b, c, d)` fades a block in over a→b, holds it, and fades it out over c→d. `smooth(a, b, t)` is a smoothstep.
+- **Jumps:** the menu and footer links call `jump(p)`, which smooth-scrolls to film position `p`. For example, `jump(1)` goes to the booking form.
+- **Without WebGL:** the canvas isn't mounted and the overlay still works.
 
 ---
 
-## 4. Comprehensive Section Blueprint
+## 3. The five scenes
 
-### 4.1 Section 01 — Start: `muse-ing` Brand Hero
+| # | Scene label | Scroll `t` | Camera | On screen |
+| --- | --- | --- | --- | --- |
+| 1 | The grin | 0 – 0.10 | Worm's-eye close-up from under the chin, orbiting slowly | The giant **MUSE-ING** title with **LIVE MUSIC** under it, a hairline and two fine columns |
+| 2 | The exhale | 0.13 – 0.29 | Orbits round to a clean side profile while he exhales smoke | "A live music experience" and what Muse-ing does for the crowd, artists and venues |
+| 3 | The strut | 0.37 – 0.56 | Shin-high camera looking up as he walks toward you, pushing in to knees-up | "Your night, your call" with the setlist and table copy |
+| 4 | The gigs | 0.60 – 0.79 | Drops to floor level; he walks up out of frame | "Upcoming gigs": a row of cards that slides sideways as you scroll |
+| 5 | The smash | 0.80 – 1.0 | Swings round to the front | He lifts the guitar by the neck and smashes it into the "glass", which cracks; a white flash; the booking form |
 
-* **Position in Canvas:** `(x: 0vw, y: 0vh)`
-* **Giant Backdrop Word:** `muse-ing` in `#D92323` lower-case `Instrument Serif`.
-  - Position: `left-[-2vw] sm:left-[1vw] top-[46%] -translate-y-1/2`
-  - Parallax: `x: 2vw → -24vw`, `y: 6.5vh → -5vh`
-* **Top-Left Micro-Intro:**
-  - Position: `top-[26%] sm:top-[27%] md:top-[28%] left-[6vw] sm:left-[7vw] md:left-[7.5vw]`
-  - Line 1: `Hey, We're Muse-ing` (`text-base sm:text-lg md:text-xl text-[#181615]/85`)
-  - Line 2: `A Live Music Experience •` (`text-xl sm:text-2xl md:text-[28px] font-medium text-[#181615]`)
-  - Underline: `w-full h-[2px] bg-[#181615] mt-2`
-  - Sits directly over the `m` and `u` glyphs with an intentional ~25px optical gap above the letters.
-* **Bottom-Left Editorial Bio:**
-  - Position: `bottom-8 sm:bottom-12 md:bottom-14 left-[6vw] sm:left-[7vw] md:left-[7.5vw] max-w-[270px] sm:max-w-[320px]`
-  - Copy: *"Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications."*
-* **Fanned Artist Card Cluster:**
-  - 4 white architectural museum picture frames (`aspect-[4/5]`) fanning over the right half of `muse-ing`:
-    - **Card 1 (Arjun Mehta):** `left-[49%] sm:left-[51%] md:left-[52%] top-[43%] sm:top-[41%]` (positioned cleanly past `e`, overlapping `-ing`)
-    - **Card 2 (Maya Sen):** `left-[56%] sm:left-[58%] md:left-[60%] top-[13%] sm:top-[11%]`
-    - **Card 3 (DJ Rhea):** `left-[64%] sm:left-[66%] md:left-[68%] top-[35%] sm:top-[33%]`
-    - **Card 4 (Kabir):** `left-[72%] sm:left-[74%] md:left-[76%] top-[14%] sm:top-[12%]`
-  - **Scroll Dispersion:** On the very first scroll increments (`0.00 → 0.05 → 0.14 → 0.26`), the cards burst outward across both axes (`x: -90px` to `-780px` for left cards, `+320px` to `+950px` for right cards) to immediately reveal the `muse-ing` background title.
+The camera keyframes are `CAMERA_KEYS` in `components/monkey/store.ts`, calibrated for a 28° vertical FOV. Between keys the camera eases with a smoothstep.
 
----
+**Framing offsets:** these slide the frame sideways using the camera's view offset, without changing perspective.
+- On landscape screens, scene 3 frames him right of centre (`walkFraming`), leaving the left side for copy.
+- On portrait screens, the scene 2 profile is pulled in from the right edge (`PROFILE_SHIFT = 0.3`).
 
-### 4.2 Section 02 — Middle: `events` Being Hosted Currently
+**Smash timing:** `SMASH` in `store.ts` holds the moments `grab`, `windUp`, `strike`, `crack` and `form`. The monkey, the glass and the overlay all share them.
 
-* **Position in Canvas:** `(x: 100vw, y: 0vh)`
-* **Giant Backdrop Word:** `events` in `#D92323` lower-case `Instrument Serif`.
-  - Position: `left-1/2 top-[45%] -translate-x-1/2 -translate-y-1/2`
-  - Parallax: `x: 20vw → -20vw`, `y: 5vh → -5vh`
-* **Section Eyebrow & Filter Bar:**
-  - Position: `top: pt-20 sm:pt-24 pl-6 sm:pl-16 md:pl-20`
-  - Eyebrow: `02 • CURRENTLY HOSTED GIGS`
-  - Title: `Live Events Across Venues`
-  - City Filter Pills: `ALL`, `Bengaluru`, `Mumbai`, `Pune`
-* **Event Cards Constellation:**
-  - Up to 5 warm off-white Polaroid event cards (`w-[230px] sm:w-[275px] md:w-[300px]`, `rounded-2xl`, `bg-[#F4EFE6] border border-transparent p-3 sm:p-3.5`) positioned around `events`, elevated by rich multi-layer ambient drop shadows (`shadow-[0_24px_60px_-8px_rgba(24,22,21,0.32),0_12px_28px_-6px_rgba(24,22,21,0.22),0_2px_8px_rgba(24,22,21,0.12)]`):
-    - Top-left (`left-[6%] sm:left-[10%] top-[14%]`, `rotate: -7deg`)
-    - Top-center (`left-[36%] sm:left-[39%] top-[11%]`, `rotate: +8deg`)
-    - Top-right (`left-[65%] sm:left-[68%] top-[14%]`, `rotate: -6deg`)
-    - Bottom-left (`left-[21%] sm:left-[24%] top-[47%]`, `rotate: -12deg`)
-    - Bottom-center (`left-[53%] sm:left-[55%] top-[46%]`, `rotate: +9deg`)
-  - **Clean Visual Presentation:** Zero badge clutter (removed Live QR badge and date pill), allowing the event photography to stand out cleanly.
-  - Card Footer: Shows venue pin icon, venue name, and dark pill button `"Know more →"`.
-* **Bottom-Left Editorial Statement:**
-  - Copy: *"SHAPE THE LIVE SETLIST IN REAL TIME, EXCITING CROWD MOMENTS THAT WILL BE PRESERVED."*
-  - CTA Button: `"Book Table or Host a Gig →"` (triggers smooth scroll to Section 4).
-  - Secondary Action: `"Preview Table QR Code"` (opens `QrCodeModal`).
+### Scene 1: the title fold
+
+- **Placement:** **MUSE-ING** is drawn on a canvas texture on a plate behind his head, so it sits in the 3D scene rather than the DOM. It spans 96% of the frame width and sits 9% from the top.
+- **Arrival:** the title glitches in letter by letter through block glyphs.
+- **Fold:** as you scroll (`t` 0.005–0.05), "ING" slides into the dash, then the dash slides into "MUSE", leaving **M-** where the word began.
+- **LIVE MUSIC:** cream (`#f4efe6`), 800 weight expanded, 118px on the 2048px canvas with 26px tracking. It stays put while the title folds.
+- **Exit:** the whole plate fades out over `t` 0.06–0.11.
+
+### Scene 4: gigs
+
+- **Data:** up to 24 events from `/api/public/events/search?when=upcoming`, falling back to `when=all` if there are none.
+- **Cards:** about 6 visible per row on desktop and about 2.5 (40vw each) on phones, at a 4:5 aspect ratio. Each card shows the date, an index (`01`, `02` …), the title, the artist, the venue and the price ("Free" when 0).
+- **Sliding:** while the scene holds, scrolling maps to the row's `scrollLeft`, so every gig passes by. You can still swipe or scroll the row by hand.
+
+### Scene 5: form
+
+- **Inquiry types:** three tabs: Reserve, Host and Join as artist. Submissions POST to `/api/public/events` with `inquiryType`.
+- **Reserve extras:** Reserve adds an event picker and a "Direct ticket checkout" link to `/book/[id]`.
+- **Card style:** the form sits in a `card-noir` panel over a dark scrim. It appears through a white flash after the glass cracks.
 
 ---
 
-### 4.3 Section 03 — Curated Talent: `artists` (Reached via Vertical Dive)
+## 4. The character
 
-* **Position in Canvas:** `(x: 100vw, y: 100vh)` (Directly beneath Section 02)
-* **Giant Backdrop Word:** `artists` in `#D92323` lower-case `Instrument Serif`.
-  - Position: `left-[4vw] sm:left-[5vw] md:left-[5.5vw] top-[46%] -translate-y-1/2`
-  - Parallax Keyframes: Sized to `text-[48vw] sm:text-[40vw] md:text-[36vw]`. At rest (`0.58 → 0.70`), `artists3WordX` settles at `2vw → 0vw`, guaranteeing the initial letter **`a` is 100% visible with a ~70px margin from the left screen edge**.
-* **Top-Left Micro-Intro:**
-  - Position: `top-[26%] sm:top-[27%] md:top-[28%] left-[6vw] sm:left-[7vw] md:left-[7.5vw]`
-  - Line 1: `Curated Live Roster`
-  - Line 2: `Featured Performing Artists •`
-  - Underline: `w-full h-[2px] bg-[#181615] mt-2`
-  - Cleanly separated from all cards with zero overlap.
-* **Vertical Counter-Parallax & Dynamic Fly-Out Dispersion into Section 04:**
-  - All cards are clustered on the **center and right side (`left ≥ 47%`)**, keeping the left title and bottom text completely unobstructed.
-  - When scrolling toward Section 04 (`0.76 → 0.94`), the cards execute an energetic multi-axis fly-out dispersion:
-    - **Card 1 (Arjun Mehta & The Midnight Collective):** `left-[47%] sm:left-[49%] md:left-[50%] top-[40%] sm:top-[38%]`, `x: 0px → -480px`, `y: 0px → 220px`, `rotate: -8° → -36°`, `opacity: 1 → 0`
-    - **Card 2 (Maya Sen):** `left-[55%] sm:left-[57%] md:left-[58%] top-[12%] sm:top-[10%]`, `x: 0px → -640px`, `y: 0px → -260px`, `rotate: 10° → 42°`, `opacity: 1 → 0`
-    - **Card 3 (DJ Rhea):** `left-[64%] sm:left-[66%] md:left-[67%] top-[34%] sm:top-[32%]`, `x: 0px → 520px`, `y: 0px → 310px`, `rotate: 2° → -32°`, `opacity: 1 → 0`
-    - **Card 4 (Kabir & The Neon Strings):** `left-[73%] sm:left-[75%] md:left-[76%] top-[13%] sm:top-[11%]`, `x: 0px → 740px`, `y: 0px → -240px`, `rotate: 4° → 46°`, `opacity: 1 → 0`
-  - Card Structure: Slim off-white architectural frame overlay (`/art-frame-offwhite-4-5.png`) with inner gold lip, artist avatar, city • genre badge, and `"Know more →"` profile button. Clicking opens `setActiveArtistModal(artist)`.
-* **Bottom-Left Editorial Statement:**
-  - Copy: *"DISCOVER INDEPENDENT TALENT, UPVOTE SONGS LIVE FROM YOUR TABLE, AND EXPERIENCE UNFORGETTABLE SETS."*
-  - CTA Links: `"Explore Live Setlists & Shows →"` (`/artist`) and `"Join as a Performer"` (scrolls to Section 4 with mode set to `artist`).
+The monkey is built entirely in code in `components/monkey/monkey.tsx`. There are no model files.
 
----
+| Part | Design |
+| --- | --- |
+| Proportions | Lanky runway build: `BODY = { head 0.86, torso 1.4, legs 1.7, arms 1.2, width 0.88, hips 1.16 }` relative to the original sculpt. Hands, shoes and the guitar keep their sculpted shape |
+| Head | A distance-field sculpt with painted skin: pores, creases and a warm muzzle. Fur shell layers, red-lit visor sunglasses |
+| Mouth | A sharp, matte, dark lip slit that the upper lip rolls over. The lips part around the cigarette in the right corner (`CIG_X = 0.3`) |
+| Cigarette | Black filter with a red band, paper and a glowing ember. Smoke drifts from the ember, and the exhale comes from the mouth in scene 2 |
+| Outfit | A single black suit: coat with a skirt, waistcoat, shirt, red tie and belt. There is no outfit switcher |
+| Right arm | A worn veteran cyber arm: graphite armour plates over bare-metal chips, a dark synthetic-muscle core, fibre bundles and visible spinning brass gears |
+| Shoes | Polished black calf Oxfords: a tall toe box, toe cap and heel counter seams, a laced throat, a slim welted leather sole and a stacked heel |
+| Guitar | Slung in front on a cognac leather strap. The right hand strums by the bridge on the beat; the chrome left hand frets under the neck and changes chord every two strides |
 
-### 4.4 Section 04 — End: Crimson Editorial Form & Footer
+### Motion
 
-* **Position in Canvas:** `(x: 200vw, y: 100vh)` (Horizontal right of Section 03)
-* **The Crimson Card Container:**
-  - Dimensions: `w-full max-w-[680px] bg-[#D92323] text-white px-7 sm:px-16 py-8 sm:py-12 rounded-3xl shadow-[0_30px_70px_-15px_rgba(217,35,35,0.45)]`
-  - Parallax Entrance: Slides in horizontally (`redFormSlideX: 140px → 0px` across `0.76 → 0.98` scroll).
-* **Mode Selector Pills:**
-  - Three switchable options inside a semi-transparent capsule: `Reserve Event`, `Host at Venue`, `Join as Artist`.
-* **Minimalist Input Fields:**
-  - White translucent underline fields (`bg-white/10 border-b border-white/30 text-white placeholder-white/60 focus:bg-white/20 focus:border-white`).
-* **Submit Button:**
-  - Full-width deep charcoal pill (`bg-[#181615] hover:bg-black text-white text-xs font-semibold uppercase tracking-widest py-3.5 rounded-full transition-all`).
-* **Editorial Bottom Footer:**
-  - Contact links (`hello@museing.live`, `+91 98765 43210`).
-  - Internal portal shortcuts: `Live QR`, `Artist`, `Artist Login`, `Host / Book`.
-  - Copyright line: `© 2026 Muse-ing Experience Inc.`
+- **Walk:** procedural, after the reference.
+  - The weight shifts clearly onto each nearly straight standing leg, and the free foot kicks back with the knee bent about 70°.
+  - One gait cycle (two steps) takes 1.9 s.
+  - It plays over `t` 0.29–0.82 (`walkWeight`).
+- **Feet:** each step runs heel strike → flat foot → heel rise → push-off from the ball, then the toes point down through the kick-back and up again to reach for the next step.
+- **Floor contact (root motion):** he walks on the spot. The world moves with whichever contact point is on the floor: the heel as he lands, the ball as he pushes off. The floor texture, light bars and dust read `travel.z`, so the planted foot stays fixed and he never glides.
+- **Arms:** two-bone IK keeps the elbows on human bend planes while the hands follow the guitar.
+- **Playing:** a "groove" at twice the step rate drives the strum and a downstroke accent. The accent dips his shoulder, gives his chest a little and nods his head.
+- **Idle:** breath, a slow look-around, and the 9-second smoking cycle (drag, hold, exhale) while he isn't walking.
 
 ---
 
-## 5. Button & Interactive Control Specifications
+## 5. The studio
 
-### 5.1 Top-Left Brand Mark (`m-`)
-- **Visual Style:** Lowercase `Instrument Serif` (`text-4xl sm:text-5xl md:text-6xl`), `m` in `#181615`, hyphen `-` in `#D92323`.
-- **Interaction:**
-  - Hover: `hover:scale-110` with `transition-transform duration-300`.
-  - Click: Calls `scrollToSection(0)`, smoothly rolling the camera canvas back to `(0vw, 0vh)`.
+`components/monkey/studio.tsx` and `stage.tsx`
 
-### 5.2 Top-Right Stacked Navigation Menu
-- **Visual Style:** Vertical stack of uppercase sans-serif buttons (`text-[11px] sm:text-xs font-semibold uppercase tracking-[0.16em]`).
-- **States:**
-  - **Inactive:** `text-[#181615]/75 hover:text-[#181615]` with smooth color transition.
-  - **Active:** `text-[#D92323]` accompanied by a `w-1.5 h-1.5 rounded-full bg-[#D92323]` leading dot indicator.
-- **Destinations:**
-  - `MUSE-ING`: `scrollToSection(0)` (target progress `0.00`)
-  - `EVENTS`: `scrollToSection(1)` (target progress `0.34`)
-  - `ARTISTS`: `scrollToSection(2)` (target progress `0.66`)
-  - `BOOK / HOST`: `scrollToSection(3)` (target progress `1.00`)
-  - `ARTIST LOGIN`: Link to `/login` with leading microphone icon.
+| Element | Design |
+| --- | --- |
+| Backdrop | A camera-following sphere with a screen-space radial gradient: core `rgb(0.62, 0.035, 0.05)`, mid `rgb(0.42, 0.02, 0.035)`, edge `rgb(0.09, 0.005, 0.012)`. It has fresh film grain every frame |
+| Floor | A glossy red reflective floor: `MeshReflectorMaterial`, colour `#7a0a12`, mirror 0.6, mix strength 3.2, with a worn tile texture and an edge fade |
+| Light bars | 16 floating white capsules (HDR, not tone-mapped, so they bloom). They wrap along z as he walks |
+| Dust | 500 pale pink points drifting with the walk |
+| Glass | An invisible plane in front of him that shows a radial crack texture at the strike |
+| Bloom | Intensity 0.85, luminance threshold 0.95, mip-mapped |
 
-### 5.3 Bottom-Right Live Progress Indicator Pill
-- **Visual Style:** Fixed floating dock in bottom-right corner (`fixed bottom-6 sm:bottom-8 right-6 sm:right-12 z-40`).
-- **Counter:** Monospace numeric readout `0{activeSection + 1} / 04`.
-- **Live Progress Bar:** `w-8 sm:w-10 h-[1.5px] bg-[#181615]/20` track with dynamic black fill (`scaleX: progressLineScale`).
-- **Contextual Action Label:**
-  - Section 0: `SCROLL TO CONTINUE →`
-  - Section 1: `SCROLL DOWN TO ARTISTS ↓`
-  - Section 2: `SCROLL TO BOOKING →`
-  - Section 3: `BACK TO ← START`
-- **Interaction:** Clicking advances to `(activeSection + 1) % 4`.
+### Lighting (do not change)
 
-### 5.4 Event Card Action Control (`KNOW MORE →`)
-- **Visual Style:**
-  - Matches the architectural bottom-right `SCROLL TO CONTINUE →` indicator:
-    - Horizontal tracking bar (`w-6 sm:w-7 h-[1.5px] bg-[#181615]/20 overflow-hidden relative`) with internal fill bar.
-    - Two-line uppercase editorial label (`text-[9px] sm:text-[10px] font-semibold uppercase tracking-[0.16em] leading-[1.15] text-[#181615]`).
-- **Interaction:**
-  - Hover: Transitions the bar and text color from charcoal `#181615` to `#D92323` crimson (`group-hover/btn:text-[#D92323] transition-colors`).
-  - Click: Opens the live audience gig view for that event (`/live/[eventId]`).
+The lighting on the monkey is fixed. Restyle the studio with the backdrop, floor and bars, never with the lights.
 
-### 5.5 City Filter Pills (Section 2)
-- **Visual Style:** Pill chips (`px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold uppercase tracking-wider`).
-- **States:**
-  - **Active City:** `bg-[#D92323] text-white shadow-sm`.
-  - **Inactive City:** `bg-white/75 text-[#181615]/75 border border-[#181615]/15 hover:bg-white`.
-
-### 5.6 Form Mode Selector Pills (Section 4)
-- **Visual Style:** Pill toggle inside a `bg-black/20 border border-white/15 rounded-full p-1` container.
-- **States:**
-  - **Selected Mode:** `bg-white text-[#D92323] shadow-sm`.
-  - **Unselected Mode:** `text-white/85 hover:text-white`.
+| Light | Values |
+| --- | --- |
+| Hemisphere | `0x2a2a30` / `0x050505`, 0.45 |
+| Key (shadows) | Directional `[-9.8, 12.6, 8.4]`, white, 2.2, shadow map 2048 |
+| Fills | Directional `[3, 0.2, 3]` `0xc9d2ff` 0.32; `[-3.2, 1.2, -3]` white 1.3; `[3.4, 2, -2.8]` white 1.6 |
+| Rim | Point `[-4, 2, -3]` `0xb04aff`, 18 ± 2 (slow pulse), distance 16 |
+| Warm fill | Point `[3, 1, 4]` `0xffa040`, 8 |
+| Lamp warmth | Point `[7, FLOOR+5.6, -4]` and `[-8, FLOOR+5.6, -7]`, `0xffa23a`, 45, distance 16, decay 1.7 |
 
 ---
 
-## 6. Museum Picture Frame Specification (`/art-frame-offwhite-4-5.png`)
+## 6. Typography
 
-To elevate the artist portrait cards from flat digital tiles into tangible art gallery objects:
-- **Aspect Ratio:** Exact 4:5 vertical portrait (`aspect-[4/5]`).
-- **Dimensions:** Base width `190px`, `sm: 230px`, `md: 260px`.
-- **Frame Profile:** Slim architectural off-white gallery moulding with an inner warm gold lip.
-- **Center Opening:** Takes up **82.9% width and 87.6% height** of the frame, providing maximum artwork area without visual obstruction.
-- **Wall Shadow:** Multi-tier physical elevation drop shadow:
-  ```css
-  shadow-[0_12px_32px_-4px_rgba(24,22,21,0.28),0_4px_12px_-2px_rgba(24,22,21,0.18),0_0_1px_rgba(24,22,21,0.3)]
-  hover:shadow-[0_22px_45px_-6px_rgba(24,22,21,0.38),0_8px_20px_-4px_rgba(24,22,21,0.24)]
-  ```
-- **Layering Architecture:**
-  1. Base container: `relative w-full h-full rounded-[1px]`.
-  2. Canvas artwork aperture: `absolute top-[6.1%] left-[8.4%] w-[82.9%] h-[87.6%] overflow-hidden bg-[#121110] z-0 shadow-inner`.
-  3. Overlay frame asset: `img src="/art-frame-offwhite-4-5.png"` rendered with `pointer-events-none z-10 object-fill`.
+| Class | Use | Spec |
+| --- | --- | --- |
+| `.title-x` | Section titles, menu items, the footer wordmark | Archivo 800, `wdth` 125, uppercase, line height 0.92, tracking −0.015em, cream, soft dark shadow |
+| `.micro` | Labels, pills, card metadata | Archivo 700, `wdth` 112, 9.5px, tracking 0.14em, uppercase |
+| `.fine` | Body copy | 11.5px, line height 1.55, cream at 62%, soft dark shadow |
 
----
+**Title sizes:**
+- Scenes 3 and 4: 30px on phones, 38px on desktop.
+- Scene 2 runs larger:
+  - title: 38 / 58px
+  - opening line: 15 / 18px
+  - list text: 14 / 16px
+  - list labels: 11 / 13px
+- Form: 32 / 44px.
 
-## 7. Responsive Breakpoint Guide
+**Decode titles:** every section title "decodes" in. When its section passes 35% visible, characters flicker as block glyphs at 40% opacity and resolve left to right into solid type. They reset once the section has gone, so the effect plays again on the way back.
 
-| Breakpoint | Window Width | Word Typography | Card Dimensions | Navigation Layout |
-| :--- | :--- | :--- | :--- | :--- |
-| **Mobile (`< 640px`)** | `< 640px` | `text-[46vw]–[48vw]` | `w-[190px] aspect-[4/5]` | Simplified right-aligned menu, touch gesture scrolling |
-| **Tablet (`sm: 640px – 768px`)** | `640px – 768px` | `text-[38vw]–[40vw]` | `w-[230px] aspect-[4/5]` | Full stacked nav with dot indicators, dual-axis wheel support |
-| **Desktop (`md: ≥ 768px`)** | `≥ 768px` | `text-[34vw]–[36vw]` | `w-[260px] aspect-[4/5]` | Complete editorial experience, full 3D parallax, modal popups |
+**Section openers:** a row of three small cream dots (`.dots`) sits above every title.
 
 ---
 
-## 8. Verification & QA Checklist
+## 7. Colour
 
-- [x] **Section Sequence:** Section 1 (`muse-ing`) $\rightarrow$ Section 2 (`events`) $\rightarrow$ Section 3 (`artists`) $\rightarrow$ Section 4 (`form`).
-- [x] **Motion Direction:** Horizontal to right (01 $\rightarrow$ 02), vertical down (02 $\rightarrow$ 03), horizontal to right (03 $\rightarrow$ 04).
-- [x] **Letter "a" Framing:** Word `artists` starts at `left-[4vw] sm:left-[5vw] md:left-[5.5vw]`; letter `a` is 100% visible on screen at rest.
-- [x] **No Card-Title Overlap:** Section 3 artist cards clustered at `left ≥ 47%`; left titles have clear, unobstructed breathing room.
-- [x] **Event Card Cleanliness:** Live QR badge and date tag removed from Section 2 event cards; visual artwork is clean.
-- [x] **Section Counter Synchronization:** Accurately reflects `01 / 04`, `02 / 04`, `03 / 04`, and `04 / 04` matching actual viewport position.
-- [x] **Fluid S-Curve:** 7-point cubic interpolation ensures the vertical dive is velvety smooth with zero abrupt deceleration.
-- [x] **TypeScript & Next.js:** Zero syntax errors; 200 OK responses across all routes.
+| Token | Value | Use |
+| --- | --- | --- |
+| Cream | `#F4EFE6` | All type, the dots, the menu button, the progress bar, the primary button (`.btn-light`) |
+| White | `#FFFFFF` | Hover states, the smash flash |
+| Ink | `#0b0a0e` / `#070709` | Card and menu panels, page background behind the canvas |
+| Studio red | See the backdrop and floor in section 5 | The scene itself |
+| Footer red | Radial `#5a0910` → `#1a0507` → `#070709` | Footer background, continuing the studio |
+
+There is no amber or yellow on the landing. Accents and hovers are cream or white so they hold contrast against the red. Muted text uses cream at reduced opacity (45–70%) rather than a second hue.
+
+---
+
+## 8. Interface around the film
+
+- **Header:**
+  - One cream menu button at the top right: 40px, 28px from the edges on phones and 48px / 40px on desktop.
+  - A quiet "Live music · Real-time setlists" tag in the centre on desktop.
+  - The menu opens a dark panel with Upcoming gigs, Book or host, Join as artist, All events and Artist login. Artist login lives only here.
+- **Bottom bar:**
+  - The scene label ("03 / 05 · The strut") and a thin progress bar on the left.
+  - "Gig index" on the right.
+  - The bar fades out for the smash.
+- **Entrances:**
+  - `.rise` slides a block up 28px out of a 7px blur as its window opens.
+  - `.rise-late` follows a beat later, so body copy arrives after its title.
+  - All of these read `--p`, the section's visibility, which the scroll loop sets.
+- **Footer** (`components/monkey/footer.tsx`):
+  - "Live music, shaped by the room" with a mail pill for hello@museing.live.
+  - Explore, Artists and Venues link columns.
+  - A full-width **MUSE-ING** wordmark at 14.5vw on one line.
+  - The copyright line and "Back to top".
+
+---
+
+## 9. Responsive rules
+
+- **Gutters:** 20px on phones (`px-5`), 32px from `sm` (`px-8`).
+- **Overflow:** no horizontal page scroll at any width. The footer wordmark uses `whitespace-nowrap` and is sized to fit.
+- **Scene 2 copy:** bottom-anchored on phones, centred left at 7vw on desktop.
+- **Scene 3 copy:** sits above the bottom bar on phones.
+- **Camera framing:** adjusts for portrait and landscape (section 3).
+
+---
+
+## 10. Files
+
+| File | Role |
+| --- | --- |
+| `app/page.tsx` | Renders `<Experience/>` |
+| `components/monkey/experience.tsx` | Runway height, scroll → `t`, jump, footer placement |
+| `components/monkey/store.ts` | Scroll state, `win` / `smooth`, camera keys, framing, `BODY`, `SMASH`, `walkWeight`, `travel` |
+| `components/monkey/stage.tsx` | Canvas, camera rig, lights, glass, bloom |
+| `components/monkey/studio.tsx` | Backdrop, floor, light bars, dust, the MUSE-ING back title |
+| `components/monkey/monkey.tsx` | The character: sculpt, materials, rig, walk, guitar play, smash |
+| `components/monkey/smoke.tsx` | Cigarette smoke and the exhale |
+| `components/monkey/overlay.tsx` | Header, menu, scene copy, decode titles, gigs, form, bottom bar |
+| `components/monkey/footer.tsx` | Page footer |
+| `components/monkey/street.tsx` | An unused cyberpunk street set, kept for later |
+| `app/globals.css` | `.title-x`, `.micro`, `.fine`, `.dots`, `.rise*`, `.pill-dark`, `.card-noir`, `.btn-light`, `.btn-ghost`, `.field-noir` |
+
+---
+
+## 11. Guardrails
+
+- Don't change the lights on the monkey.
+- Keep the single black suit; there's no outfit switcher.
+- No amber or yellow on the landing; accents stay cream or white.
+- The walk must never glide. Anything that moves with the world reads `travel.z`.
+- Keep scenes few and well placed. Add copy inside an existing scene before adding a scroll section.
+- Check every change on phone and desktop widths with no console errors. The page takes 30–50 s to load in the in-app browser.
