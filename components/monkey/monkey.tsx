@@ -102,6 +102,8 @@ function smin(a: number, b: number, k: number) {
 const smax = (a: number, b: number, k: number) => -smin(-a, -b, k)
 
 const smirk = (x: number) => 0.085 * smooth(-0.12, 0.42, x)
+/** Where the cigarette sits along the lip slit, right of centre. */
+const CIG_X = 0.3
 
 function headSDF(x: number, y: number, z: number) {
   const ax = Math.abs(x)
@@ -133,6 +135,8 @@ function headSDF(x: number, y: number, z: number) {
   d = smin(d, sdE(x, ly, z, 0, -0.70, 1.05, 0.34, 0.11, 0.21), 0.06)
   // The lip slit: a groove deep and wide enough for the mesh to hold, running out to the corners
   d = smax(d, -sdCap(ax, ly, z, 0.38, -0.60, 0.96, 0, -0.60, 1.30, 0.036), 0.022)
+  // The lips part around the cigarette in the right corner of the slit
+  d = smax(d, -sdE(x, ly, z, CIG_X, -0.6, 1.19, 0.075, 0.04, 0.1), 0.02)
   d = smin(d, sdE(x, y, z, 0, -0.76, 0.60, 0.50, 0.32, 0.48), 0.2)
   d = smin(d, sdCap(x, y, z, 0, -0.75, -0.08, 0, -1.75, -0.10, 0.44), 0.24)
   return Math.max(d, -(y + 1.65))
@@ -304,7 +308,7 @@ function paintSkin(proj: { geo: THREE.BufferGeometry; T: Float32Array }, W: numb
         w += 0.28 * crease(y * 34, 0.16) * (1 - smooth(0.07, 0.14, ax)) * smooth(-0.02, 0.05, y) * (1 - smooth(0.22, 0.28, y))
         const lipFan = (x / (0.78 - (y + 0.38) * 0.45)) * 22 + (vnoise(x * 8, y * 5, 6.1) - 0.5) * 0.9
         w +=
-          0.34 *
+          0.2 *
           crease(lipFan, 0.17) *
           (0.45 + 0.55 * vnoise(x * 5, y * 3, 4.2)) *
           smooth(-0.60, -0.52, y) *
@@ -324,7 +328,13 @@ function paintSkin(proj: { geo: THREE.BufferGeometry; T: Float32Array }, W: numb
         w += 0.58 * Math.exp(-Math.pow((nl - 0.54) / 0.038, 2)) * smooth(-0.70, -0.58, y) * (1 - smooth(-0.08, -0.02, y))
         const ly = y - smirk(x)
         const lips = (1 - smooth(0.30, 0.40, ax)) * smooth(-0.82, -0.75, ly) * (1 - smooth(-0.52, -0.48, ly)) * smooth(0.94, 1.04, z)
-        w += 0.26 * crease(x * 54 + 0.35 * Math.sin(ly * 30), 0.2) * lips
+        w += 0.12 * crease(x * 54 + 0.35 * Math.sin(ly * 30), 0.2) * lips
+        // The slit between the lips: a sharp dark crease, the upper lip rolling over it
+        const slit = Math.max(
+          Math.exp(-Math.pow((ly + 0.6) / 0.014, 2)) * (1 - smooth(0.33, 0.4, ax)) * smooth(0.92, 1.0, z),
+          Math.exp(-(Math.pow((x - CIG_X) / 0.05, 2) + Math.pow((ly + 0.6) / 0.03, 2)))
+        )
+        w += 1.1 * slit + 0.25 * Math.exp(-Math.pow((ly + 0.575) / 0.03, 2)) * slit
         w += 0.48 * Math.exp(-Math.pow((Math.hypot(x - 0.38, y + 0.55) - 0.055) / 0.018, 2)) * smooth(0.24, 0.32, x)
         const chin = smooth(-0.78, -0.88, y) * (1 - smooth(0.26, 0.42, ax))
         const bumps = fbm3(x * 26, y * 26, z * 26, 3)
@@ -338,6 +348,8 @@ function paintSkin(proj: { geo: THREE.BufferGeometry; T: Float32Array }, W: numb
         const noseWing = Math.exp(-Math.pow(Math.hypot(x / 1.2, (y + 0.10) / 0.7) / 0.18, 2))
         const cheekHi = Math.exp(-Math.pow(Math.hypot(ax - 0.36, y + 0.06) / 0.22, 2))
         rg = 0.48 + cav * 0.24 - noseWing * 0.14 - cheekHi * 0.10 - lips * 0.22 + pores * 0.06
+        // No shine down inside the slit, so it reads as a dark line even under the lights
+        rg = lerp(rg, 0.95, Math.min(1, slit * 1.4))
 
         const skinBlend = smooth(0.12, 0.52, m)
         h = lerp(hf, h, skinBlend)
@@ -381,9 +393,10 @@ function paintSkin(proj: { geo: THREE.BufferGeometry; T: Float32Array }, W: numb
 
         // A dark line inside the slit with a soft shadow either side of it
         const lipSpan = (1 - smooth(0.34, 0.41, ax)) * smooth(0.92, 1.02, z)
-        const mline = Math.exp(-Math.pow((ly2 + 0.60) / 0.024, 2)) * lipSpan
-        const mshade = Math.exp(-Math.pow((ly2 + 0.60) / 0.06, 2)) * lipSpan
-        const mdark = 1 - Math.min(0.95, 0.9 * mline + 0.32 * mshade)
+        const gap = Math.exp(-(Math.pow((x - CIG_X) / 0.055, 2) + Math.pow((ly2 + 0.6) / 0.034, 2)))
+        const mline = Math.max(Math.exp(-Math.pow((ly2 + 0.60) / 0.018, 2)) * lipSpan, gap)
+        const mshade = Math.exp(-Math.pow((ly2 + 0.60) / 0.05, 2)) * lipSpan
+        const mdark = 1 - Math.min(0.97, 0.97 * mline + 0.4 * mshade)
         kr *= mdark
         kg *= mdark
         kb *= mdark
@@ -3033,10 +3046,10 @@ export default function Monkey() {
     const R = 0.028
     const L = 0.6
     const F = 0.17
-    const corner = mouthCorner(0.3, -0.63 + smirk(0.3))
+    const corner = mouthCorner(CIG_X, -0.6 + smirk(CIG_X))
     const dir = new THREE.Vector3(0.84, -0.14, 0.52).normalize()
     const cigGroup = new THREE.Group()
-    cigGroup.position.copy(corner).addScaledVector(dir, -0.045)
+    cigGroup.position.copy(corner).addScaledVector(dir, -0.07)
     cigGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
 
     const cyl = (r0: number, r1: number, h: number, y: number, mat: THREE.Material) => {
