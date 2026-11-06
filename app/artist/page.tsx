@@ -216,7 +216,7 @@ function SetlistSongRow({
           className={`p-1.5 rounded-xl border transition cursor-pointer shrink-0 ${
             isMarkedDone
               ? "bg-emerald-400/10 border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/20"
-              : "border-white/12 hover:border-emerald-600 hover:text-emerald-300 text-[#F4EFE6]/60"
+              : "border-white/30 bg-white/[0.04] hover:border-emerald-400 hover:text-emerald-300 text-[#F4EFE6]/90"
           }`}
           title={isMarkedDone ? "Already marked as Done (click to toggle)" : "Mark as Done"}
         >
@@ -252,7 +252,7 @@ function SetlistSongRow({
 
         {/* 5. Three Lines Reorder Handle: Hold & drag anywhere to reorder queue */}
         <div
-          className="flex items-center gap-1 pl-1.5 border-l border-white/10 text-neutral-400 shrink-0"
+          className="flex items-center gap-1 pl-1.5 border-l border-white/10 text-[#F4EFE6]/75 shrink-0"
           title="Hold and drag to reorder setlist queue"
         >
           <div
@@ -264,9 +264,9 @@ function SetlistSongRow({
             className="flex flex-col items-center justify-center gap-[3px] py-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-110 active:bg-[#D92323]/15 text-[#F4EFE6]/60 hover:text-white cursor-grab active:cursor-grabbing transition select-none group/handle"
             title="Hold and drag to move anywhere in setlist"
           >
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-neutral-400 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
+            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
           </div>
 
           {/* Quick Nudge Buttons */}
@@ -278,7 +278,7 @@ function SetlistSongRow({
                 handleMoveSong(song.id, "up")
               }}
               disabled={index === 0}
-              className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+              className="p-0.5 rounded hover:bg-white/10 text-[#F4EFE6]/75 hover:text-white disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition"
               title="Push up in setlist"
             >
               <ChevronUp className="w-3.5 h-3.5" />
@@ -290,7 +290,7 @@ function SetlistSongRow({
                 handleMoveSong(song.id, "down")
               }}
               disabled={index === totalCount - 1}
-              className="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-white disabled:opacity-20 cursor-pointer disabled:cursor-not-allowed transition"
+              className="p-0.5 rounded hover:bg-white/10 text-[#F4EFE6]/75 hover:text-white disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition"
               title="Push down in setlist"
             >
               <ChevronDown className="w-3.5 h-3.5" />
@@ -1175,7 +1175,7 @@ export default function ArtistDashboardPage() {
             onClick={handleConnectHdmiScreen}
             className="px-4 py-2 rounded-full bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
           >
-            <Tv className="w-3.5 h-3.5 text-[#F4EFE6]" />
+            <Tv className="w-3.5 h-3.5" />
             <span>{hdmiConnected ? "HDMI Screen Active" : "Connect HDMI Screen"}</span>
           </button>
 
@@ -1915,7 +1915,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Karaoke
                             </button>
@@ -1926,7 +1926,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Acoustic
                             </button>
@@ -1937,7 +1937,7 @@ export default function ArtistDashboardPage() {
                                 setYtSearchQuery(q)
                                 handleSearchYouTube(q)
                               }}
-                              className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
+                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
                             >
                               Instrumental
                             </button>

@@ -89,7 +89,7 @@ export default function QrCodeModal({
           <X className="w-4 h-4" />
         </button>
 
-        <div className="flex items-center gap-2 text-purple-300 text-xs font-medium mb-2">
+        <div className="flex items-center gap-2 text-[#F4EFE6]/70 text-xs font-medium mb-2">
           <QrCode className="w-4 h-4" />
           Location + Date Venue Table QR
         </div>
@@ -98,11 +98,11 @@ export default function QrCodeModal({
 
         <div className="flex flex-wrap gap-2 mt-3">
           <span className="inline-flex items-center gap-1.5 text-xs bg-white/10 px-2.5 py-1 rounded-full text-white/90">
-            <MapPin className="w-3.5 h-3.5 text-purple-400" />
+            <MapPin className="w-3.5 h-3.5 text-[#F4EFE6]" />
             {locationName}
           </span>
           <span className="inline-flex items-center gap-1.5 text-xs bg-white/10 px-2.5 py-1 rounded-full text-white/90">
-            <Calendar className="w-3.5 h-3.5 text-amber-400" />
+            <Calendar className="w-3.5 h-3.5 text-[#F4EFE6]" />
             {eventDateOnly}
           </span>
         </div>
@@ -127,7 +127,7 @@ export default function QrCodeModal({
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex items-center justify-between gap-2 mb-4">
-          <code className="text-xs text-purple-200 truncate">{relativeUrl}</code>
+          <code className="text-xs text-[#F4EFE6]/80 truncate">{relativeUrl}</code>
           <button
             onClick={handleCopy}
             className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs flex items-center gap-1 shrink-0 cursor-pointer"
@@ -140,7 +140,7 @@ export default function QrCodeModal({
         <div className="flex gap-2.5">
           <Link
             href={relativeUrl}
-            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-purple-500 to-amber-500 text-black font-semibold text-xs flex items-center justify-center gap-1.5 hover:opacity-95 transition"
+            className="flex-1 py-3 px-4 rounded-xl bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] font-semibold text-xs flex items-center justify-center gap-1.5 hover:opacity-95 transition"
           >
             <ExternalLink className="w-4 h-4" />
             Simulate QR Scan (Open Phone View)
