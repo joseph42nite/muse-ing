@@ -3,6 +3,7 @@
 import * as THREE from "three"
 import { useEffect, useMemo, useRef } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js"
 import { BODY, BODY_WAIST, ember as emberWorld, MONKEY_SCALE, mouth as mouthWorld, scroll, smooth, SMASH, travel, walkWeight } from "./store"
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v)
@@ -841,18 +842,25 @@ function bodyMaterials(env: THREE.Texture) {
       envMap: env,
       envMapIntensity: 0.55,
     }),
+    // Polished calf: a fine grain under a high-gloss shine
     boot: new THREE.MeshPhysicalMaterial({
-      color: hdr(0.008, 0.008, 0.010),
-      roughness: 0.38,
-      metalness: 0.04,
-      clearcoat: 0.35,
-      clearcoatRoughness: 0.28,
-      normalMap: withRepeat(F.grain, 5, 5),
-      normalScale: new THREE.Vector2(0.38, 0.38),
+      color: hdr(0.009, 0.008, 0.009),
+      roughness: 0.32,
+      metalness: 0.02,
+      clearcoat: 1,
+      clearcoatRoughness: 0.1,
+      normalMap: withRepeat(F.grain, 7, 7),
+      normalScale: new THREE.Vector2(0.14, 0.14),
       envMap: env,
-      envMapIntensity: 0.35,
+      envMapIntensity: 0.7,
     }),
-    sole: new THREE.MeshStandardMaterial({ color: hdr(0.016, 0.015, 0.017), roughness: 0.88 }),
+    // Dark leather sole edge, burnished
+    sole: new THREE.MeshPhysicalMaterial({
+      color: hdr(0.022, 0.014, 0.01),
+      roughness: 0.62,
+      envMap: env,
+      envMapIntensity: 0.2,
+    }),
     furHand: new THREE.MeshStandardMaterial({
       color: hdr(0.016, 0.015, 0.014),
       roughness: 0.84,
@@ -1863,20 +1871,86 @@ function buildArms(M: BodyMats) {
 const R_AN = v3(-0.64, -7.48, -0.03)
 const L_AN = v3(0.80, -7.48, 0.16)
 
-function bootSDF(x: number, y: number, z: number) {
-  let d = sdCap(x, y, z, 0, -0.42, -0.04, 0, -0.28, -0.04, 0.14)
-  d = smin(d, sdRB(x, y, z, 0, -0.42, 0.28, 0.22, 0.10, 0.56, 0.08), 0.07)
-  d = smin(d, sdRB(x, y, z, 0, -0.43, 0.76, 0.17, 0.075, 0.22, 0.06), 0.05)
-  return Math.max(d, -(y + 0.52))
+/**
+ * The shoe's footprint as a 2D distance in plan (x across, z forward): a narrow rounded heel
+ * blending into a wider ball and an almond toe, grown by `grow` (the sole's welt).
+ */
+function shoePlan(x: number, z: number, grow = 0) {
+  const ell = (cz: number, rx: number, rz: number) => (Math.hypot(x / (rx + grow), (z - cz) / (rz + grow)) - 1) * Math.min(rx, rz)
+  return smin(ell(0.02, 0.152, 0.22), ell(0.5, 0.212, 0.48), 0.16)
 }
 
+/** Underside of the upper: flat under the heel, springing up toward the toe. */
+const shoeBase = (z: number) => -0.52 + 0.045 * Math.pow(smooth(0.62, 1.0, z), 1.6)
+
+/** Top line of the upper: the collar at the back, sloping down the instep onto a low toe box. */
+const shoeTop = (z: number) => lerp(-0.2, -0.345, smooth(0.1, 0.62, z)) - 0.075 * Math.pow(smooth(0.68, 1.0, z), 1.4)
+
+/** A fine seam: a narrow slot near the surface where `line` (distance to the seam) is small. */
+const seam = (d: number, line: number, w = 0.006) => Math.max(d, -Math.max(Math.abs(line) - w, -d - 0.012))
+
+/**
+ * A polished leather Oxford: the footprint extruded between the sole and the top line with
+ * rounded edges, an ankle filling the collar, a toe cap, a heel counter and a closed laced
+ * throat stitched in.
+ */
+function bootSDF(x: number, y: number, z: number) {
+  const top = shoeTop(z)
+  const base = shoeBase(z)
+  const hh = (top - base) / 2
+  const rc = Math.min(0.11, hh * 0.92)
+  const qx = shoePlan(x, z) + rc
+  const qy = Math.abs(y - (top + base) / 2) - hh + rc
+  let d = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0) - rc
+  d = smin(d, sdCap(x, y, z, 0, -0.36, -0.02, 0, -0.2, -0.04, 0.135), 0.06)
+  d = Math.max(d, base - y)
+  // Toe cap straight across the ball, curving back at the sides
+  d = seam(d, z - 0.69 + 0.9 * x * x)
+  // Heel counter, rising from the sole to the collar at the back
+  d = seam(d, y + 0.42 - 0.35 * Math.max(0, 0.12 - z) - 0.25 * Math.max(0, z - 0.12), 0.005)
+  // The laced throat: two facings meeting down the middle, and the vamp seam across their foot
+  if (z > 0.1 && z < 0.47) {
+    d = seam(d, x, 0.003)
+    d = seam(d, Math.abs(x) - 0.078 - 0.12 * Math.max(0, z - 0.38), 0.004)
+  }
+  if (Math.abs(x) < 0.09) d = seam(d, z - 0.47, 0.004)
+  return d
+}
+
+/** Leather sole with a slim welt round the upper and a stacked heel block under the back. */
 function soleSDF(x: number, y: number, z: number) {
-  const qx = Math.abs(x) - 0.23 * (1 - 0.28 * smooth(0.38, 0.95, z))
-  const qy = Math.abs(y + 0.55) - 0.028
-  const qz = Math.abs(z - 0.35) - 0.59
-  const o = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0)
-  const heel = sdRB(x, y, z, 0, -0.58, -0.08, 0.19, 0.045, 0.16, 0.02)
-  return Math.min(o - 0.030, heel)
+  const base = shoeBase(z)
+  const plan = shoePlan(x, z, 0.014)
+  const slab = Math.max(plan, Math.abs(y - (base - 0.022)) - 0.022) - 0.004
+  const heelPlan = Math.max(shoePlan(x, z, 0.012), z - 0.13)
+  const heel = Math.max(heelPlan, Math.abs(y + 0.59) - 0.035) - 0.004
+  return Math.min(slab, heel)
+}
+
+/** Surface height of the upper at (x, z), found by stepping down onto it from above. */
+function shoeSurface(x: number, z: number) {
+  let lo = -0.55
+  let hi = 0
+  for (let k = 0; k < 28; k++) {
+    const m = (lo + hi) / 2
+    if (bootSDF(x, m, z) < 0) lo = m
+    else hi = m
+  }
+  return lo
+}
+
+/** Five straight lace bars across the throat, sitting on the facings. */
+function laceGeometry() {
+  const bars: THREE.BufferGeometry[] = []
+  ;[0.16, 0.22, 0.28, 0.34, 0.4].forEach((z) => {
+    const pts: THREE.Vector3[] = []
+    for (let i = 0; i <= 8; i++) {
+      const x = lerp(-0.066, 0.066, i / 8)
+      pts.push(v3(x, shoeSurface(x, z) + 0.008, z))
+    }
+    bars.push(tubeGeometry(pts, () => 0.0085, 6, 16))
+  })
+  return mergeGeometries(bars)!
 }
 
 /** Centerline of a trouser leg (s = -1 right, +1 left) from the hip (v = 0) to the ankle (v = 1). */
@@ -1948,16 +2022,18 @@ function buildLegs(M: BodyMats) {
     g.add(leg)
   })
 
-  const boot = projectSphere(bootSDF, 88, 64, v3(0, -0.25, 0.25), 1.8)
-  const sole = projectSphere(soleSDF, 64, 48, v3(0, -0.56, 0.36), 1.6)
+  const boot = projectSphere(bootSDF, 128, 96, v3(0, -0.4, 0.36), 1.8)
+  const sole = projectSphere(soleSDF, 96, 48, v3(0, -0.56, 0.36), 1.6)
+  const laces = laceGeometry()
   ;[R_AN, L_AN].forEach((A, i) => {
     const b = new THREE.Group()
     b.position.set(A.x, FLOOR_Y + 0.62 * 0.98, A.z)
     b.rotation.y = BOOT_YAW[i]
     b.scale.setScalar(0.98)
-    b.add(mesh(boot.geo, M.boot), mesh(sole.geo, M.sole))
-    // Heel and toe contact points, used to keep the stance foot on the floor
-    ;[v3(0, -0.6, -0.2), v3(0, -0.58, 0.92)].forEach((p) => {
+    b.add(mesh(boot.geo, M.boot), mesh(sole.geo, M.sole), mesh(laces, M.strap))
+    // Heel and ball contact points, used to keep the stance foot on the floor: it lands on
+    // the back of the heel and pushes off the ball, the toe springing up ahead of it
+    ;[v3(0, -0.62, -0.17), v3(0, -0.565, 0.62)].forEach((p) => {
       const mark = new THREE.Object3D()
       mark.position.copy(p)
       mark.userData.marker = true
