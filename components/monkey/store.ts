@@ -14,9 +14,10 @@ export const mouth = { x: 0.04, y: 1.12, z: 0.72 }
 /**
  * Body proportions relative to the original sculpt, for a lankier figure: the head shrinks
  * toward the neck, the torso stretches down from the neck, the legs stretch down from the
- * waist, the arms hang longer from the shoulders, and the body narrows. Hands, boots and the guitar keep their original shape.
+ * waist, the arms hang longer from the shoulders, the body narrows
+ * and the hips widen again below the waist. Hands, boots and the guitar keep their original shape.
  */
-export const BODY = { head: 0.86, torso: 1.4, legs: 1.7, arms: 1.2, width: 0.88 }
+export const BODY = { head: 0.86, torso: 1.4, legs: 1.7, arms: 1.2, width: 0.88, hips: 1.16 }
 
 /** Neck and stretched waist heights in face.js units. */
 export const BODY_NECK = -1.05
@@ -104,14 +105,12 @@ export const SMASH = {
   form: [0.89, 0.93] as const,
 }
 
+/**
+ * How far the studio has moved under him, in world units along z. He walks on the spot, so the
+ * world travels with his planted boot instead (the floor, light bars and dust read it); this
+ * keeps every camera shot and the smoke wordmark where they were framed.
+ */
+export const travel = { z: 0 }
+
 /** When he walks: from the end of the exhale until he reaches for the guitar. */
 export const walkWeight = (t: number) => win(t, 0.29, 0.37, 0.79, 0.82)
-
-/** Outfit looks for the runway walk. `index` is the look being worn; the monkey wipes to it from the feet up. */
-export const LOOKS = [
-  { name: "Noir", note: "Black wool, red silk" },
-  { name: "Velvet", note: "Oxblood velvet, gold tie" },
-  { name: "Ivory", note: "Ivory twill, black silk" },
-] as const
-
-export const look = { index: 0 }

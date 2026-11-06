@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { ArrowRight, ArrowUpRight, MapPin, Menu, Mic2, X } from "lucide-react"
-import { look, LOOKS, scroll, smooth, SMASH, win } from "./store"
+import { scroll, smooth, SMASH, win } from "./store"
 
 interface OverlayEvent {
   id: string
@@ -26,6 +26,75 @@ const GIGS = [0.6, 0.65, 0.75, 0.79] as const
 const dateLabel = (d: string | null) =>
   d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Soon"
 
+/** How visible each section is (0..1), written by the scroll loop and read by the decoding titles. */
+const shown: Record<string, number> = {}
+
+const GLYPHS = "█▓▒░▀▄▌▐#%&$@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+const escapeHtml = (c: string) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c)
+
+/**
+ * A title that decodes in, after the reference: as its section arrives, letters appear as
+ * flickering block glyphs at low opacity and resolve left to right into solid type. Once the
+ * section has gone it resets, ready to play again.
+ */
+function Decode({ lines, section }: { lines: string[]; section: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const text = lines.join("\n")
+    const render = (p: number) => {
+      let html = ""
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i]
+        if (ch === "\n") html += "<br/>"
+        else if (ch === " ") html += " "
+        else {
+          const at = (i / text.length) * 0.75
+          if (p >= at + 0.22) html += escapeHtml(ch)
+          else if (p >= at) html += `<span style="opacity:.4">${escapeHtml(GLYPHS[Math.floor(Math.random() * GLYPHS.length)])}</span>`
+          else html += `<span style="opacity:0">${escapeHtml(ch)}</span>`
+        }
+      }
+      el.innerHTML = html
+    }
+    let raf = 0
+    let start = -1
+    let done = false
+    render(0)
+    const tick = () => {
+      const v = shown[section] ?? 0
+      if (start < 0 && v > 0.35) start = performance.now()
+      if (start >= 0 && v < 0.02) {
+        start = -1
+        done = false
+        render(0)
+      }
+      if (start >= 0 && !done) {
+        const p = (performance.now() - start) / 900
+        render(p)
+        if (p > 1.1) done = true
+      }
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [lines, section])
+  return (
+    <>
+      <span className="sr-only">{lines.join(" ")}</span>
+      <span ref={ref} aria-hidden="true" />
+    </>
+  )
+}
+
+const TITLES = {
+  s2: ["A live music", "experience"],
+  s3: ["Your night,", "your call"],
+  s4: ["Upcoming", "gigs"],
+  form: ["Book or", "host with us"],
+}
+
 export default function Overlay({ jump }: { jump: (p: number) => void }) {
   const refs = useRef<Record<string, HTMLElement | null>>({})
   const [events, setEvents] = useState<OverlayEvent[]>([])
@@ -34,27 +103,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
-  const [lookIdx, setLookIdx] = useState(0)
   const [menu, setMenu] = useState(false)
-
-  const wear = (step: number) =>
-    setLookIdx((i) => {
-      const n = (i + step + LOOKS.length) % LOOKS.length
-      look.index = n
-      return n
-    })
-
-  // L switches the look while he is on the runway
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "l" || e.metaKey || e.ctrlKey || e.altKey) return
-      if ((e.target as HTMLElement)?.closest?.("input, textarea, select")) return
-      if (win(scroll.value, STRUT[0], STRUT[1], GIGS[2], GIGS[3]) < 0.5) return
-      wear(e.shiftKey ? -1 : 1)
-    }
-    window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
-  }, [])
 
   useEffect(() => {
     let off = false
@@ -78,6 +127,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   useEffect(() => {
     let raf = 0
     const set = (key: string, v: number) => {
+      shown[key] = v
       const el = refs.current[key]
       if (!el) return
       el.style.opacity = String(v)
@@ -91,7 +141,6 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       set("s2", win(t, 0.13, 0.17, 0.25, 0.29))
       set("s3", win(t, ...STRUT))
       set("s4", win(t, ...GIGS))
-      set("look", win(t, STRUT[0], STRUT[1], GIGS[2], GIGS[3]))
       set("flash", win(t, SMASH.crack[0], SMASH.crack[1], SMASH.crack[1], SMASH.form[0] + 0.01) * 0.85)
       set("form", smooth(SMASH.form[0], SMASH.form[1], t))
       set("chrome", 1 - smooth(SMASH.windUp[0], SMASH.strike[0], t))
@@ -158,21 +207,11 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   return (
     <div className="pointer-events-none absolute inset-0 text-[#F4EFE6]">
       <h1 className="sr-only">Muse-ing: a live music experience. Discover live events, book a table, or join as an artist.</h1>
-      <span className="instrument pointer-events-none absolute opacity-0" aria-hidden="true">
-        muse-ing
-      </span>
 
-      {/* Header: logo left, a quiet tag in the middle, artist login and the menu right */}
-      <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-between px-5 pt-5 sm:px-8 sm:pt-6">
-        <button type="button" onClick={() => go(0)} aria-label="Back to start" className="logo-mark text-4xl leading-none sm:text-5xl">
-          <span>m</span>
-          <span className="text-[#F2A33A]">-</span>
-        </button>
+      {/* Header: a quiet tag in the middle and the menu right (artist login lives in the menu) */}
+      <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-end px-5 pt-5 sm:px-8 sm:pt-6">
         <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/55 max-md:hidden">Live music · Real-time setlists</p>
         <div className="flex items-center gap-2">
-          <Link href="/login" className="pill-dark micro max-sm:hidden">
-            Artist login <Mic2 className="h-3 w-3 text-[#F2A33A]" />
-          </Link>
           <button
             type="button"
             onClick={() => setMenu((m) => !m)}
@@ -200,19 +239,21 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
             <Link href="/events" className="title-x rounded-xl px-3 py-2.5 text-[15px] transition hover:bg-white/5 hover:text-[#F2A33A]">
               All events
             </Link>
-            <Link href="/login" className="title-x rounded-xl px-3 py-2.5 text-[15px] text-[#F2A33A] transition hover:bg-white/5">
-              Artist login
+            <Link href="/login" className="title-x flex items-center gap-2 rounded-xl px-3 py-2.5 text-[15px] text-[#F2A33A] transition hover:bg-white/5">
+              Artist login <Mic2 className="h-3.5 w-3.5" />
             </Link>
           </nav>
         )}
       </header>
 
-      {/* Scene 1: a giant title across the top over the worm's-eye close-up, a hairline and two fine columns */}
-      <section ref={reg("hero")} aria-label="Muse-ing" className="absolute inset-x-0 top-20 px-5 sm:top-24 sm:px-8">
-        <p className="title-x select-none text-center text-[17vw] leading-[0.8] sm:whitespace-nowrap sm:text-[10.6vw]" aria-hidden="true">
-          Live music
-        </p>
-        <div className="mx-auto mt-3 h-px w-full bg-[#F4EFE6]/70 sm:mt-4" />
+      {/* Scene 1: the giant title hangs in the 3D scene behind his head (studio.tsx); here, the
+          hairline just under it and two fine columns */}
+      <section
+        ref={reg("hero")}
+        aria-label="Muse-ing"
+        className="absolute inset-x-0 top-[calc(9vh+22vw)] px-5 sm:px-8"
+      >
+        <div className="mx-auto h-px w-full bg-[#F4EFE6]/70" />
         <div className="mt-3 flex justify-between gap-6 sm:mt-4 sm:justify-start sm:gap-[18vw]">
           <p className="micro max-w-[150px] leading-[1.5] text-[#F4EFE6]">
             Fully live and ready <span className="text-[#F4EFE6]/55">to redefine your night out</span>
@@ -229,9 +270,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         <div className="rise">
           <div className="dots"><i /></div>
           <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
-            A live music
-            <br />
-            experience
+            <Decode lines={TITLES.s2} section="s2" />
           </h2>
           <p className="fine mt-3 max-w-[260px]">
             Connecting independent artists with live venue crowds through real-time setlists, requests and dedications.
@@ -249,9 +288,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         <div className="rise">
           <div className="dots"><i /></div>
           <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
-            Your night,
-            <br />
-            your call
+            <Decode lines={TITLES.s3} section="s3" />
           </h2>
         </div>
         <div className="rise-late">
@@ -267,9 +304,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
           <div>
             <div className="dots"><i /></div>
             <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
-              Upcoming
-              <br />
-              gigs
+              <Decode lines={TITLES.s4} section="s4" />
             </h2>
           </div>
           <Link href="/events" className="pill-dark micro shrink-0">
@@ -310,9 +345,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         <div className="max-h-[86vh] w-full max-w-[640px] overflow-y-auto card-noir px-6 py-9 text-[#F4EFE6] sm:px-14 sm:py-12">
           <div className="dots mx-auto w-fit"><i /></div>
           <h2 className="title-x mt-4 text-center text-[32px] sm:text-[44px]">
-            Book or
-            <br />
-            host with us
+            <Decode lines={TITLES.form} section="form" />
           </h2>
           <p className="fine mx-auto mt-3 max-w-sm text-center">
             Reserve a table, host a crowd-setlist night at your venue, or join the roster as a performer.
@@ -377,26 +410,13 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         </div>
       </section>
 
-      {/* Bottom bar: scene label left, the look switch in the middle, the index right */}
+      {/* Bottom bar: scene label left, the index right */}
       <div ref={reg("chrome")} className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 px-5 pb-5 sm:px-8 sm:pb-6">
         <div className="flex items-center gap-3">
           <span ref={reg("label")} className="micro text-[#F4EFE6]/60 max-sm:hidden" />
           <div className="h-px w-12 overflow-hidden bg-white/15 max-sm:hidden">
             <div ref={reg("bar")} className="h-full w-full origin-left bg-[#F2A33A]" />
           </div>
-        </div>
-        <div ref={reg("look")} role="group" aria-label="Outfit" className="absolute left-1/2 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap" style={{ opacity: 0 }}>
-          <span className="micro text-[#F4EFE6]/55">Press</span>
-          <button
-            type="button"
-            onClick={() => wear(1)}
-            aria-label={`Switch look, now wearing ${LOOKS[lookIdx].name}`}
-            className="micro flex h-[30px] min-w-[96px] items-center justify-center gap-2 rounded-full bg-[#F4EFE6] px-4 text-[#0b0a0e] transition hover:bg-[#F2A33A]"
-          >
-            <span aria-live="polite">{LOOKS[lookIdx].name}</span>
-            <kbd className="rounded border border-black/25 px-1 font-sans text-[8.5px] max-sm:hidden">L</kbd>
-          </button>
-          <span className="micro text-[#F4EFE6]/55">to switch</span>
         </div>
         <Link href="/events" className="micro pointer-events-auto flex items-center gap-1 text-[#F4EFE6]/70 transition hover:text-[#F2A33A] max-sm:hidden">
           Gig index <ArrowUpRight className="h-3 w-3" />

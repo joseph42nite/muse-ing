@@ -3,7 +3,7 @@
 import * as THREE from "three"
 import { useEffect, useMemo, useRef } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
-import { BODY, BODY_WAIST, ember as emberWorld, look, MONKEY_SCALE, mouth as mouthWorld, scroll, smooth, SMASH, walkWeight } from "./store"
+import { BODY, BODY_WAIST, ember as emberWorld, MONKEY_SCALE, mouth as mouthWorld, scroll, smooth, SMASH, travel, walkWeight } from "./store"
 
 const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v)
 const sat = (v: number) => clamp(v, 0, 1)
@@ -130,7 +130,8 @@ function headSDF(x: number, y: number, z: number) {
   d = smin(d, sdE(x, ly, z, 0, -0.41, 1.09, 0.41, 0.24, 0.24), 0.09)
   d = smax(d, -sdCap(0, y, z, 0, -0.20, 1.16, 0, -0.42, 1.24, 0.022) - ax * 0.45, 0.025)
   d = smin(d, sdE(x, ly, z, 0, -0.70, 1.05, 0.34, 0.11, 0.21), 0.06)
-  d = smax(d, -sdCap(ax, ly, z, 0.36, -0.60, 0.98, 0, -0.60, 1.28, 0.020), 0.028)
+  // The lip slit: a groove deep and wide enough for the mesh to hold, running out to the corners
+  d = smax(d, -sdCap(ax, ly, z, 0.38, -0.60, 0.96, 0, -0.60, 1.30, 0.036), 0.022)
   d = smin(d, sdE(x, y, z, 0, -0.76, 0.60, 0.50, 0.32, 0.48), 0.2)
   d = smin(d, sdCap(x, y, z, 0, -0.75, -0.08, 0, -1.75, -0.10, 0.44), 0.24)
   return Math.max(d, -(y + 1.65))
@@ -377,10 +378,14 @@ function paintSkin(proj: { geo: THREE.BufferGeometry; T: Float32Array }, W: numb
         kg = lerp(kg, 66, lipTone * 0.45)
         kb = lerp(kb, 56, lipTone * 0.45)
 
-        const mline = Math.exp(-Math.pow((ly2 + 0.60) / 0.015, 2)) * (1 - smooth(0.32, 0.39, ax)) * smooth(0.94, 1.04, z)
-        kr *= 1 - 0.78 * mline
-        kg *= 1 - 0.78 * mline
-        kb *= 1 - 0.78 * mline
+        // A dark line inside the slit with a soft shadow either side of it
+        const lipSpan = (1 - smooth(0.34, 0.41, ax)) * smooth(0.92, 1.02, z)
+        const mline = Math.exp(-Math.pow((ly2 + 0.60) / 0.024, 2)) * lipSpan
+        const mshade = Math.exp(-Math.pow((ly2 + 0.60) / 0.06, 2)) * lipSpan
+        const mdark = 1 - Math.min(0.95, 0.9 * mline + 0.32 * mshade)
+        kr *= mdark
+        kg *= mdark
+        kb *= mdark
 
         const sock = Math.exp(-Math.pow(Math.hypot(ax - 0.28, (y - 0.11) / 0.7) / 0.2, 2))
         kr *= 1 - 0.38 * sock
@@ -660,6 +665,9 @@ function fabrics() {
 
 function bodyMaterials(env: THREE.Texture) {
   const F = fabrics()
+  const armorWear = wearMaps(11, 0.17, 0.5, 90)
+  const chromeWear = wearMaps(23, 0.82, 0.55, 30)
+  const brassWear = wearMaps(37, 0.7, 0.7, 20)
   return {
     F,
     coat: new THREE.MeshPhysicalMaterial({
@@ -749,12 +757,58 @@ function bodyMaterials(env: THREE.Texture) {
       envMap: env,
       envMapIntensity: 0.85,
     }),
+    // Cyber arm: gloss graphite armour plates over a dark synthetic-muscle core
+    // Graphite paint over bare metal: the wear map darkens the base to graphite and leaves
+    // chips and scratches at the full, bright metal colour
+    armor: new THREE.MeshPhysicalMaterial({
+      color: hdr(0.3, 0.31, 0.33),
+      map: armorWear.map,
+      metalness: 0.85,
+      roughness: 1,
+      roughnessMap: armorWear.rough,
+      clearcoat: 1,
+      clearcoatRoughness: 0.12,
+      envMap: env,
+      envMapIntensity: 1.5,
+    }),
+    brass: new THREE.MeshPhysicalMaterial({
+      color: hdr(0.62, 0.4, 0.14),
+      map: brassWear.map,
+      metalness: 1,
+      roughness: 1,
+      roughnessMap: brassWear.rough,
+      envMap: env,
+      envMapIntensity: 1.2,
+    }),
+    armorCore: new THREE.MeshPhysicalMaterial({
+      color: hdr(0.012, 0.01, 0.012),
+      metalness: 0.6,
+      roughness: 0.5,
+      sheen: 0.4,
+      sheenRoughness: 0.4,
+      sheenColor: hdr(0.25, 0.02, 0.02),
+      normalMap: withRepeat(F.twill, 3, 12),
+      normalScale: new THREE.Vector2(0.6, 0.6),
+      envMap: env,
+      envMapIntensity: 0.6,
+    }),
+    fiber: new THREE.MeshPhysicalMaterial({
+      color: hdr(0.09, 0.012, 0.014),
+      emissive: hdr(0.06, 0.004, 0.004),
+      metalness: 0.3,
+      roughness: 0.3,
+      clearcoat: 0.8,
+      envMap: env,
+      envMapIntensity: 0.9,
+    }),
     neon: new THREE.MeshBasicMaterial({ color: hdr(4.2, 0.11, 0.06), toneMapped: false }),
     neonSoft: new THREE.MeshBasicMaterial({ color: hdr(1.6, 0.04, 0.03), toneMapped: false }),
     chrome: new THREE.MeshPhysicalMaterial({
       color: hdr(0.78, 0.81, 0.86),
+      map: chromeWear.map,
       metalness: 1,
-      roughness: 0.17,
+      roughness: 1,
+      roughnessMap: chromeWear.rough,
       clearcoat: 0.6,
       clearcoatRoughness: 0.14,
       envMap: env,
@@ -823,106 +877,6 @@ function bodyMaterials(env: THREE.Texture) {
 }
 
 type BodyMats = ReturnType<typeof bodyMaterials>
-
-// Outfit palettes, one per entry in LOOKS (store.ts). Only the cloth, boots and neon trim
-// change colour; chrome, fur and the guitar stay as they are.
-type Rgb = [number, number, number]
-type Wardrobe = "coat" | "lapel" | "seamWelt" | "vest" | "lining" | "dressShirt" | "tie" | "pants" | "boot" | "neon" | "neonSoft"
-const WARDROBE: Record<Wardrobe, Rgb>[] = [
-  {
-    coat: [0.011, 0.011, 0.014], lapel: [0.013, 0.013, 0.017], seamWelt: [0.017, 0.018, 0.023], vest: [0.014, 0.014, 0.018],
-    lining: [0.055, 0.006, 0.009], dressShirt: [0.27, 0.28, 0.31], tie: [0.13, 0.009, 0.018], pants: [0.015, 0.015, 0.019],
-    boot: [0.008, 0.008, 0.010], neon: [4.2, 0.11, 0.06], neonSoft: [1.6, 0.04, 0.03],
-  },
-  {
-    coat: [0.072, 0.007, 0.013], lapel: [0.04, 0.004, 0.008], seamWelt: [0.055, 0.007, 0.011], vest: [0.048, 0.005, 0.009],
-    lining: [0.16, 0.085, 0.018], dressShirt: [0.012, 0.012, 0.014], tie: [0.42, 0.23, 0.05], pants: [0.058, 0.006, 0.011],
-    boot: [0.009, 0.006, 0.006], neon: [3.6, 1.35, 0.16], neonSoft: [1.4, 0.52, 0.06],
-  },
-  {
-    coat: [0.46, 0.42, 0.35], lapel: [0.39, 0.36, 0.30], seamWelt: [0.34, 0.31, 0.26], vest: [0.42, 0.39, 0.33],
-    lining: [0.014, 0.014, 0.018], dressShirt: [0.012, 0.012, 0.015], tie: [0.008, 0.008, 0.010], pants: [0.43, 0.39, 0.33],
-    boot: [0.010, 0.010, 0.012], neon: [0.15, 2.0, 3.6], neonSoft: [0.06, 0.75, 1.4],
-  },
-]
-
-/**
- * Lets the outfit change mid-walk: each cloth material keeps its current colour in `color`
- * and gets the next look's colour in `uWipeTo`. Everything below a noisy front at world
- * height `uWipe` shows the next look, with a band of the next look's neon along the front.
- */
-function wardrobe(M: BodyMats) {
-  const shared = { uWipe: { value: -100 }, uWipeEdge: { value: new THREE.Color() } }
-  const targets = {} as Record<Wardrobe, THREE.Color>
-  for (const key of Object.keys(WARDROBE[0]) as Wardrobe[]) {
-    const mat = M[key] as THREE.MeshStandardMaterial | THREE.MeshBasicMaterial
-    const to = (targets[key] = mat.color.clone())
-    mat.onBeforeCompile = (sh) => {
-      sh.uniforms.uWipe = shared.uWipe
-      sh.uniforms.uWipeEdge = shared.uWipeEdge
-      sh.uniforms.uWipeTo = { value: to }
-      sh.vertexShader = sh.vertexShader
-        .replace("#include <common>", "#include <common>\nvarying vec3 vWipePos;")
-        .replace("#include <project_vertex>", "#include <project_vertex>\nvWipePos = (modelMatrix * vec4(transformed, 1.0)).xyz;")
-      const lit = sh.fragmentShader.includes("#include <emissivemap_fragment>")
-      sh.fragmentShader = sh.fragmentShader
-        .replace(
-          "#include <common>",
-          `#include <common>
-varying vec3 vWipePos;
-uniform float uWipe;
-uniform vec3 uWipeEdge;
-uniform vec3 uWipeTo;
-float wipeHash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
-float wipeNoise(vec3 p) {
-  vec3 i = floor(p), f = fract(p);
-  f = f * f * (3.0 - 2.0 * f);
-  return mix(
-    mix(mix(wipeHash(i), wipeHash(i + vec3(1, 0, 0)), f.x), mix(wipeHash(i + vec3(0, 1, 0)), wipeHash(i + vec3(1, 1, 0)), f.x), f.y),
-    mix(mix(wipeHash(i + vec3(0, 0, 1)), wipeHash(i + vec3(1, 0, 1)), f.x), mix(wipeHash(i + vec3(0, 1, 1)), wipeHash(i + vec3(1, 1, 1)), f.x), f.y),
-    f.z);
-}`
-        )
-        .replace(
-          "#include <color_fragment>",
-          `#include <color_fragment>
-float wipeH = vWipePos.y + 0.45 * wipeNoise(vWipePos * 3.2) + 0.15 * wipeNoise(vWipePos * 11.0);
-diffuseColor.rgb = mix(diffuseColor.rgb, uWipeTo, step(wipeH, uWipe));
-float wipeBand = smoothstep(0.09, 0.0, abs(wipeH - uWipe));` + (lit ? "" : "\ndiffuseColor.rgb += uWipeEdge * wipeBand;")
-        )
-      if (lit)
-        sh.fragmentShader = sh.fragmentShader.replace(
-          "#include <emissivemap_fragment>",
-          "#include <emissivemap_fragment>\ntotalEmissiveRadiance += uWipeEdge * wipeBand * 0.35;"
-        )
-    }
-  }
-  return {
-    worn: 0,
-    to: 0,
-    start: -1,
-    /** Called each frame; returns nothing, drives the uniforms toward look.index. */
-    update(time: number) {
-      const want = ((look.index % WARDROBE.length) + WARDROBE.length) % WARDROBE.length
-      if (this.start < 0) {
-        if (want === this.worn) return
-        this.to = want
-        this.start = time
-        for (const key of Object.keys(targets) as Wardrobe[]) targets[key].setRGB(...WARDROBE[want][key], THREE.LinearSRGBColorSpace)
-        shared.uWipeEdge.value.setRGB(...WARDROBE[want].neon, THREE.LinearSRGBColorSpace).multiplyScalar(0.6)
-      }
-      const u = Math.min(1, (time - this.start) / 1.3)
-      // From under the soles (y -3) to above the cap (y ~2), with room for the noise
-      shared.uWipe.value = lerp(-3.6, 2.9, u * u * (3 - 2 * u))
-      if (u >= 1) {
-        for (const key of Object.keys(targets) as Wardrobe[]) (M[key] as THREE.MeshBasicMaterial).color.copy(targets[key])
-        shared.uWipe.value = -100
-        this.worn = this.to
-        this.start = -1
-      }
-    },
-  }
-}
 
 function tubeGeometry(pts: THREE.Vector3[], radius: (t: number, th: number) => number, radial: number, seg: number) {
   const raw = [pts[0].clone()]
@@ -1462,6 +1416,250 @@ const L_SH = v3(1.22, -1.66, 0.03)
 const L_EL = v3(1.60, -2.86, -0.10)
 const L_WR = v3(1.48, -4.14, 0.30)
 
+/** A spur gear in the xy plane, centred on the origin: trapezoid teeth, an axle hole and lightening holes. */
+function gearGeometry(teeth: number, r: number, thick: number) {
+  const shape = new THREE.Shape()
+  const root = r * 0.8
+  for (let i = 0; i < teeth; i++) {
+    const a = (i / teeth) * Math.PI * 2
+    const step = (Math.PI * 2) / teeth
+    const pts = [
+      [root, a],
+      [r, a + step * 0.18],
+      [r, a + step * 0.42],
+      [root, a + step * 0.6],
+    ]
+    pts.forEach(([rr, aa], k) => {
+      const x = Math.cos(aa) * rr
+      const y = Math.sin(aa) * rr
+      if (i === 0 && k === 0) shape.moveTo(x, y)
+      else shape.lineTo(x, y)
+    })
+  }
+  shape.closePath()
+  const hole = (cx: number, cy: number, hr: number) => {
+    const h = new THREE.Path()
+    h.absarc(cx, cy, hr, 0, Math.PI * 2, true)
+    shape.holes.push(h)
+  }
+  hole(0, 0, r * 0.18)
+  for (let k = 0; k < 4; k++) hole(Math.cos((k * Math.PI) / 2 + 0.4) * r * 0.5, Math.sin((k * Math.PI) / 2 + 0.4) * r * 0.5, r * 0.14)
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth: thick,
+    bevelEnabled: true,
+    bevelThickness: thick * 0.2,
+    bevelSize: thick * 0.15,
+    bevelSegments: 1,
+    curveSegments: 8,
+  })
+  g.translate(0, 0, -thick / 2)
+  return g
+}
+
+/** A gear facing along `axis` at `at`, on a pivot that stays live after pinning so it can turn. */
+function gearAt(at: THREE.Vector3, axis: THREE.Vector3, teeth: number, r: number, mat: THREE.Material, spin: number) {
+  const pivot = new THREE.Group()
+  pivot.userData.pivot = true
+  pivot.position.copy(at)
+  pivot.quaternion.setFromUnitVectors(v3(0, 0, 1), axis.clone().normalize())
+  const gear = mesh(gearGeometry(teeth, r, r * 0.22), mat)
+  gear.userData.spin = spin
+  gear.rotation.z = spin * 0.7
+  pivot.add(gear, mesh(new THREE.CylinderGeometry(r * 0.17, r * 0.17, r * 0.4, 16).rotateX(Math.PI / 2), mat))
+  return pivot
+}
+
+/**
+ * Wear for a veteran's armour, as a colour multiplier and a roughness map. Plates map the whole
+ * texture, so the borders are their edges: that is where the paint is chipped back to bare metal
+ * and grime collects; scratches and dirt cover the rest.
+ */
+function wearMaps(seed: number, base: number, grime: number, chips: number) {
+  const S = 512
+  const make = () => {
+    const c = document.createElement("canvas")
+    c.width = c.height = S
+    return [c, c.getContext("2d")!] as const
+  }
+  const [colC, col] = make()
+  const [rghC, rgh] = make()
+  const rnd = mulberry32(seed)
+  const grey = (v: number, a = 1) => `rgba(${v * 255},${v * 255},${v * 255},${a})`
+  col.fillStyle = grey(base)
+  col.fillRect(0, 0, S, S)
+  rgh.fillStyle = grey(0.24)
+  rgh.fillRect(0, 0, S, S)
+  const nearEdge = () => {
+    const e = rnd() * 4
+    const along = rnd() * S
+    const inset = Math.pow(rnd(), 2) * 34
+    return e < 1 ? [along, inset] : e < 2 ? [along, S - inset] : e < 3 ? [inset, along] : [S - inset, along]
+  }
+  // Grime, gathering towards the edges
+  for (let i = 0; i < 70; i++) {
+    const [x, y] = rnd() < 0.6 ? nearEdge() : [rnd() * S, rnd() * S]
+    const rr = 18 + rnd() * 80
+    const gc = col.createRadialGradient(x, y, 0, x, y, rr)
+    gc.addColorStop(0, `rgba(0,0,0,${grime * (0.4 + rnd() * 0.5)})`)
+    gc.addColorStop(1, "rgba(0,0,0,0)")
+    col.fillStyle = gc
+    col.fillRect(x - rr, y - rr, rr * 2, rr * 2)
+    const gr = rgh.createRadialGradient(x, y, 0, x, y, rr)
+    gr.addColorStop(0, "rgba(255,255,255,0.35)")
+    gr.addColorStop(1, "rgba(255,255,255,0)")
+    rgh.fillStyle = gr
+    rgh.fillRect(x - rr, y - rr, rr * 2, rr * 2)
+  }
+  // Scratches, mostly running along the limb
+  for (let i = 0; i < 220; i++) {
+    const x = rnd() * S
+    const y = rnd() * S
+    const a = Math.PI / 2 + (rnd() - 0.5) * 1.4
+    const len = 8 + Math.pow(rnd(), 2) * 140
+    const w = 0.5 + rnd() * 1.3
+    const bright = 0.35 + rnd() * 0.5
+    col.strokeStyle = grey(1, bright * 0.7)
+    col.lineWidth = w
+    col.beginPath()
+    col.moveTo(x, y)
+    col.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
+    col.stroke()
+    rgh.strokeStyle = grey(0.62, 0.8)
+    rgh.lineWidth = w + 0.6
+    rgh.beginPath()
+    rgh.moveTo(x, y)
+    rgh.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len)
+    rgh.stroke()
+  }
+  // Chipped paint at the edges, down to bare metal
+  for (let i = 0; i < chips; i++) {
+    const [x, y] = nearEdge()
+    const rr = 2 + Math.pow(rnd(), 1.5) * 14
+    const sides = 5 + Math.floor(rnd() * 4)
+    col.fillStyle = grey(0.9 + rnd() * 0.1)
+    rgh.fillStyle = grey(0.42)
+    ;[col, rgh].forEach((ctx) => {
+      ctx.beginPath()
+      for (let k = 0; k < sides; k++) {
+        const a = (k / sides) * Math.PI * 2
+        const q = rr * (0.45 + rnd() * 0.75)
+        if (k === 0) ctx.moveTo(x + Math.cos(a) * q, y + Math.sin(a) * q)
+        else ctx.lineTo(x + Math.cos(a) * q, y + Math.sin(a) * q)
+      }
+      ctx.closePath()
+      ctx.fill()
+    })
+  }
+  // Fine dirt
+  for (let i = 0; i < 2600; i++) {
+    col.fillStyle = `rgba(0,0,0,${0.15 + rnd() * 0.3})`
+    col.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 1.5, 1 + rnd() * 1.5)
+  }
+  const tex = (c: HTMLCanvasElement) => {
+    const t = new THREE.CanvasTexture(c)
+    t.wrapS = t.wrapT = THREE.RepeatWrapping
+    t.anisotropy = 4
+    return t
+  }
+  return { map: tex(colC), rough: tex(rghC) }
+}
+
+/** A frame along a limb segment from A to B: axis `d`, forward `f` (towards +z) and outward `o` (towards +x). */
+function limbFrame(A: THREE.Vector3, B: THREE.Vector3) {
+  const d = B.clone().sub(A).normalize()
+  const f = v3(0, 0, 1).addScaledVector(d, -d.z).normalize()
+  const o = new THREE.Vector3().crossVectors(d, f)
+  if (o.x < 0) o.negate()
+  const len = A.distanceTo(B)
+  /** Point at fraction `t` along the limb, angle `th` round it (0 front, π/2 outer, π back) and radius `r`. */
+  const at = (t: number, th: number, r: number) =>
+    A.clone()
+      .addScaledVector(d, t * len)
+      .addScaledVector(f, Math.cos(th) * r)
+      .addScaledVector(o, Math.sin(th) * r)
+  return { d, f, o, len, at, mid: A.clone().lerp(B, 0.5) }
+}
+
+/** A muscle bulge centred at (t0, th0) along and round a limb. */
+const muscle = (t: number, th: number, t0: number, th0: number, wt: number, wth: number) => {
+  const dth = Math.atan2(Math.sin(th - th0), Math.cos(th - th0))
+  return Math.exp(-Math.pow((t - t0) / wt, 2) - Math.pow(dth / wth, 2))
+}
+
+/** Upper arm: deltoid cap, biceps in front, the triceps' long and lateral heads behind. */
+const upperArmR = (t: number, th: number) =>
+  lerp(0.31, 0.25, t) +
+  0.12 * muscle(t, th, 0.06, Math.PI / 2, 0.17, 1.2) +
+  0.13 * muscle(t, th, 0.5, 0, 0.17, 0.8) +
+  0.1 * muscle(t, th, 0.34, Math.PI, 0.18, 0.75) +
+  0.07 * muscle(t, th, 0.26, 2.25, 0.13, 0.5) -
+  0.06 * smooth(0.72, 1.0, t)
+
+/** Forearm: wide at the elbow with the brachioradialis, extensors and flexors, narrowing to the wrist. */
+const foreArmR = (t: number, th: number) =>
+  lerp(0.27, 0.16, Math.pow(Math.max(0, t), 0.8)) +
+  0.11 * muscle(t, th, 0.17, 0.9, 0.16, 0.6) +
+  0.08 * muscle(t, th, 0.24, 2.1, 0.18, 0.65) +
+  0.09 * muscle(t, th, 0.2, -1.2, 0.18, 0.8)
+
+/**
+ * Cyber limb segment: a dark synthetic-muscle core, armour plates laid over each muscle
+ * group with chamfered edges, red light in the seams between them, and bare artificial
+ * muscle fibres along the inside of the limb.
+ */
+function cyberLimb(
+  M: BodyMats,
+  frame: ReturnType<typeof limbFrame>,
+  R: (t: number, th: number) => number,
+  plates: { t: [number, number]; th: [number, number]; mat: THREE.Material; lift?: number }[],
+  seams: { th: number; t: [number, number] }[],
+  fibers: [number, number]
+) {
+  const g = new THREE.Group()
+  g.add(
+    mesh(
+      solidClothShell(28, 40, (u, v) => frame.at(lerp(-0.02, 1.02, v), u * Math.PI * 2, R(v, u * Math.PI * 2) * 0.9), 0.01, frame.mid),
+      M.armorCore
+    )
+  )
+  plates.forEach(({ t: [t0, t1], th: [a0, a1], mat, lift = 1 }) => {
+    const shell = solidClothShell(
+      18,
+      26,
+      (u, v) => {
+        const t = lerp(t0, t1, v)
+        const th = lerp(a0, a1, u)
+        // Edges roll down towards the core so each plate reads as a separate piece
+        const edge = Math.min(u * (a1 - a0), (1 - u) * (a1 - a0), v * (t1 - t0) * 4, (1 - v) * (t1 - t0) * 4)
+        // Shallow dents from years of knocks
+        const dent = 0.012 * Math.sin(t * 23 + th * 7) * Math.sin(th * 11 - t * 9) - 0.02 * muscle(t, th, 0.62, 0.4, 0.06, 0.25)
+        return frame.at(t, th, R(t, th) * lift * (0.955 + 0.045 * smooth(0, 0.14, edge)) * (1 + dent))
+      },
+      0.022,
+      frame.mid
+    )
+    g.add(mesh(shell, mat))
+  })
+  seams.forEach(({ th, t: [t0, t1] }) => {
+    const pts = Array.from({ length: 14 }, (_, i) => {
+      const t = lerp(t0, t1, i / 13)
+      return frame.at(t, th, R(t, th) * 0.93)
+    })
+    g.add(mesh(tubeGeometry(pts, () => 0.007, 6, 40), M.neonSoft, false))
+  })
+  const [f0, f1] = fibers
+  for (let k = 0; k < 6; k++) {
+    const th0 = -Math.PI / 2 + (k - 2.5) * 0.17
+    const pts = Array.from({ length: 16 }, (_, i) => {
+      const t = lerp(f0, f1, i / 15)
+      const th = th0 + 0.05 * Math.sin(t * 9 + k)
+      return frame.at(t, th, R(t, th) * 0.93)
+    })
+    g.add(mesh(tubeGeometry(pts, (t) => 0.017 + 0.009 * Math.sin(t * Math.PI), 8, 40), M.fiber, false))
+  }
+  return g
+}
+
 function buildArms(M: BodyMats) {
   const g = new THREE.Group()
   // Rigid pieces are sorted into the joint they ride on, so the rig can pin them to bones.
@@ -1532,23 +1730,8 @@ function buildArms(M: BodyMats) {
   into.add(mesh(pocketWelt, M.pants))
 
   into = lShoulder
-  into.add(ball(L_SH, 0.28, M.chromeDark, [0.95, 0.98, 0.92]))
-  for (let p = 0; p < 3; p++) {
-    const py = L_SH.y + 0.06 - p * 0.14
-    const pauldron = solidClothShell(
-      10,
-      18,
-      (u, v) => {
-        const a = lerp(-0.20, 1.85, u)
-        const yy = lerp(py + 0.09, py - 0.09, v)
-        const r = (0.325 - p * 0.012) * (1 - 0.12 * Math.pow(v - 0.5, 2))
-        return v3(L_SH.x - 0.02 + Math.sin(a) * r, yy, L_SH.z + Math.cos(a) * r * 0.92)
-      },
-      0.020,
-      L_SH
-    )
-    into.add(mesh(pauldron, p === 1 ? M.chromeDark : M.chrome))
-  }
+  // Shoulder socket, mostly hidden in the coat's armhole
+  into.add(ball(L_SH, 0.25, M.armorCore, [0.95, 0.98, 0.92]))
   into = g
   const leftArmholeCuff = solidClothShell(
     8,
@@ -1565,62 +1748,70 @@ function buildArms(M: BodyMats) {
   into.add(ringAt(L_SH.clone().add(v3(0.02, -0.06, 0)), v3(0.86, -0.48, 0.04), 0.315, 0.008, M.neonSoft))
 
   into = lShoulder
-  const uArmDir = L_EL.clone().sub(L_SH).normalize()
-  into.add(mesh(tubeGeometry([L_SH, L_SH.clone().lerp(L_EL, 0.5), L_EL], (t) => lerp(0.28, 0.225, t), 24, 32), M.chromeDark))
-  ;[-1, 1].forEach((sideSign) => {
-    const midArm = L_SH.clone().lerp(L_EL, 0.5)
-    const plate = solidClothShell(
-      16,
-      14,
-      (u, v) => {
-        const c = L_SH.clone().lerp(L_EL, lerp(0.14, 0.88, v))
-        const a = (sideSign > 0 ? 0.35 : Math.PI - 0.35) + (u - 0.5) * 1.35
-        const swell = Math.sin(v * Math.PI) * 0.044
-        const r = lerp(0.295, 0.245, v) + swell
-        return v3(c.x + Math.sin(a) * r, c.y, c.z + Math.cos(a) * r)
-      },
-      0.018,
-      midArm
+  const upperFrame = limbFrame(L_SH, L_EL)
+  /** Outward surface normal at angle `th` round a limb. */
+  const outward = (fr: ReturnType<typeof limbFrame>, th: number) =>
+    fr.f.clone().multiplyScalar(Math.cos(th)).addScaledVector(fr.o, Math.sin(th))
+  into.add(
+    cyberLimb(
+      M,
+      upperFrame,
+      upperArmR,
+      [
+        { t: [0.0, 0.3], th: [-1.9, 3.6], mat: M.armor, lift: 1.03 }, // deltoid cap
+        { t: [0.33, 0.9], th: [-1.0, 0.72], mat: M.armor }, // biceps
+        { t: [0.33, 0.52], th: [0.78, 1.95], mat: M.chrome }, // lateral strip, cut short over the gear window
+        { t: [0.3, 0.9], th: [2.07, 3.9], mat: M.armor }, // triceps
+      ],
+      [
+        { th: 0.75, t: [0.35, 0.52] },
+        { th: 2.01, t: [0.33, 0.88] },
+        { th: -1.06, t: [0.35, 0.88] },
+      ],
+      [0.12, 0.92]
     )
-    into.add(mesh(plate, M.chrome))
-  })
+  )
+  // Gear window on the outside of the upper arm
+  into.add(
+    gearAt(upperFrame.at(0.64, 1.15, upperArmR(0.64, 1.15) * 0.9), outward(upperFrame, 1.15), 12, 0.13, M.brass, 1),
+    gearAt(upperFrame.at(0.8, 1.3, upperArmR(0.8, 1.3) * 0.9), outward(upperFrame, 1.3), 9, 0.09, M.chromeDark, -1.4)
+  )
 
   into = lElbow
-  const elbowDrum = mesh(new THREE.CylinderGeometry(0.24, 0.24, 0.28, 28), M.chromeDark)
-  elbowDrum.rotation.x = Math.PI / 2
-  elbowDrum.position.copy(L_EL)
-  into.add(elbowDrum)
-  into.add(ball(L_EL, 0.255, M.chrome, [1.05, 0.75, 0.85]))
-  into.add(ringAt(L_EL, uArmDir, 0.252, 0.009, M.neon))
-
+  into.add(ball(L_EL, 0.24, M.armorCore))
   const foreDir = L_WR.clone().sub(L_EL).normalize()
-  const foreSide = v3(0, 0, 1).cross(foreDir).normalize()
-  const midFore = L_EL.clone().lerp(L_WR, 0.5)
-  into.add(mesh(tubeGeometry([L_EL, midFore, L_WR], (t) => lerp(0.24, 0.178, t), 24, 32), M.chromeDark))
-  for (let seg = 0; seg < 2; seg++) {
-    const v0 = seg === 0 ? 0.10 : 0.52
-    const v1 = seg === 0 ? 0.48 : 0.90
-    const fPlate = solidClothShell(
-      12,
-      20,
-      (u, v) => {
-        const t = lerp(v0, v1, v)
-        const c = L_EL.clone().lerp(L_WR, t)
-        const a = lerp(-0.65, Math.PI + 0.65, u)
-        const r = lerp(0.272, 0.205, t) * (1 + 0.06 * Math.cos(a * 2))
-        return v3(c.x + Math.sin(a) * r, c.y, c.z + Math.cos(a) * r)
-      },
-      0.018,
-      midFore
+  const fore = limbFrame(L_EL, L_WR)
+  into.add(
+    cyberLimb(
+      M,
+      fore,
+      foreArmR,
+      [
+        { t: [-0.1, 0.1], th: [2.3, 4.0], mat: M.chrome, lift: 1.12 }, // elbow cap
+        { t: [0.04, 0.47], th: [0.1, 2.75], mat: M.armor }, // brachioradialis and extensors, short of the gear window
+        { t: [0.04, 0.55], th: [-2.6, -0.05], mat: M.armor }, // flexors
+        { t: [0.12, 0.62], th: [2.85, 3.55], mat: M.chrome, lift: 1.04 }, // ulna ridge
+        { t: [0.64, 0.97], th: [-3.0, 3.0], mat: M.chrome, lift: 1.06 }, // wrist sleeve
+      ],
+      [
+        { th: 0.02, t: [0.06, 0.58] },
+        { th: 2.8, t: [0.08, 0.6] },
+      ],
+      [0.1, 0.6]
     )
-    into.add(mesh(fPlate, M.chrome))
-  }
-  ;[-1, 1].forEach((s) => {
-    const pA = L_EL.clone().addScaledVector(foreSide, s * 0.19).addScaledVector(foreDir, 0.18)
-    const pB = L_WR.clone().addScaledVector(foreSide, s * 0.15).addScaledVector(foreDir, -0.10)
-    into.add(mesh(tubeGeometry([pA, pA.clone().lerp(pB, 0.55)], () => 0.028, 12, 8), M.chromeDark))
-    into.add(mesh(tubeGeometry([pA.clone().lerp(pB, 0.45), pB], () => 0.018, 10, 8), M.chrome))
-  })
+  )
+  into.add(ringAt(fore.at(0.64, 0, 0), foreDir, foreArmR(0.64, 0) * 1.03, 0.007, M.neon))
+  // Exposed elbow drive: a brass gear meshed with a dark steel one, turned to face forward
+  const elbowFace = fore.o.clone().multiplyScalar(0.45).addScaledVector(fore.f, 0.9).normalize()
+  into.add(
+    gearAt(L_EL.clone().addScaledVector(elbowFace, 0.21), elbowFace, 14, 0.15, M.brass, 0.8),
+    gearAt(L_EL.clone().addScaledVector(elbowFace, 0.2).addScaledVector(fore.d, 0.22), elbowFace, 9, 0.09, M.chromeDark, -1.25)
+  )
+  // Forearm window above the wrist
+  into.add(
+    gearAt(fore.at(0.555, 0.85, foreArmR(0.555, 0.85) * 0.88), outward(fore, 0.85), 11, 0.1, M.brass, -1.1),
+    gearAt(fore.at(0.545, 0.2, foreArmR(0.545, 0.2) * 0.88), outward(fore, 0.2), 8, 0.072, M.chromeDark, 1.6)
+  )
 
   into = lHand
   into.add(ball(L_WR, 0.195, M.chromeDark, [1.0, 0.82, 0.88]))
@@ -1792,6 +1983,82 @@ function buildBelt(M: BodyMats) {
   return g
 }
 
+/** Guitar-local strap buttons: the upper horn (uppermost while he plays) and the tail. */
+const STRAP_BUTTONS = [v3(-0.55, 0.45, -0.02), v3(0, -1.24, -0.02)]
+
+/**
+ * A leather strap for the playing pose, in the upper body's local space: from the tail button
+ * round his right hip, diagonally up his back, over the left shoulder and down his chest to the
+ * horn button. Each point is found by casting a ray at the coat so it lies on the surface.
+ */
+function buildStrap(M: BodyMats, upper: THREE.Object3D, coat: THREE.Object3D, horn: THREE.Vector3, tail: THREE.Vector3) {
+  const targets: THREE.Object3D[] = []
+  coat.traverse((o) => {
+    if (o instanceof THREE.Mesh) targets.push(o)
+  })
+  const ray = new THREE.Raycaster()
+  const out: { p: THREE.Vector3; n: THREE.Vector3 }[] = []
+  /** Cast from `from` along `dir` (upper-local) and keep the hit, lifted off the cloth. */
+  const onCoat = (from: THREE.Vector3, dir: THREE.Vector3) => {
+    const o = upper.localToWorld(from.clone())
+    const d = upper.localToWorld(from.clone().add(dir)).sub(o).normalize()
+    ray.set(o, d)
+    const hit = ray.intersectObjects(targets, false)[0]
+    if (!hit) return
+    const n = dir.clone().normalize().negate()
+    out.push({ p: upper.worldToLocal(hit.point.clone()).addScaledVector(n, 0.035), n })
+  }
+  const SHOULDER = v3(0.66, -1.32, 0)
+  const HIP = v3(-0.8, -3.85, 0)
+  out.push({ p: tail.clone(), n: v3(0, 0, 1) })
+  onCoat(v3(-3, HIP.y + 0.05, 0.35), v3(1, 0, 0)) // round the right hip
+  for (let i = 0; i <= 7; i++) {
+    const k = i / 7 // up the back
+    onCoat(v3(lerp(HIP.x, SHOULDER.x, k), lerp(HIP.y, SHOULDER.y, k), -3), v3(0, 0, 1))
+  }
+  onCoat(v3(SHOULDER.x + 0.06, 2, -0.05), v3(0, -1, 0)) // over the shoulder
+  for (let i = 0; i <= 5; i++) {
+    const k = i / 5 // down the chest
+    onCoat(v3(lerp(SHOULDER.x, horn.x + 0.08, k), lerp(SHOULDER.y, horn.y + 0.25, k), 3), v3(0, 0, -1))
+  }
+  out.push({ p: horn.clone(), n: v3(0, 0, 1) })
+
+  const curve = new THREE.CatmullRomCurve3(
+    out.map((o) => o.p),
+    false,
+    "centripetal"
+  )
+  const N = 120
+  const P: number[] = []
+  const I: number[] = []
+  const UV: number[] = []
+  for (let i = 0; i <= N; i++) {
+    const t = i / N
+    const p = curve.getPointAt(t)
+    const tan = curve.getTangentAt(t)
+    const src = out[Math.min(out.length - 1, Math.round(t * (out.length - 1)))].n
+    const side = new THREE.Vector3().crossVectors(tan, src).normalize().multiplyScalar(0.075)
+    P.push(p.x + side.x, p.y + side.y, p.z + side.z, p.x - side.x, p.y - side.y, p.z - side.z)
+    UV.push(0, t * 8, 1, t * 8)
+    if (i < N) {
+      const a = i * 2
+      I.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+    }
+  }
+  const g = new THREE.BufferGeometry()
+  g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3))
+  g.setAttribute("uv", new THREE.Float32BufferAttribute(UV, 2))
+  g.setIndex(I)
+  g.computeVertexNormals()
+  // Worn cognac leather, so the strap reads against the black coat
+  const leather = (M.strap as THREE.MeshPhysicalMaterial).clone()
+  leather.color = hdr(0.16, 0.06, 0.025)
+  leather.roughness = 0.6
+  leather.clearcoat = 0.15
+  leather.side = THREE.DoubleSide
+  return mesh(g, leather)
+}
+
 function buildGuitar(M: BodyMats) {
   const g = new THREE.Group()
   const gtr = new THREE.Group()
@@ -1860,6 +2127,9 @@ function buildGuitar(M: BodyMats) {
   })
   gtr.add(head)
 
+  // Strap buttons: on the upper horn and at the tail
+  STRAP_BUTTONS.forEach((b) => gtr.add(ball(b, 0.035, M.chrome)))
+
   const bridge = mesh(new THREE.BoxGeometry(0.32, 0.06, 0.04), M.chrome)
   bridge.position.set(0, -0.32, 0.13)
   gtr.add(bridge)
@@ -1870,8 +2140,8 @@ function buildGuitar(M: BodyMats) {
     gtr.add(str)
   }
 
-  gtr.position.set(0.38, -2.50, -0.76)
-  gtr.rotation.set(0.12, Math.PI + 0.14, 0.54)
+  // Sized for his lankier build; position and rotation are set every frame while he plays
+  gtr.scale.setScalar(1.2)
   g.add(gtr)
 
   return { group: g, guitar: gtr }
@@ -1971,11 +2241,23 @@ function chainWeights(nodes: THREE.Vector3[], radius: number[]) {
 function pinTo(b: THREE.Object3D, obj: THREE.Object3D) {
   const inv = b.matrixWorld.clone().invert()
   const items: THREE.Object3D[] = []
+  const underPivot = (o: THREE.Object3D) => {
+    for (let p = o.parent; p && p !== obj; p = p.parent) if (p.userData.pivot) return true
+    return false
+  }
   obj.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh || o.userData.marker) items.push(o)
+    if (underPivot(o)) return
+    if ((o as THREE.Mesh).isMesh || o.userData.marker || o.userData.pivot) items.push(o)
   })
   const rels = items.map((o) => inv.clone().multiply(o.matrixWorld))
   items.forEach((o, i) => {
+    if (o.userData.pivot) {
+      // Moving parts (gears) keep a live transform so they can spin, and stay round under the body stretch
+      rels[i].decompose(o.position, o.quaternion, o.scale)
+      o.scale.setScalar(Math.cbrt(Math.abs(rels[i].determinant())))
+      b.add(o)
+      return
+    }
     if ((o as THREE.Mesh).isMesh) {
       const m = o as THREE.Mesh
       m.geometry = m.geometry.clone().applyMatrix4(rels[i])
@@ -2106,13 +2388,13 @@ function buildRig(
   root.updateMatrixWorld(true)
   const restLow = Math.min(...markers.map((m) => m.matrixWorld.elements[13]))
 
-  return { hips: hips.outer, legs: legRig, arms: armRig, skirt, markers, restLow }
+  return { hips: hips.outer, legs: legRig, arms: armRig, skirt, markers, restLow, plant: { boot: -1, z: 0 } }
 }
 
 type Rig = ReturnType<typeof buildRig>
 
 /** Seconds per full gait cycle (two steps) — an unhurried runway pace. */
-const STRIDE = 1.3
+const STRIDE = 1.45
 const X_AXIS = new THREE.Vector3(1, 0, 0)
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 const QI = new THREE.Quaternion()
@@ -2123,27 +2405,31 @@ const hang = (side: number, pitch: number) => v3(side, -Math.cos(pitch), Math.si
 const aim = (from: THREE.Vector3, to: THREE.Vector3) => new THREE.Quaternion().setFromUnitVectors(from, to)
 
 /**
- * Pose the strut at gait phase `ph`, blended in by `w` (0 = sculpted pose, 1 = full walk):
- * wide hip sway with the free hip dropping, feet crossing onto one line, and loose arms held
- * off the body that trail the legs.
+ * Pose the walk at gait phase `ph`, blended in by `w` (0 = sculpted pose, 1 = full walk), after
+ * the reference: the weight shifts clearly onto each standing leg, which stays nearly straight;
+ * the free foot kicks back high off the floor, knee bent to about a right angle and toes
+ * pointing down; feet land under the hips, drifting slightly inward, toes turned out.
  */
 function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
-  const sway = 0.17 * Math.cos(ph)
-  const yaw = 0.17 * Math.sin(ph)
+  const sway = 0.11 * Math.cos(ph)
+  const yaw = 0.08 * Math.sin(ph)
   rig.hips.position.set(POSE.waist.x + sway * w, POSE.waist.y, POSE.waist.z)
-  rig.hips.rotation.set(0, yaw * w, 0.13 * Math.cos(ph) * w)
+  rig.hips.rotation.set(0, yaw * w, 0.08 * Math.cos(ph) * w)
 
   rig.legs.forEach((L) => {
     const si = ph + (L.s > 0 ? Math.PI : 0)
     const sn = Math.sin(si)
-    const pitch = 0.40 * sn
-    const bend = 0.08 + 0.95 * Math.pow(Math.max(0, Math.cos(si + 0.6)), 2)
-    // Feet cross onto one line under the body, catwalk style
-    const lat = (-L.s * 0.04 - sway - L.hipAt.x) / (L.lenT + L.lenS)
+    const pitch = 0.28 * sn
+    // The free foot kicks back high just after toe-off (knee to about 85 degrees, shin near
+    // horizontal behind); the standing knee stays almost straight
+    const bend = 0.05 + 1.42 * Math.pow(Math.max(0, Math.cos(si + 0.9)), 2.2)
+    // Feet land under the hips, drifting slightly inward
+    const lat = (L.s * 0.16 - 0.6 * sway - L.hipAt.x) / (L.lenT + L.lenS)
     const qHip = aim(L.thighRest, hang(lat, pitch))
     const qShin = aim(L.shinRest, hang(lat, pitch - bend))
     const qKnee = qHip.clone().invert().multiply(qShin)
-    const toesUp = sn > 0 ? 0.22 * sn : 0.5 * sn
+    // Toes lift to meet the floor heel-first, and point down as the foot kicks back
+    const toesUp = sn > 0 ? 0.22 * sn : 0.5 * sn - 0.5 * Math.pow(Math.max(0, Math.cos(si + 0.9)), 2)
     const qFoot = rotY(-yaw).multiply(rotX(-toesUp)).multiply(rotY(-BOOT_YAW[L.i] + L.s * 0.1))
     const qAnkle = qShin.clone().invert().multiply(qFoot)
     L.hip.quaternion.slerpQuaternions(QI, qHip, w)
@@ -2155,10 +2441,10 @@ function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
   rig.arms.forEach((A) => {
     // Arms trail the legs a beat behind, held out from the coat with soft elbows
     const si = ph + (A.s > 0 ? Math.PI : 0) - 0.45
-    const swing = 0.05 - 0.42 * Math.sin(si)
+    const swing = 0.05 - 0.34 * Math.sin(si)
     const bend = 0.34 + 0.3 * Math.max(0, swing)
-    const qShoulder = aim(A.upperRest, hang(A.s * (0.34 + 0.06 * Math.cos(si)), swing))
-    const qFore = aim(A.foreRest, hang(A.s * 0.26, swing + bend))
+    const qShoulder = aim(A.upperRest, hang(A.s * (0.24 + 0.04 * Math.cos(si)), swing))
+    const qFore = aim(A.foreRest, hang(A.s * 0.18, swing + bend))
     const qElbow = qShoulder.clone().invert().multiply(qFore)
     const qWrist = qFore.clone().invert().multiply(rotX(-0.8 * (swing + bend) + 0.25 * Math.sin(si - 0.6)))
     A.shoulder.quaternion.slerpQuaternions(QI, qShoulder, w)
@@ -2169,9 +2455,88 @@ function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
   // Drop the hips until the lowest heel or toe touches the floor again
   rig.hips.updateMatrixWorld(true)
   let low = Infinity
-  for (const m of rig.markers) low = Math.min(low, m.matrixWorld.elements[13])
+  const bootLow = [Infinity, Infinity]
+  const bootZ = [0, 0]
+  rig.markers.forEach((m, k) => {
+    // Two contact markers per boot, heel then toe
+    const b = k >> 1
+    const y = m.matrixWorld.elements[13]
+    low = Math.min(low, y)
+    bootLow[b] = Math.min(bootLow[b], y)
+    bootZ[b] += m.matrixWorld.elements[14] / 2
+  })
   rig.hips.position.y += (rig.restLow - low) / rootScale
+
+  // He walks on the spot, so the planted boot sweeps backwards under him; move the world with
+  // it so that boot stays put on the floor and he reads as walking rather than gliding
+  const stance = bootLow[0] <= bootLow[1] ? 0 : 1
+  if (rig.plant.boot === stance) travel.z += (bootZ[stance] - rig.plant.z) * w
+  rig.plant.boot = stance
+  rig.plant.z = bootZ[stance]
 }
+
+/** The rotation taking the frame (a, plane normal na) onto (b, plane normal nb). */
+function frameTurn(a: THREE.Vector3, na: THREE.Vector3, b: THREE.Vector3, nb: THREE.Vector3) {
+  const basis = (x: THREE.Vector3, z: THREE.Vector3) => {
+    const zz = z.clone().addScaledVector(x, -z.dot(x)).normalize()
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, new THREE.Vector3().crossVectors(zz, x), zz))
+  }
+  return basis(b, nb).multiply(basis(a, na).invert())
+}
+
+/**
+ * Two-bone IK: bend arm `A` so its wrist reaches `target` (in the spine bone's space) with the
+ * elbow bending towards `pole` (a direction, or with `poleIsPoint` a point the elbow should
+ * rest near), blended over the current pose by `w`. `flex` tips the hand at the wrist.
+ */
+function reach(A: Rig["arms"][number], target: THREE.Vector3, pole: THREE.Vector3, flex: number, w: number, poleIsPoint = false) {
+  const S = A.shoulder.position
+  if (poleIsPoint) pole = pole.clone().sub(S)
+  const a = A.elbow.position.length()
+  const b = A.wrist.position.length()
+  const toT = target.clone().sub(S)
+  const d = THREE.MathUtils.clamp(toT.length(), Math.abs(a - b) + 1e-3, (a + b) * 0.995)
+  const dir = toT.normalize()
+  const along = (a * a - b * b + d * d) / (2 * d)
+  const h = Math.sqrt(Math.max(0, a * a - along * along))
+  const bendDir = pole.clone().addScaledVector(dir, -pole.dot(dir)).normalize()
+  const E = S.clone().addScaledVector(dir, along).addScaledVector(bendDir, h)
+  const T = S.clone().addScaledVector(dir, d)
+  // Turn each bone so the arm keeps its natural bending plane from the sculpted pose, not just
+  // its direction: then the elbow always flexes the anatomical way, its point on the outside
+  const u = E.clone().sub(S).normalize()
+  const f = T.sub(E).normalize()
+  const n = new THREE.Vector3().crossVectors(u, f)
+  if (n.lengthSq() < 1e-6) n.crossVectors(u, bendDir)
+  n.normalize()
+  const restN = new THREE.Vector3().crossVectors(A.upperRest, A.foreRest).normalize()
+  const qShoulder = frameTurn(A.upperRest, restN, u, n)
+  const qFore = frameTurn(A.foreRest, restN, f, n)
+  const qElbow = qShoulder.clone().invert().multiply(qFore)
+  A.shoulder.quaternion.slerp(qShoulder, w)
+  A.elbow.quaternion.slerp(qElbow, w)
+  A.wrist.quaternion.slerp(rotX(flex), w)
+}
+
+/**
+ * Where he holds the guitar while playing, in the original sculpt's upper-body units (see BODY):
+ * at belly height with the neck running out to his left just above level and angled a little
+ * forward, the way players hold it, so the fretting forearm reaches forward. That puts the strings
+ * and the frets by the nut about 70-75% of an arm's length from each shoulder, so both elbows
+ * bend to roughly a right angle (closer and his long arms have to wing out; further and they
+ * lock straight).
+ */
+const PLAY = { pos: v3(-0.1, -3.6, 1.25), rot: new THREE.Euler(-0.12, -0.38, -1.43) }
+const CHORDS = [0, 0.42, 0.18, 0.58]
+// Which way each elbow bends, from its own shoulder in the spine's space (x towards his left,
+// y up, z forward). While playing the strumming elbow sits out over the guitar's top corner at
+// belly height, a little forward, so the forearm drops onto the strings near the bridge
+// (further back hides the arm in the coat, higher becomes a chicken wing); the fretting
+// elbow drops towards his hip so the forearm angles up and out to the neck. For the smash they swing out to lift it.
+const ELBOW_PLAY_R = v3(-0.75, -0.5, 0.4).normalize()
+const ELBOW_PLAY_L = v3(0, -1, 0.35).normalize()
+const ELBOW_LIFT_R = v3(-0.65, -0.55, 0.3).normalize()
+const ELBOW_LIFT_L = v3(0.65, -0.55, 0.3).normalize()
 
 export default function Monkey() {
   const { gl } = useThree()
@@ -2613,14 +2978,14 @@ export default function Monkey() {
 
     // 7. 1970s Formal Suit, Swagger Pose Arms, Contrapposto Trousers & Sunburst Les Paul Guitar
     const M = bodyMaterials(env)
-    const outfit = wardrobe(M)
     const upper = new THREE.Group()
     const lower = new THREE.Group()
     const gtrBuilt = buildGuitar(M)
     const jacket = buildJacket(M)
     const arms = buildArms(M)
     const legs = buildLegs(M)
-    upper.add(jacket, arms.group, buildBelt(M), gtrBuilt.group)
+    const belt = buildBelt(M)
+    upper.add(jacket, arms.group, belt, gtrBuilt.group)
     lower.add(legs.group)
     // Lankier proportions (BODY in store.ts): the torso hangs from the neck and the legs from
     // the waist, both stretched and narrowed. Group-local y is face y - 0.20, so the neck sits
@@ -2628,7 +2993,7 @@ export default function Monkey() {
     const w = BODY.width
     upper.scale.set(1.12 * w, BODY.torso, 1.08 * w)
     upper.position.set(0, POSE.neck.y + 1.25 * BODY.torso, 0.04)
-    lower.scale.set(1.12 * w, BODY.legs, 1.08 * w)
+    lower.scale.set(1.12 * w * BODY.hips, BODY.legs, 1.08 * w)
     lower.position.set(0, BODY_WAIST + 4.3 * BODY.legs, 0.04)
     HD.outer.scale.setScalar(BODY.head)
     // Longer arms, hanging from the shoulder line (local y -1.75)
@@ -2637,6 +3002,30 @@ export default function Monkey() {
     arms.group.updateMatrix()
 
     // Hands, boots, buttons and the guitar keep the original sculpt's shape
+    // Wider hips: the coat, waistcoat and belt flare out from the waist (local y -3.6) to
+    // the hips (-4.6) and stay wide down the skirt, matching the wider trousers below
+    const flared = new Set<THREE.BufferGeometry>()
+    upper.updateMatrixWorld(true)
+    const upperInv = upper.matrixWorld.clone().invert()
+    ;[jacket, belt].forEach((part) =>
+      part.traverse((o) => {
+        if (!(o instanceof THREE.Mesh) || o.material === M.button || flared.has(o.geometry)) return
+        flared.add(o.geometry)
+        const toUpper = upperInv.clone().multiply(o.matrixWorld)
+        const toLocal = toUpper.clone().invert()
+        const pos = o.geometry.attributes.position as THREE.BufferAttribute
+        const p = new THREE.Vector3()
+        for (let i = 0; i < pos.count; i++) {
+          p.fromBufferAttribute(pos, i).applyMatrix4(toUpper)
+          p.x *= lerp(1, BODY.hips, smooth(-3.6, -4.6, p.y))
+          p.applyMatrix4(toLocal)
+          pos.setXYZ(i, p.x, p.y, p.z)
+        }
+        pos.needsUpdate = true
+        o.geometry.computeBoundingSphere()
+      })
+    )
+
     const keepTorso = v3(1 / w, 1 / BODY.torso, 1 / w)
     const keepHand = keepTorso.clone().multiply(v3(1, 1 / BODY.arms, 1))
     ;([[arms.rHand, R_WR], [arms.lHand, L_WR]] as const).forEach(([hand, W]) => {
@@ -2656,10 +3045,21 @@ export default function Monkey() {
     UP.inner.add(upper)
     HIPS.inner.add(lower)
 
+    // Guitar strap, laid over the coat for the playing pose (see PLAY)
+    root.updateMatrixWorld(true)
+    const playQ = new THREE.Quaternion().setFromEuler(PLAY.rot)
+    const onBody = (b: THREE.Vector3) => b.clone().multiplyScalar(1.2).applyQuaternion(playQ).multiply(keepTorso).add(PLAY.pos)
+    const strap = buildStrap(M, upper, jacket, onBody(STRAP_BUTTONS[0]), onBody(STRAP_BUTTONS[1]))
+    upper.add(strap)
+
     upper.updateMatrix()
     lower.updateMatrix()
     root.updateMatrixWorld(true)
     const rig = buildRig(root, HIPS, UP.inner, upper.matrix, lower.matrix, legs, arms, jacket)
+    const gears: THREE.Object3D[] = []
+    root.traverse((o) => {
+      if (o.userData.spin) gears.push(o)
+    })
 
     return {
       root,
@@ -2672,7 +3072,9 @@ export default function Monkey() {
       mouthAnchor,
       guitar: gtrBuilt.guitar,
       rig,
-      outfit,
+      gears,
+      fret: 0,
+      strap,
     }
   }, [gl])
 
@@ -2690,15 +3092,15 @@ export default function Monkey() {
     mouthWorld.z = tmp.z
   }, [built, tmp])
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = scroll.value
     const tt = state.clock.elapsedTime
 
     // 9-second smoking cycle + scroll exhale (matching face.js)
     const CYCLE = 9
     const ct = tt % CYCLE
-    const scrolled = smooth(0, 0.02, t)
-    const cycleOn = 1 - scrolled
+    // He keeps smoking through the hero, until the long exhale takes over
+    const cycleOn = 1 - smooth(0.012, 0.03, t)
     const inhale = cycleOn * smooth(0, 1.1, ct) * (1 - smooth(1.6, 2.1, ct))
     const cyclePuff = cycleOn * smooth(2.2, 2.5, ct) * (1 - smooth(3.5, 4.4, ct))
     const longExhale = smooth(0.02, 0.06, t) * (1 - smooth(0.21, 0.28, t))
@@ -2711,38 +3113,88 @@ export default function Monkey() {
     built.emberMat.color.setRGB(3.2 * glow, 0.6 * glow, 0.12 * glow, THREE.LinearSRGBColorSpace)
     built.cigLight.intensity = 0.12 * glow
 
-    // Subtle idle breathing sway around the contrapposto swagger pose; from the
-    // full-body reveal until he reaches for the guitar he walks the runway on the spot,
-    // shoulders countering the hips and the head held level, chin up.
+    // Standing, he is alive but unhurried: a slow breath, a gentle weight shift and a look
+    // around. From the full-body reveal until he reaches for the guitar he walks the runway on
+    // the spot; the shoulders counter the hips (less than empty-handed, both hands are on the
+    // guitar) and the head cancels most of the torso's sway so his gaze stays steady, chin up.
+    // Everything keeps one beat: a down-up strum per step, the downstroke landing as an accent
+    // that dips the right shoulder, gives the chest a little and nods the head.
     const strike = smooth(SMASH.strike[0], SMASH.strike[1], t)
     const walk = walkWeight(t)
+    const idle = 1 - walk
+    const grab = smooth(SMASH.grab[0], SMASH.grab[1], t)
+    const playing = 1 - grab
     const ph = (tt / STRIDE) * Math.PI * 2
+    const groove = 2 * ph
+    const accent = Math.pow(Math.max(0, Math.sin(groove + 0.4)), 3)
+    const breath = Math.sin((tt / 4.2) * Math.PI * 2)
+    const torsoYaw = -0.09 * Math.sin(ph - 0.2)
+    const torsoRoll = -0.05 * Math.cos(ph - 0.15)
     built.upperPivot.rotation.set(
-      POSE.upper.x + Math.sin(tt * 1.2) * 0.004 + 0.14 * strike + walk * (-0.06 + 0.02 * Math.cos(2 * ph)),
-      lerp(POSE.upper.y, -0.3 * Math.sin(ph - 0.2), walk) + Math.sin(tt * 0.5) * 0.008,
-      lerp(POSE.upper.z, -0.17 * Math.cos(ph - 0.15), walk) + Math.sin(tt * 0.9) * 0.004
+      POSE.upper.x + 0.01 * breath + 0.14 * strike + walk * (-0.04 + 0.01 * Math.cos(2 * ph)) +
+        playing * (-0.035 + 0.012 * accent),
+      lerp(POSE.upper.y, torsoYaw, walk) + idle * 0.03 * Math.sin(tt * 0.27 + 0.8),
+      lerp(POSE.upper.z, torsoRoll, walk) + idle * 0.015 * Math.sin(tt * 0.42) + playing * 0.018 * Math.sin(groove)
     )
     built.headPivot.rotation.set(
-      POSE.head.x + Math.sin(tt * 0.7) * 0.006 - 0.04 * longExhale - walk * (0.08 + 0.025 * Math.cos(2 * ph - 0.5)),
-      lerp(POSE.head.y, 0.16 * Math.sin(ph - 0.4), walk) + Math.sin(tt * 0.4) * 0.012,
-      lerp(POSE.head.z, 0.1 * Math.cos(ph - 0.3), walk)
+      POSE.head.x - 0.006 * breath - 0.04 * longExhale - walk * (0.06 + 0.01 * Math.cos(2 * ph)) +
+        idle * 0.025 * Math.sin(tt * 0.47 + 0.4) + playing * 0.03 * accent,
+      lerp(POSE.head.y, -0.8 * torsoYaw, walk) + idle * (0.07 * Math.sin(tt * 0.31) + 0.03 * Math.sin(tt * 0.77 + 1.3)),
+      lerp(POSE.head.z, -0.8 * torsoRoll - 0.8 * playing * 0.018 * Math.sin(groove), walk) + idle * 0.025 * Math.sin(tt * 0.36 + 2.0)
     )
-    poseWalk(built.rig, ph, walk, MONKEY_SCALE)
-    built.outfit.update(tt)
-
-    // Scene 6 guitar smash choreography
-    const grab = smooth(SMASH.grab[0], SMASH.grab[1], t)
+    // He plays the guitar slung across his front; for the smash he lifts it by the neck,
+    // winds up and strikes. Positions are in the sculpt's units, stretched to the body.
+    // Hanging on its strap it lags each step a little and dips on the downstroke; the hands
+    // follow it.
     const wind = smooth(SMASH.windUp[0], SMASH.windUp[1], t)
+    const swing = playing * (walk * 0.045 * Math.sin(ph + 0.7) + idle * 0.015 * Math.sin(tt * 0.8))
     built.guitar.position.set(
-      lerp(0.38, 0.0, grab) * BODY.width,
-      lerp(-2.50, -1.60, grab) * BODY.torso,
-      (lerp(-0.76, 1.20, grab) + 1.4 * strike) * BODY.width
+      lerp(PLAY.pos.x, 0.0, grab) * BODY.width,
+      (lerp(PLAY.pos.y, -1.6, grab) - playing * 0.025 * accent) * BODY.torso,
+      (lerp(PLAY.pos.z, 1.2, grab) + 1.4 * strike) * BODY.width
     )
     built.guitar.rotation.set(
-      0.12 + 0.8 * wind - 2.1 * strike,
-      lerp(Math.PI + 0.14, 0, grab),
-      lerp(0.54, 0, grab)
+      lerp(PLAY.rot.x, 0.12, grab) + 0.8 * wind - 2.1 * strike,
+      lerp(PLAY.rot.y, 0, grab) + playing * walk * 0.035 * Math.sin(ph),
+      lerp(PLAY.rot.z, 0, grab) + swing
     )
+
+    // The strap only fits the playing pose; it comes off as he lifts the guitar for the smash
+    built.strap.visible = grab < 0.02
+
+    poseWalk(built.rig, ph, walk, MONKEY_SCALE)
+
+    // Hands on the guitar, in its local frame (strings along +y, the neck's underside towards
+    // +x while he plays, the face towards +z): the right hand strums across the strings by the
+    // bridge on the beat, the wrist snapping through each stroke and lifting off the strings on
+    // the way up; the chrome left comes up under the neck, thumb behind, presses in on the
+    // accents and slides to a new open chord every two strides, up by the headstock.
+    // For the smash both hands slide up the neck to grip it.
+    const strum = Math.sin(groove)
+    const chord = CHORDS[Math.floor(ph / (4 * Math.PI)) % CHORDS.length]
+    built.fret += (chord - built.fret) * Math.min(1, delta * 9)
+    const spine = built.rig.arms[0].shoulder.parent!
+    const toSpine = spine.matrixWorld.clone().invert().multiply(built.guitar.matrixWorld)
+    const onGuitar = (x: number, y: number, z: number) => v3(x, y, z).applyMatrix4(toSpine)
+    const [R, L] = built.rig.arms
+    reach(
+      R,
+      onGuitar(lerp(0.2 + 0.14 * strum, 0.02, grab), lerp(-0.78, 0.75, grab), lerp(0.3 + 0.06 * Math.max(0, Math.cos(groove)), -0.12, grab)),
+      ELBOW_PLAY_R.clone().lerp(ELBOW_LIFT_R, grab),
+      lerp(-0.45 + 0.3 * Math.cos(groove), 0.2, grab),
+      1
+    )
+    reach(
+      L,
+      onGuitar(lerp(0.2 - 0.03 * accent, -0.05, grab), lerp(2.4 + 0.3 * built.fret, 1.55, grab), lerp(-0.04, -0.06, grab)),
+      ELBOW_PLAY_L.clone().lerp(ELBOW_LIFT_L, grab),
+      lerp(0.5, 0.25, grab),
+      1
+    )
+
+    // Arm gears tick over slowly at rest and drive harder while he walks
+    const gearDt = Math.min(delta, 0.05)
+    for (const g of built.gears) g.rotation.z += gearDt * g.userData.spin * (0.35 + 1.4 * walk)
 
     built.tipAnchor.getWorldPosition(tmp)
     emberWorld.x = tmp.x

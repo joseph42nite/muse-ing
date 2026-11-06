@@ -227,8 +227,10 @@ function sampleWord(family: string, maxPts: number) {
   g.fillStyle = "#fff"
   g.textAlign = "center"
   g.textBaseline = "middle"
-  g.font = `330px ${family}`
-  g.fillText("muse-ing", W / 2, H / 2 + 10)
+  // Heavy and extra wide, matching the hero's title type
+  g.font = `800 expanded 210px ${family}`
+  if ("fontStretch" in g) g.fontStretch = "expanded"
+  g.fillText("MUSE-ING", W / 2, H / 2 + 10)
   const d = g.getImageData(0, 0, W, H).data
   const pts: number[] = []
   let minX = W
@@ -321,18 +323,12 @@ export function Wordmark() {
 
   useEffect(() => {
     let cancelled = false
-    const family = '"Instrument Serif", Georgia, serif'
+    // The display font next/font loads for the titles (Archivo with its width axis)
+    const display = getComputedStyle(document.body).getPropertyValue("--font-display").trim()
+    const family = `${display || "Archivo"}, "Arial Black", sans-serif`
     const run = async () => {
       try {
-        if (typeof FontFace !== "undefined") {
-          const ff = new FontFace("Instrument Serif", "url(/fonts/InstrumentSerif-Regular.ttf)", {
-            style: "normal",
-            weight: "400",
-          })
-          const loaded = await ff.load()
-          document.fonts.add(loaded)
-        }
-        await document.fonts.load('330px "Instrument Serif"', "muse-ing")
+        await document.fonts.load(`800 expanded 210px ${family}`, "MUSE-ING")
       } catch {
         /* fallback */
       }
