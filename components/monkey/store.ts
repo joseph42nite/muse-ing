@@ -8,7 +8,7 @@ export const MONKEY_SCALE = 4.5 / 7.65
 /** World position of the cigarette ember, kept current by the monkey for the smoke. */
 export const ember = { x: 0.44, y: 1.07, z: 1.02 }
 
-/** World position of the monkey's mouth, for the exhale and smoke wordmark. */
+/** World position of the monkey's mouth, for the exhale. */
 export const mouth = { x: 0.04, y: 1.12, z: 0.72 }
 
 /**
@@ -55,7 +55,7 @@ export const CAMERA_KEYS: CamKey[] = [
   { t: 0.0,  p: [0.55, 0.50, 2.35],  l: [0.0, 1.38, 0.35] },    // 1 worm's-eye close-up from under the chin
   { t: 0.08, p: [1.05, 0.62, 2.50],  l: [0.0, 1.34, 0.38] },
   { t: 0.15, p: [3.10, 0.80, 2.45],  l: [-0.20, 1.24, 0.60] },  // orbiting round while he exhales
-  { t: 0.23, p: [4.30, 0.75, 0.95],  l: [-0.35, 1.20, 0.85] },  // 2 side profile, the name forms in the smoke in front of him
+  { t: 0.23, p: [4.30, 0.75, 0.95],  l: [-0.35, 1.20, 0.85] },  // 2 side profile while he exhales, the copy in the space in front of him
   { t: 0.27, p: [4.30, 0.75, 0.95],  l: [-0.35, 1.20, 0.85] },
   { t: 0.37, p: [-0.70, -3.55, 20.2], l: [-0.18, -2.15, 0.10] }, // 3 the strut, shin-high camera looking up at him
   { t: 0.52, p: [0.45, -3.10, 12.0],  l: [-0.15, -0.90, 0.10] }, // pushing in to knees-up
@@ -65,9 +65,6 @@ export const CAMERA_KEYS: CamKey[] = [
   { t: 0.84, p: [0, 0.85, 6.60],     l: [0, 0.65, 0.35] },
   { t: 1.0,  p: [0, 0.85, 6.60],     l: [0, 0.65, 0.35] },
 ]
-
-/** Where the smoke wordmark settles: the held side-profile shot. */
-export const WORDMARK_SHOT = 0.25
 
 const lerp = (a: number, b: number, u: number) => a + (b - a) * u
 
@@ -108,7 +105,7 @@ export const SMASH = {
 /**
  * How far the studio has moved under him, in world units along z. He walks on the spot, so the
  * world travels with his planted boot instead (the floor, light bars and dust read it); this
- * keeps every camera shot and the smoke wordmark where they were framed.
+ * keeps every camera shot where it was framed.
  */
 export const travel = { z: 0 }
 

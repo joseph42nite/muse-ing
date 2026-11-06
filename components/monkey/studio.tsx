@@ -238,6 +238,12 @@ export function Dust() {
 
 const GLITCH = "█▓▒░▀▄▌▐#%&$@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
+/** Title plate canvas height: the word on top, the smaller line under it (width is 2048). */
+const TITLE_H = 900
+/** Baselines (middle of the letters) for the word and the line under it, in canvas pixels. */
+const WORD_Y = 290
+const SUB_Y = 468
+
 /** How far below the top of the frame the title plate starts, as a share of the frame height (the overlay's hairline sits under it). */
 const TITLE_TOP = 0.09
 
@@ -247,16 +253,16 @@ const TITLE_TOP = 0.09
  * letter flickers through broken block glyphs and snaps into place at its own moment. Then, as
  * you start to scroll, the word folds into its logo: the letters after the dash slide into it
  * and vanish, then the dash slides back into the word, swallowing all but the first letter,
- * leaving "M-" where the word began.
+ * leaving "M-" where the word began. A smaller line (`sub`) sits under the word and stays put.
  */
-export function BackTitle({ text }: { text: string }) {
+export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
   const { camera } = useThree()
   const mesh = useRef<THREE.Mesh>(null)
   const dash = text.indexOf("-")
   const cv = useMemo(() => {
     const c = document.createElement("canvas")
     c.width = 2048
-    c.height = 640
+    c.height = TITLE_H
     return c
   }, [])
   const tex = useMemo(() => {
@@ -271,14 +277,14 @@ export function BackTitle({ text }: { text: string }) {
     const display = getComputedStyle(document.body).getPropertyValue("--font-display").trim()
     const family = `${display || "Archivo"}, "Arial Black", sans-serif`
     document.fonts
-      .load(`800 expanded 200px ${family}`, text)
+      .load(`800 expanded 200px ${family}`, text + sub)
       .catch(() => {})
       .finally(() => {
         anim.current.family = family
         anim.current.ready = true
         anim.current.start = performance.now() + 450
       })
-  }, [text])
+  }, [text, sub])
 
   useFrame(() => {
     const m = mesh.current
@@ -305,15 +311,19 @@ export function BackTitle({ text }: { text: string }) {
 
     // Glitch-in: each letter settles at its own moment
     const p = (performance.now() - anim.current.start) / 1300
-    const glyphs = [...text].map((ch, i) => {
-      const settle = 0.15 + (((i * 7919) % 13) / 13) * 0.75
-      return p >= settle ? ch : p < 0 ? " " : Math.random() < 0.18 ? ch : GLITCH[Math.floor(Math.random() * GLITCH.length)]
-    })
+    const glitch = (str: string, seed: number) =>
+      [...str].map((ch, i) => {
+        if (ch === " ") return ch
+        const settle = 0.15 + ((((i + seed) * 7919) % 13) / 13) * 0.75
+        return p >= settle ? ch : p < 0 ? " " : Math.random() < 0.18 ? ch : GLITCH[Math.floor(Math.random() * GLITCH.length)]
+      })
+    const glyphs = glitch(text, 0)
+    const subGlyphs = glitch(sub, 5).join("")
     // Fold into the logo on scroll: the tail into the dash, then the dash into the word
     const fold = smooth(0.005, 0.05, t)
     const a = smooth(0, 0.5, fold)
     const b = smooth(0.5, 1, fold)
-    const key = glyphs.join("") + a.toFixed(3) + b.toFixed(3)
+    const key = glyphs.join("") + subGlyphs + a.toFixed(3) + b.toFixed(3)
     if (key === anim.current.last) return
     anim.current.last = key
 
@@ -337,8 +347,21 @@ export function BackTitle({ text }: { text: string }) {
     const ox = (cv.width - right(text.length - 1)) / 2
 
     g.clearRect(0, 0, cv.width, cv.height)
+    // The smaller line tucked under the word, in off-white and widely tracked; it stays put while the word folds
+    if (sub) {
+      g.save()
+      g.font = `800 expanded 118px ${anim.current.family}`
+      if ("fontStretch" in g) (g as CanvasRenderingContext2D & { fontStretch: string }).fontStretch = "expanded"
+      if ("letterSpacing" in g) (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "26px"
+      g.fillStyle = "#f4efe6"
+      g.textAlign = "center"
+      g.textBaseline = "middle"
+      g.fillText(subGlyphs, cv.width / 2, SUB_Y, cv.width * 0.9)
+      g.restore()
+      g.font = `800 expanded ${fontPx}px ${anim.current.family}`
+    }
     g.save()
-    g.translate(ox, cv.height / 2)
+    g.translate(ox, WORD_Y)
     g.scale(k, k)
     g.fillStyle = "#0c0204"
     g.textBaseline = "middle"

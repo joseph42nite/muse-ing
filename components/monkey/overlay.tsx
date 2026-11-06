@@ -88,6 +88,13 @@ function Decode({ lines, section }: { lines: string[]; section: string }) {
   )
 }
 
+/** Who Muse-ing is for, in scene 2. */
+const ABOUT = [
+  ["For the crowd", "Find live gigs near you and shape the setlist from your table."],
+  ["For artists", "Run your setlist live, see requests as they land, and get paid for priority shoutouts."],
+  ["For venues", "Host crowd-setlist nights and fill tables through direct booking."],
+] as const
+
 const TITLES = {
   s2: ["A live music", "experience"],
   s3: ["Your night,", "your call"],
@@ -209,7 +216,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       <h1 className="sr-only">Muse-ing: a live music experience. Discover live events, book a table, or join as an artist.</h1>
 
       {/* Header: a quiet tag in the middle and the menu right (artist login lives in the menu) */}
-      <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-end px-5 pt-5 sm:px-8 sm:pt-6">
+      <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-end px-7 pt-7 sm:px-12 sm:pt-10">
         <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/55 max-md:hidden">Live music · Real-time setlists</p>
         <div className="flex items-center gap-2">
           <button
@@ -217,15 +224,15 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
             onClick={() => setMenu((m) => !m)}
             aria-label={menu ? "Close menu" : "Open menu"}
             aria-expanded={menu}
-            className="grid h-[30px] w-[30px] place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-[#F2A33A]"
+            className="grid h-10 w-10 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-[#F2A33A]"
           >
-            {menu ? <X className="h-3.5 w-3.5" /> : <Menu className="h-3.5 w-3.5" />}
+            {menu ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
         </div>
         {menu && (
           <nav
             aria-label="Primary"
-            className="absolute right-5 top-16 flex w-56 flex-col rounded-2xl border border-white/10 bg-[#0b0a0e]/92 p-2 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)] backdrop-blur-md sm:right-8"
+            className="absolute right-7 top-[84px] flex w-56 flex-col rounded-2xl border border-white/10 bg-[#0b0a0e]/92 p-2 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)] backdrop-blur-md sm:right-12 sm:top-[104px]"
           >
             {[
               ["Upcoming gigs", () => go(0.68)],
@@ -251,7 +258,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       <section
         ref={reg("hero")}
         aria-label="Muse-ing"
-        className="absolute inset-x-0 top-[calc(9vh+22vw)] px-5 sm:px-8"
+        className="absolute inset-x-0 top-[calc(9vh+26vw)] px-5 sm:px-8"
       >
         <div className="mx-auto h-px w-full bg-[#F4EFE6]/70" />
         <div className="mt-3 flex justify-between gap-6 sm:mt-4 sm:justify-start sm:gap-[18vw]">
@@ -265,17 +272,31 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
         </div>
       </section>
 
-      {/* Scene 2: tagline under the smoke wordmark */}
-      <section ref={reg("s2")} aria-label="About" className="absolute bottom-24 left-5 max-w-[400px] sm:bottom-28 sm:left-[7vw]" style={{ opacity: 0 }}>
+      {/* Scene 2: what Muse-ing is, in the open space in front of his profile as he exhales */}
+      <section
+        ref={reg("s2")}
+        aria-label="About"
+        className="absolute inset-x-5 bottom-16 max-w-[600px] sm:inset-x-auto sm:bottom-auto sm:left-[7vw] sm:top-1/2 sm:-translate-y-1/2"
+        style={{ opacity: 0 }}
+      >
         <div className="rise">
           <div className="dots"><i /></div>
-          <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">
+          <h2 className="title-x mt-4 text-[38px] sm:text-[58px]">
             <Decode lines={TITLES.s2} section="s2" />
           </h2>
-          <p className="fine mt-3 max-w-[260px]">
-            Connecting independent artists with live venue crowds through real-time setlists, requests and dedications.
+          <p className="fine mt-4 max-w-[520px] text-[15px]! sm:text-[18px]!">
+            Muse-ing connects independent artists with live venue crowds. The room requests, the artist plays, and no two
+            nights turn out the same.
           </p>
         </div>
+        <ul className="rise-late mt-6 space-y-4 border-t border-white/15 pt-5">
+          {ABOUT.map(([who, what]) => (
+            <li key={who} className="grid grid-cols-[110px_1fr] items-baseline gap-4 sm:grid-cols-[150px_1fr]">
+              <span className="micro text-[11px]! text-[#F4EFE6] sm:text-[13px]!">{who}</span>
+              <span className="fine text-[14px]! sm:text-[16px]!">{what}</span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* Scene 3: the strut, copy on the left while he walks right of centre */}

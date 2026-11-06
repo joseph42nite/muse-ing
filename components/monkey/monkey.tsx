@@ -2394,7 +2394,7 @@ function buildRig(
 type Rig = ReturnType<typeof buildRig>
 
 /** Seconds per full gait cycle (two steps) — an unhurried runway pace. */
-const STRIDE = 1.45
+const STRIDE = 1.9
 const X_AXIS = new THREE.Vector3(1, 0, 0)
 const Y_AXIS = new THREE.Vector3(0, 1, 0)
 const QI = new THREE.Quaternion()
@@ -2411,18 +2411,18 @@ const aim = (from: THREE.Vector3, to: THREE.Vector3) => new THREE.Quaternion().s
  * pointing down; feet land under the hips, drifting slightly inward, toes turned out.
  */
 function poseWalk(rig: Rig, ph: number, w: number, rootScale: number) {
-  const sway = 0.11 * Math.cos(ph)
-  const yaw = 0.08 * Math.sin(ph)
+  const sway = 0.08 * Math.cos(ph)
+  const yaw = 0.06 * Math.sin(ph)
   rig.hips.position.set(POSE.waist.x + sway * w, POSE.waist.y, POSE.waist.z)
-  rig.hips.rotation.set(0, yaw * w, 0.08 * Math.cos(ph) * w)
+  rig.hips.rotation.set(0, yaw * w, 0.06 * Math.cos(ph) * w)
 
   rig.legs.forEach((L) => {
     const si = ph + (L.s > 0 ? Math.PI : 0)
     const sn = Math.sin(si)
-    const pitch = 0.28 * sn
-    // The free foot kicks back high just after toe-off (knee to about 85 degrees, shin near
-    // horizontal behind); the standing knee stays almost straight
-    const bend = 0.05 + 1.42 * Math.pow(Math.max(0, Math.cos(si + 0.9)), 2.2)
+    const pitch = 0.24 * sn
+    // The free foot kicks back just after toe-off (knee to about 70 degrees); the standing
+    // knee stays almost straight
+    const bend = 0.05 + 1.2 * Math.pow(Math.max(0, Math.cos(si + 0.9)), 2.2)
     // Feet land under the hips, drifting slightly inward
     const lat = (L.s * 0.16 - 0.6 * sway - L.hipAt.x) / (L.lenT + L.lenS)
     const qHip = aim(L.thighRest, hang(lat, pitch))
@@ -3138,7 +3138,7 @@ export default function Monkey() {
     )
     built.headPivot.rotation.set(
       POSE.head.x - 0.006 * breath - 0.04 * longExhale - walk * (0.06 + 0.01 * Math.cos(2 * ph)) +
-        idle * 0.025 * Math.sin(tt * 0.47 + 0.4) + playing * 0.03 * accent,
+        idle * 0.025 * Math.sin(tt * 0.47 + 0.4) + playing * 0.02 * accent,
       lerp(POSE.head.y, -0.8 * torsoYaw, walk) + idle * (0.07 * Math.sin(tt * 0.31) + 0.03 * Math.sin(tt * 0.77 + 1.3)),
       lerp(POSE.head.z, -0.8 * torsoRoll - 0.8 * playing * 0.018 * Math.sin(groove), walk) + idle * 0.025 * Math.sin(tt * 0.36 + 2.0)
     )
@@ -3147,7 +3147,7 @@ export default function Monkey() {
     // Hanging on its strap it lags each step a little and dips on the downstroke; the hands
     // follow it.
     const wind = smooth(SMASH.windUp[0], SMASH.windUp[1], t)
-    const swing = playing * (walk * 0.045 * Math.sin(ph + 0.7) + idle * 0.015 * Math.sin(tt * 0.8))
+    const swing = playing * (walk * 0.03 * Math.sin(ph + 0.7) + idle * 0.012 * Math.sin(tt * 0.8))
     built.guitar.position.set(
       lerp(PLAY.pos.x, 0.0, grab) * BODY.width,
       (lerp(PLAY.pos.y, -1.6, grab) - playing * 0.025 * accent) * BODY.torso,

@@ -6,7 +6,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber"
 import { EffectComposer, Bloom } from "@react-three/postprocessing"
 import Monkey from "./monkey"
 import { BackTitle, Backdrop, Dust, LightBars, StudioFloor } from "./studio"
-import { Smoke, Wordmark } from "./smoke"
+import { Smoke } from "./smoke"
 import { FLOOR, PROFILE_SHIFT, profileFraming, sampleCamera, scroll, smooth, SMASH, walkFraming } from "./store"
 
 const GLASS_Z = 1.8
@@ -150,10 +150,9 @@ export default function Stage({ onReady }: { onReady?: () => void }) {
       <StudioFloor />
       <LightBars />
       <Dust />
-      <BackTitle text="MUSE-ING" />
+      <BackTitle text="MUSE-ING" sub="LIVE MUSIC" />
       <Monkey />
       <Smoke />
-      <Wordmark />
       <Glass />
       <EffectComposer multisampling={4}>
         <Bloom intensity={0.85} luminanceThreshold={0.95} luminanceSmoothing={0.2} mipmapBlur />
