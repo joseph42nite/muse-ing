@@ -4,7 +4,7 @@ import * as THREE from "three"
 import { useEffect, useMemo, useRef } from "react"
 import { useFrame, useThree } from "@react-three/fiber"
 import { MeshReflectorMaterial } from "@react-three/drei"
-import { FLOOR, scroll, smooth, travel } from "./store"
+import { FLOOR, GLITCH_GLYPHS, scroll, smooth, travel } from "./store"
 
 /*
  * The studio he stands in, after the reference: a seamless deep-red backdrop that glows in the
@@ -236,8 +236,6 @@ export function Dust() {
   )
 }
 
-const GLITCH = "█▓▒░▀▄▌▐#%&$@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
 /** Title plate canvas height: the word on top, the smaller line under it (width is 2048). */
 const TITLE_H = 900
 /** Baselines (middle of the letters) for the word and the line under it, in canvas pixels. */
@@ -246,14 +244,18 @@ const SUB_Y = 468
 
 /** How far below the top of the frame the title plate starts, as a share of the frame height (the overlay's hairline sits under it). */
 const TITLE_TOP = 0.09
+/** Widest the title plate may get, as a share of the frame height (keeps it legible on wide screens). */
+const TITLE_MAX_H = 0.95
+/** On wide screens, where the plate is capped, it starts higher up, so the word and the line under it clear his head. */
+const TITLE_TOP_WIDE = 0.03
 
 /**
  * The giant hero title, hung behind his head on a plate that faces the camera across the top of
  * the frame, so the head covers part of it like the reference. It glitches in on load: each
  * letter flickers through broken block glyphs and snaps into place at its own moment. Then, as
  * you start to scroll, the word folds into its logo: the letters after the dash slide into it
- * and vanish, then the dash slides back into the word, swallowing all but the first letter,
- * leaving "M-" where the word began. A smaller line (`sub`) sits under the word and stays put.
+ * and vanish, then the M slides right over the letters up to the dash, swallowing them,
+ * leaving "M-" centred in the frame. A smaller line (`sub`) sits under the word and stays put.
  */
 export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
   const { camera } = useThree()
@@ -301,9 +303,14 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     const w = h * cam.aspect
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion)
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion)
-    const plateW = w * 0.96
+    // Full width on phones, but capped by the frame height on wide screens: otherwise the dark
+    // word runs out into the near-black vignette at the edges and the line under it drops down
+    // behind his head. Keep TITLE_MAX_H in step with the overlay's hairline (overlay.tsx).
+    const wide = w * 0.96 > h * TITLE_MAX_H
+    const plateW = wide ? h * TITLE_MAX_H : w * 0.96
     const plateH = plateW * (cv.height / cv.width)
-    m.position.copy(cam.position).addScaledVector(fwd, D).addScaledVector(up, h / 2 - plateH / 2 - h * TITLE_TOP)
+    const top = wide ? TITLE_TOP_WIDE : TITLE_TOP
+    m.position.copy(cam.position).addScaledVector(fwd, D).addScaledVector(up, h / 2 - plateH / 2 - h * top)
     m.quaternion.copy(cam.quaternion)
     m.scale.set(plateW, plateH, 1)
 
@@ -315,7 +322,7 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
       [...str].map((ch, i) => {
         if (ch === " ") return ch
         const settle = 0.15 + ((((i + seed) * 7919) % 13) / 13) * 0.75
-        return p >= settle ? ch : p < 0 ? " " : Math.random() < 0.18 ? ch : GLITCH[Math.floor(Math.random() * GLITCH.length)]
+        return p >= settle ? ch : p < 0 ? " " : Math.random() < 0.18 ? ch : GLITCH_GLYPHS[Math.floor(Math.random() * GLITCH_GLYPHS.length)]
       })
     const glyphs = glitch(text, 0)
     const subGlyphs = glitch(sub, 5).join("")
@@ -339,12 +346,15 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     widths.reduce((x, wd, i) => ((left[i] = x), x + wd * k), 0)
     const right = (i: number) => left[i] + widths[i] * k
     const tailShift = a * (right(text.length - 1) - right(dash))
-    const dashShift = b * (left[dash] - right(0))
-    const dashL = left[dash] - dashShift
-    const dashR = right(dash) - dashShift
-    // The word stays where it started, centred as a whole, so "M-" ends up where the word
-    // began, clear of his head in the middle of the frame
+    // The word starts centred as a whole; once folded, "M-" sits centred on its own
     const ox = (cv.width - right(text.length - 1)) / 2
+    const wM = widths[0] * k
+    const wDash = widths[dash] * k
+    const mEnd = (cv.width - wM - wDash) / 2 - ox
+    // The M slides right into the dash, and the dash eases over so the pair ends up centred
+    const mL = left[0] + b * (mEnd - left[0])
+    const dashL = left[dash] + b * (mEnd + wM - left[dash])
+    const mR = mL + wM
 
     g.clearRect(0, 0, cv.width, cv.height)
     // The smaller line tucked under the word, in off-white and widely tracked; it stays put while the word folds
@@ -366,13 +376,16 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     g.fillStyle = "#0c0204"
     g.textBaseline = "middle"
     const draw = (i: number, x: number) => g.fillText(glyphs[i], x / k, 0)
-    // The word before the dash, hidden behind the dash as it slides back
-    g.save()
-    g.beginPath()
-    g.rect(-1e4, -1e4, dashL / k + 1e4, 2e4)
-    g.clip()
-    for (let i = 0; i < dash; i++) if (i === 0 || left[i] < dashL) draw(i, left[i])
-    g.restore()
+    // The letters between the M and the dash, swallowed by the M as it slides over them
+    if (b < 1) {
+      g.save()
+      g.beginPath()
+      g.rect(mR / k, -1e4, Math.max(0, dashL - mR) / k, 2e4)
+      g.clip()
+      for (let i = 1; i < dash; i++) draw(i, left[i])
+      g.restore()
+    }
+    draw(0, mL)
     // The letters after the dash, sliding into it and vanishing past its far edge (where it
     // stood before it moved, so they stay gone once the dash slides back into the word)
     if (a < 1) {

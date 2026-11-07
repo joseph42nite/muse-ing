@@ -17,7 +17,7 @@ export const mouth = { x: 0.04, y: 1.12, z: 0.72 }
  * waist, the arms hang longer from the shoulders, the body narrows
  * and the hips widen again below the waist. Hands, boots and the guitar keep their original shape.
  */
-export const BODY = { head: 0.86, torso: 1.4, legs: 1.7, arms: 1.2, width: 0.88, hips: 1.16 }
+export const BODY = { head: 0.86, torso: 1.4, legs: 1.7, arms: 1.2, width: 0.88, hips: 1.16, depth: 1.3 }
 
 /** Neck and stretched waist heights in face.js units. */
 export const BODY_NECK = -1.05
@@ -26,7 +26,23 @@ export const BODY_WAIST = BODY_NECK + (-4.1 - BODY_NECK) * BODY.torso
 /** World height of the street his soles land on (the leg group's boot pivots sit 0.6076 above its floor at -7.85). */
 export const FLOOR = 1.5 + MONKEY_SCALE * (BODY_WAIST + 4.3 * BODY.legs + BODY.legs * (-7.85 + 0.6076) - 0.6076)
 
-export const clamp01 = (x: number) => Math.min(1, Math.max(0, x))
+export const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v)
+export const clamp01 = (x: number) => clamp(x, 0, 1)
+export const lerp = (a: number, b: number, u: number) => a + (b - a) * u
+
+/** Seeded random numbers in [0, 1), so procedural details come out the same every load. */
+export function mulberry32(a: number) {
+  return function () {
+    a |= 0
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+/** Broken block glyphs that titles flicker through before they resolve. */
+export const GLITCH_GLYPHS = "█▓▒░▀▄▌▐#%&$@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 export const smooth = (a: number, b: number, x: number) => {
   const t = clamp01((x - a) / (b - a))
@@ -65,8 +81,6 @@ export const CAMERA_KEYS: CamKey[] = [
   { t: 0.84, p: [0, 0.85, 6.60],     l: [0, 0.65, 0.35] },
   { t: 1.0,  p: [0, 0.85, 6.60],     l: [0, 0.65, 0.35] },
 ]
-
-const lerp = (a: number, b: number, u: number) => a + (b - a) * u
 
 export function sampleCamera(t: number): { p: Vec3; l: Vec3 } {
   const keys = CAMERA_KEYS
@@ -111,3 +125,26 @@ export const travel = { z: 0 }
 
 /** When he walks: from the end of the exhale until he reaches for the guitar. */
 export const walkWeight = (t: number) => win(t, 0.29, 0.37, 0.79, 0.82)
+
+/** Scroll windows for each scene's copy: fades in from a to b, holds until c, gone by d. */
+export const COPY = {
+  about: [0.13, 0.17, 0.25, 0.29] as const,
+  strut: [0.37, 0.41, 0.52, 0.56] as const,
+  gigs: [0.6, 0.65, 0.75, 0.79] as const,
+}
+
+/**
+ * Where scrolling comes to rest: one stop per scene, each with the span its copy is fully on
+ * screen. When the scroll settles outside every span, it glides on to the next stop.
+ */
+export const STOPS: { at: number; hold: readonly [number, number] }[] = [
+  { at: 0, hold: [0, 0.03] },
+  { at: 0.21, hold: [COPY.about[1], COPY.about[2]] },
+  { at: 0.465, hold: [COPY.strut[1], COPY.strut[2]] },
+  // The gig row slides along while this one holds, so land at its start
+  { at: COPY.gigs[1] + 0.005, hold: [COPY.gigs[1], COPY.gigs[2]] },
+  { at: 1, hold: [SMASH.form[1], 1] },
+]
+
+/** When the scroll last landed on a stop, and which way it was going: the camera bobs as it settles. */
+export const landing = { at: -1, dir: 1 }

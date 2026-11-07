@@ -7,7 +7,7 @@ import { EffectComposer, Bloom } from "@react-three/postprocessing"
 import Monkey from "./monkey"
 import { BackTitle, Backdrop, Dust, LightBars, StudioFloor } from "./studio"
 import { Smoke } from "./smoke"
-import { FLOOR, PROFILE_SHIFT, profileFraming, sampleCamera, scroll, smooth, SMASH, walkFraming } from "./store"
+import { FLOOR, landing, PROFILE_SHIFT, profileFraming, sampleCamera, scroll, smooth, SMASH, walkFraming } from "./store"
 
 const GLASS_Z = 1.8
 
@@ -16,8 +16,12 @@ function Rig() {
   useFrame((_, dt) => {
     scroll.value = THREE.MathUtils.damp(scroll.value, scroll.target, 4.5, Math.min(dt, 0.05))
     const { p, l } = sampleCamera(scroll.value)
-    camera.position.set(p[0], p[1], p[2])
-    camera.lookAt(l[0], l[1], l[2])
+    // Landing on a scene, the camera dips past it and floats back up, settling over a second
+    const k = (performance.now() - landing.at) / 1000
+    const dist = Math.hypot(p[0] - l[0], p[1] - l[1], p[2] - l[2])
+    const bob = landing.at > 0 && k < 1.4 ? 0.012 * dist * landing.dir * Math.sin(k * Math.PI * 2) * Math.exp(-3.2 * k) : 0
+    camera.position.set(p[0], p[1] - bob, p[2])
+    camera.lookAt(l[0], l[1] - bob, l[2])
 
     // Slide the frame without changing the perspective: on landscape screens he walks right of
     // centre; on portrait ones the side profile is pulled in from the right edge
@@ -134,14 +138,14 @@ function Glass() {
   )
 }
 
-export default function Stage({ onReady }: { onReady?: () => void }) {
+export default function Stage({ onReady, active = true }: { onReady?: () => void; active?: boolean }) {
   return (
     <Canvas
       shadows
+      frameloop={active ? "always" : "never"}
       dpr={[1, 1.75]}
       camera={{ fov: 28, near: 0.1, far: 80, position: [2.09, 1.20, 1.35] }}
       gl={{ antialias: true, powerPreference: "high-performance" }}
-      onCreated={() => onReady?.()}
     >
       <Rig />
       <Lights />
@@ -151,7 +155,7 @@ export default function Stage({ onReady }: { onReady?: () => void }) {
       <LightBars />
       <Dust />
       <BackTitle text="MUSE-ING" sub="LIVE MUSIC" />
-      <Monkey />
+      <Monkey onReady={onReady} />
       <Smoke />
       <Glass />
       <EffectComposer multisampling={4}>

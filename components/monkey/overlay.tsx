@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { ArrowRight, ArrowUpRight, MapPin, Menu, Mic2, X } from "lucide-react"
-import { scroll, smooth, SMASH, win } from "./store"
+import { COPY, GLITCH_GLYPHS, scroll, smooth, SMASH, win } from "./store"
 
 interface OverlayEvent {
   id: string
@@ -19,9 +19,6 @@ type Inquiry = "reserve" | "host" | "artist"
 const SCENES = ["The grin", "The exhale", "The strut", "The gigs", "The smash"]
 const sceneIndex = (t: number) => (t < 0.12 ? 0 : t < 0.3 ? 1 : t < 0.58 ? 2 : t < 0.78 ? 3 : 4)
 
-// Scroll windows for each block of copy, matched to the camera path in store.ts
-const STRUT = [0.37, 0.41, 0.52, 0.56] as const
-const GIGS = [0.6, 0.65, 0.75, 0.79] as const
 
 const dateLabel = (d: string | null) =>
   d ? new Date(`${d}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }) : "Soon"
@@ -29,7 +26,6 @@ const dateLabel = (d: string | null) =>
 /** How visible each section is (0..1), written by the scroll loop and read by the decoding titles. */
 const shown: Record<string, number> = {}
 
-const GLYPHS = "█▓▒░▀▄▌▐#%&$@ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 const escapeHtml = (c: string) => (c === "&" ? "&amp;" : c === "<" ? "&lt;" : c === ">" ? "&gt;" : c)
 
 /**
@@ -52,7 +48,7 @@ function Decode({ lines, section }: { lines: string[]; section: string }) {
         else {
           const at = (i / text.length) * 0.75
           if (p >= at + 0.22) html += escapeHtml(ch)
-          else if (p >= at) html += `<span style="opacity:.4">${escapeHtml(GLYPHS[Math.floor(Math.random() * GLYPHS.length)])}</span>`
+          else if (p >= at) html += `<span style="opacity:.4">${escapeHtml(GLITCH_GLYPHS[Math.floor(Math.random() * GLITCH_GLYPHS.length)])}</span>`
           else html += `<span style="opacity:0">${escapeHtml(ch)}</span>`
         }
       }
@@ -146,9 +142,9 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
     const loop = () => {
       const t = scroll.value
       set("hero", 1 - smooth(0.04, 0.1, t))
-      set("s2", win(t, 0.13, 0.17, 0.25, 0.29))
-      set("s3", win(t, ...STRUT))
-      set("s4", win(t, ...GIGS))
+      set("s2", win(t, ...COPY.about))
+      set("s3", win(t, ...COPY.strut))
+      set("s4", win(t, ...COPY.gigs))
       set("flash", win(t, SMASH.crack[0], SMASH.crack[1], SMASH.crack[1], SMASH.form[0] + 0.01) * 0.85)
       set("form", smooth(SMASH.form[0], SMASH.form[1], t))
       set("chrome", 1 - smooth(SMASH.windUp[0], SMASH.strike[0], t))
@@ -160,7 +156,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       }
       // While the gigs hold, scrolling slides the whole row past so every gig gets seen
       const row = refs.current.row
-      const along = smooth(GIGS[1] - 0.01, GIGS[2], t)
+      const along = smooth(COPY.gigs[1] - 0.01, COPY.gigs[2], t)
       if (row && Math.abs(along - rowAt) > 1e-4) {
         row.scrollLeft = along * (row.scrollWidth - row.clientWidth)
         rowAt = along
@@ -266,7 +262,7 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       <section
         ref={reg("hero")}
         aria-label="Muse-ing"
-        className="absolute inset-x-0 top-[calc(9vh+26vw)] px-5 sm:px-8"
+        className="absolute inset-x-0 top-[calc(9vh+26vw)] [@media(min-aspect-ratio:95/96)]:top-[calc(3vh+25.7vh)] px-5 sm:px-8"
       >
         <div className="mx-auto h-px w-full bg-[#F4EFE6]/70" />
         <div className="mt-3 flex justify-between gap-6 sm:mt-4 sm:justify-start sm:gap-[18vw]">

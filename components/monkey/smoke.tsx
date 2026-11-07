@@ -3,19 +3,10 @@
 import * as THREE from "three"
 import { useMemo, useRef } from "react"
 import { useFrame } from "@react-three/fiber"
-import { ember, MONKEY_SCALE, mouth, scroll, smooth } from "./store"
+import { ember, MONKEY_SCALE, mouth, mulberry32, scroll, smooth } from "./store"
 
 const S = MONKEY_SCALE
 
-function mulberry32(a: number) {
-  return function () {
-    a |= 0
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
 
 const NOISE = /* glsl */ `
   float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
