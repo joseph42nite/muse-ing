@@ -8,6 +8,21 @@ import { dateTime, inr, useAdminData } from "../use-admin-data"
 import { AccountDialog, type EditableAccount } from "../account-dialog"
 import { EventDialog } from "../event-dialog"
 import { Notice } from "../admin-form"
+import { ArtistPaymentsDialog } from "../artist-payments-dialog"
+
+interface Bucket {
+  count: number
+  amount: number
+}
+interface Payments {
+  gigs: number
+  paid: Bucket
+  due: Bucket
+  due_now: Bucket
+  average_fee: number | null
+  reliability: number | null
+  status: string
+}
 
 interface ArtistRow extends EditableAccount {
   category: string | null
@@ -22,6 +37,7 @@ interface ArtistRow extends EditableAccount {
   gigs_upcoming: number
   next_gig: string | null
   earnings: number
+  payments: Payments | null
 }
 
 export default function ArtistsPage() {
@@ -30,6 +46,7 @@ export default function ArtistsPage() {
   const [adding, setAdding] = useState(false)
   const [booking, setBooking] = useState<ArtistRow | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [paying, setPaying] = useState<ArtistRow | null>(null)
 
   const columns: Column<ArtistRow>[] = [
     {
@@ -44,15 +61,46 @@ export default function ArtistsPage() {
       ),
     },
     { header: "Phone", cell: (a) => <Muted>{a.phone}</Muted> },
-    { header: "Fee", cell: (a) => (a.average_fee ? inr(a.average_fee) : <Muted>{null}</Muted>), className: "text-right" },
+    {
+      header: "Fee",
+      // Average of paid gigs, like Hyphening; the roster's usual fee until there are any.
+      cell: (a) => {
+        const fee = a.payments?.average_fee ?? a.average_fee
+        return fee ? inr(fee) : <Muted>{null}</Muted>
+      },
+      className: "text-right",
+    },
     {
       header: "Payments",
-      cell: (a) => (
-        <div>
-          <p className="text-[13px]">{a.payment_status ?? "—"}</p>
-          {!!a.amount_pending && <p className="text-[11px] text-[#ff7a7a]">{inr(a.amount_pending)} pending</p>}
-        </div>
-      ),
+      cell: (a) => {
+        const p = a.payments
+        return (
+          <button
+            type="button"
+            onClick={() => setPaying(a)}
+            className="group -mx-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/[0.06]"
+            title="Change payment status"
+          >
+            {!p || !p.gigs ? (
+              <span className="text-[12px] text-[#F4EFE6]/45">No paid gigs · open</span>
+            ) : p.due.count ? (
+              <>
+                <span className="block text-[13px] text-[#ff7a7a]">{inr(p.due.amount)} due</span>
+                <span className="block text-[11px] text-[#F4EFE6]/50">
+                  {p.due_now.count ? `${inr(p.due_now.amount)} for ${p.due_now.count} played` : `${p.due.count} upcoming`} ·{" "}
+                  {inr(p.paid.amount)} paid
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="block text-[13px]">All paid</span>
+                <span className="block text-[11px] text-[#F4EFE6]/50">{inr(p.paid.amount)} over {p.paid.count} gigs</span>
+              </>
+            )}
+            <span className="micro mt-0.5 block text-[#F4EFE6]/35 group-hover:text-[#F4EFE6]/70">Change status ▾</span>
+          </button>
+        )
+      },
     },
     {
       header: "Bank",
@@ -127,6 +175,11 @@ export default function ArtistsPage() {
           setNotice(m)
           reload()
         }}
+      />
+      <ArtistPaymentsDialog
+        artist={paying}
+        onClose={() => setPaying(null)}
+        onChanged={() => void reload()}
       />
       <EventDialog
         open={!!booking}

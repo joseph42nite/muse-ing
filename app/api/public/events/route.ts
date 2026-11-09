@@ -27,7 +27,7 @@ export async function GET(req: Request) {
       (SELECT COUNT(*) FROM song_requests sr WHERE sr.event_id = e.id AND sr.source_type = 'artist_playlist' AND sr.status IN ('confirmed', 'playing')) AS playlist_songs_count,
       (SELECT COALESCE(SUM(sr.upvotes), 0) FROM song_requests sr WHERE sr.event_id = e.id AND sr.status IN ('confirmed', 'playing')) AS total_upvotes,
       (SELECT COUNT(*) FROM song_requests sr WHERE sr.event_id = e.id AND sr.dedication_payment_status = 'paid' AND sr.status IN ('confirmed', 'playing')) AS priority_dedications_count
-    FROM (SELECT * FROM events WHERE is_listed = 1) e
+    FROM (SELECT * FROM events WHERE is_listed = 1 AND COALESCE(fee_status, '') <> 'Cancelled') e
     LEFT JOIN users u ON u.id = e.artist_id
   `
 
@@ -70,11 +70,11 @@ export async function GET(req: Request) {
       u.instagram_handle,
       u.avatar_url,
       u.bio,
-      (SELECT e.id FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_id,
-      (SELECT e.title FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_title,
-      (SELECT e.location_name FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_location,
-      (SELECT e.location_slug FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_slug,
-      (SELECT e.event_date_only FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_date
+      (SELECT e.id FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 AND COALESCE(e.fee_status, '') <> 'Cancelled' ORDER BY e.date ASC LIMIT 1) AS next_event_id,
+      (SELECT e.title FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 AND COALESCE(e.fee_status, '') <> 'Cancelled' ORDER BY e.date ASC LIMIT 1) AS next_event_title,
+      (SELECT e.location_name FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 AND COALESCE(e.fee_status, '') <> 'Cancelled' ORDER BY e.date ASC LIMIT 1) AS next_event_location,
+      (SELECT e.location_slug FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 AND COALESCE(e.fee_status, '') <> 'Cancelled' ORDER BY e.date ASC LIMIT 1) AS next_event_slug,
+      (SELECT e.event_date_only FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 AND COALESCE(e.fee_status, '') <> 'Cancelled' ORDER BY e.date ASC LIMIT 1) AS next_event_date
     FROM users u
     WHERE u.role = 'artist'
     ORDER BY u.created_at ASC

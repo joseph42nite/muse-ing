@@ -4,6 +4,7 @@ import { useEffect, useState } from "react"
 import { Trash2 } from "lucide-react"
 import { useAdminData } from "./use-admin-data"
 import { adminWrite, Field, FormDialog, toLocalInput } from "./admin-form"
+import { FEE_STATUS_OPTIONS } from "./fee-status"
 
 export interface EditableEvent {
   id: string
@@ -183,8 +184,11 @@ export function EventDialog({
               <Field label="Status">
                 <select className="admin-field" value={f.fee_status} onChange={set("fee_status")}>
                   <option value="">—</option>
-                  <option value="Pending">Pending</option>
-                  <option value="Paid">Paid</option>
+                  {FEE_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
                 </select>
               </Field>
             </div>

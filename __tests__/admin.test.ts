@@ -304,3 +304,77 @@ describe("gig bookkeeping and listing", () => {
     expect(admin.listSchedule("2031-01-01").find((r) => r.id === id)?.fee_status).toBe("Paid")
   })
 })
+
+describe("artist payments", () => {
+  const { paymentSummary, dueOn, paidOn } = require("../lib/server/payments") as typeof import("../lib/server/payments")
+  const g = (id: string, date: string, fee: number | null, status: string | null, advance = 0, artist = "a1", venue = "v1") => ({
+    id,
+    title: id,
+    date: `${date}T14:30:00.000Z`,
+    artist_id: artist,
+    artist_name: artist,
+    venue_id: venue,
+    venue_name: venue,
+    location_name: null,
+    artist_fee: fee,
+    advance_paid: advance,
+    fee_status: status,
+  })
+
+  it("matches the Hyphening rules and splits dues into played and upcoming", () => {
+    const gigs = [
+      g("p1", "2030-01-01", 4000, "Paid"),
+      g("p2", "2030-01-02", 5000, "Paid", 0, "a2"),
+      g("d1", "2030-01-03", 4000, "Pending"), // played, due 4000
+      g("adv", "2030-01-04", 6000, "Advance Paid", 2500, "a2"), // played, due 3500, 2500 handed over
+      g("up", "2030-02-10", 4000, "Pending", 0, "a1", "v2"), // upcoming, due 4000
+      g("cx", "2030-01-05", 4000, "Cancelled", 1000), // left out, but its advance was paid out
+      g("over", "2030-01-06", 1000, "Advance Paid", 1500, "a2"), // advance above fee: never negative
+    ]
+    const s = paymentSummary(gigs, "2030-01-31")
+    expect(s.totals).toMatchObject({
+      gigs: 6,
+      played: 5,
+      upcoming: 1,
+      cancelled: 1,
+      total_fees: 24000,
+      paid: { count: 2, amount: 4000 + 5000 + 2500 + 1000 + 1500 },
+      paid_fees: 9000,
+      due: { count: 4, amount: 4000 + 3500 + 4000 + 0 },
+      due_now: { count: 3, amount: 7500 },
+      due_upcoming: { count: 1, amount: 4000 },
+    })
+    expect(s.reconciles).toBe(true)
+    expect(dueOn({ fee_status: "Advance Paid", artist_fee: 1000, advance_paid: 1500 })).toBe(0)
+    expect(paidOn({ fee_status: "Cancelled", artist_fee: 4000, advance_paid: 1000 })).toBe(1000)
+
+    const a1 = s.byArtist.find((a) => a.artist_id === "a1")!
+    expect(a1).toMatchObject({ gigs: 3, played: 2, upcoming: 1, status: "Due", average_fee: 4000, reliability: 33 })
+    expect(a1.due_now).toEqual({ count: 1, amount: 4000 })
+    expect(a1.oldest_due).toBe("2030-01-03T14:30:00.000Z")
+    expect(s.byArtist[0].artist_id).toBe("a1") // most owed for played gigs first (4000 vs 3500)
+    expect(s.byVenue.find((v) => v.venue_id === "v2")).toMatchObject({ gigs: 1, total_fees: 4000, due: 4000 })
+    expect(s.byMonth.map((m) => m.month)).toEqual(["2030-01", "2030-02"])
+  })
+
+  it("changes a gig's status from the dropdown and settles an artist's played gigs", async () => {
+    token = adminToken
+    const settle = require("../app/api/admin/artists/[id]/settle/route")
+    const gigsRoute = require("../app/api/admin/artists/[id]/gigs/route")
+    run("INSERT INTO users (id, name, email, role, password_hash) VALUES ('pay-artist', 'Payee', 'payee@x.in', 'artist', 'x')")
+    run(`INSERT INTO events (id, title, date, artist_id, artist_fee, fee_status) VALUES
+         ('pg-1', 'Old', '2020-01-01T14:30:00Z', 'pay-artist', 4000, 'Pending'),
+         ('pg-2', 'Old 2', '2020-01-02T14:30:00Z', 'pay-artist', 4000, 'Advance Paid'),
+         ('pg-3', 'Next', '2099-01-01T14:30:00Z', 'pay-artist', 4000, 'Pending')`)
+    expect((await eventById.PATCH(json("/e", "PATCH", { fee_status: "Advance Paid", advance_paid: "1500" }), ctx("pg-1"))).status).toBe(200)
+    let body = await (await gigsRoute.GET(new Request("http://x"), ctx("pay-artist"))).json()
+    expect(body.summary.due_now).toEqual({ count: 2, amount: 2500 + 4000 })
+    const res = await (await settle.POST(new Request("http://x", { method: "POST" }), ctx("pay-artist"))).json()
+    expect(res.settled).toBe(2) // the upcoming gig stays due
+    body = await (await gigsRoute.GET(new Request("http://x"), ctx("pay-artist"))).json()
+    expect(body.summary).toMatchObject({ due: { count: 1, amount: 4000 }, due_now: { count: 0, amount: 0 } })
+    expect((await settle.POST(new Request("http://x"), ctx("nobody"))).status).toBe(404)
+    token = sessionFor("pay-snoop", "venue")
+    expect((await gigsRoute.GET(new Request("http://x"), ctx("pay-artist"))).status).toBe(403)
+  })
+})

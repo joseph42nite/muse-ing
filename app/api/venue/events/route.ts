@@ -9,6 +9,7 @@ interface EventRow {
   description: string | null
   location_name: string | null
   ticket_price: number
+  cancelled: number
   artist_id: string | null
   artist_name: string | null
   artist_category: string | null
@@ -29,7 +30,7 @@ export async function GET() {
   if (!user) return forbidden()
   const events = all<EventRow>(
     `SELECT e.id, e.title, e.date, e.description, e.location_name, e.ticket_price,
-            e.artist_id, a.name AS artist_name, a.category AS artist_category, a.instagram_handle AS artist_instagram
+            e.artist_id, e.fee_status = 'Cancelled' AS cancelled, a.name AS artist_name, a.category AS artist_category, a.instagram_handle AS artist_instagram
        FROM events e LEFT JOIN users a ON a.id = e.artist_id
       WHERE (? = 'admin' OR e.venue_id = ?)
       ORDER BY e.date DESC`,

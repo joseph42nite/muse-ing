@@ -6,6 +6,7 @@ import { AlertTriangle, Plus } from "lucide-react"
 import { PageHeader } from "../admin-table"
 import { inr, useAdminData } from "../use-admin-data"
 import { EventDialog, type EditableEvent } from "../event-dialog"
+import { feeStatusLabel } from "../fee-status"
 import { cn } from "@/lib/utils"
 
 interface ScheduleRow extends EditableEvent {
@@ -110,6 +111,7 @@ function Schedule() {
                   className={cn(
                     "admin-panel block p-5 text-left transition hover:border-[#F4EFE6]/50!",
                     r.clashes.length && "border-[#D92323]/60!",
+                    r.fee_status === "Cancelled" && "opacity-50",
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-3">
@@ -124,9 +126,9 @@ function Schedule() {
                   <p className="micro mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[#F4EFE6]/45">
                     <span>{r.tickets_sold} tickets sold</span>
                     {r.artist_fee != null && (
-                      <span className={r.fee_status === "Pending" ? "text-[#ff7a7a]" : undefined}>
+                      <span className={r.fee_status === "Paid" || !r.fee_status ? undefined : "text-[#ff7a7a]"}>
                         Fee {inr(r.artist_fee)}
-                        {r.fee_status ? ` · ${r.fee_status}` : ""}
+                        {r.fee_status ? ` · ${feeStatusLabel(r.fee_status)}` : ""}
                       </span>
                     )}
                     {r.is_listed === 0 && <span>Not on website</span>}

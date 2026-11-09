@@ -222,11 +222,12 @@ const ADDED_COLUMNS = [
   "ALTER TABLE events ADD COLUMN advance_paid REAL",
   "ALTER TABLE events ADD COLUMN fee_status TEXT",
   "ALTER TABLE events ADD COLUMN external_ref TEXT",
+  "ALTER TABLE events ADD COLUMN external_snapshot TEXT",
   "CREATE UNIQUE INDEX IF NOT EXISTS events_external_ref_idx ON events (external_ref)",
 ]
 
 // Bump when SCHEMA or ADDED_COLUMNS change so a dev server's cached connection re-migrates.
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 7
 
 function migrate(conn: DatabaseSync) {
   conn.exec(SCHEMA)

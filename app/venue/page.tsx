@@ -18,6 +18,7 @@ interface VenueEvent {
   description: string | null
   location_name: string | null
   ticket_price: number
+  cancelled: number | null
   artist_name: string | null
   artist_category: string | null
   artist_instagram: string | null
@@ -138,7 +139,11 @@ export default function VenuePage() {
                 >
                   <div className="min-w-0">
                     <p className="micro flex items-center gap-2 text-[#F4EFE6]/60">
-                      {isToday && <span className="rounded-full bg-[#D92323] px-2 py-0.5 text-[#F4EFE6]">Tonight</span>}
+                      {e.cancelled ? (
+                        <span className="rounded-full border border-[#ff7a7a]/50 px-2 py-0.5 text-[#ff7a7a]">Cancelled</span>
+                      ) : (
+                        isToday && <span className="rounded-full bg-[#D92323] px-2 py-0.5 text-[#F4EFE6]">Tonight</span>
+                      )}
                       {when(e.date)}
                     </p>
                     <h2 className="title-x mt-1.5 text-[18px] leading-tight sm:truncate sm:text-[22px]">{e.title}</h2>

@@ -124,67 +124,79 @@ function upsert(role, ref, name, preferredEmail, fallbackEmail, fields) {
   }
 }
 
-// Gigs become Muse events. Hyphening only stores the day, so new gigs start at 8pm India time.
-// They're created off the public site (is_listed = 0). Re-runs refresh the artist, venue, fee and
-// payment status, and move the date only if the day changed, so a title, time or listing set in the
-// admin panel is kept. A gig cancelled in Hyphening is removed unless it has paid bookings.
-const gigReport = { created: 0, updated: 0, removed: 0, skipped: [] }
+// Gigs become Muse events. Hyphening only stores the day, so new gigs start at 8pm India time and
+// are created off the public site (is_listed = 0). Each event remembers what was last imported
+// (external_snapshot). On a re-run a field is only updated if it still holds that value, so anything
+// changed in the admin panel (a payment status, fee, artist, time…) is kept. A gig cancelled in
+// Hyphening is marked Cancelled here, never deleted.
+const gigReport = { created: 0, updated: 0, unchanged: 0, kept: 0, skipped: [] }
 const CITY = { blr: "Bengaluru", bangalore: "Bengaluru", bengaluru: "Bengaluru", mum: "Mumbai", mumbai: "Mumbai" }
 const userId = (ref) => idByRef.get(ref) ?? byRef.get(ref)?.id ?? null
 const istDay = (iso) => new Date(new Date(iso).getTime() + 330 * 60e3).toISOString().slice(0, 10)
+const STATUS = { paid: "Paid", pending: "Pending", "advance paid": "Advance Paid", cancelled: "Cancelled" }
+const SYNCED = ["artist_id", "venue_id", "artist_fee", "advance_paid", "fee_status", "day"]
 
 function importGigs(gigs) {
-  const eventByRef = db.prepare("SELECT id, date FROM events WHERE external_ref = ?")
+  const eventByRef = db.prepare(
+    "SELECT id, date, artist_id, venue_id, artist_fee, advance_paid, fee_status, external_snapshot FROM events WHERE external_ref = ?",
+  )
   for (const g of gigs) {
     const ref = `hyphening:gig:${g.id}`
     const existing = eventByRef.get(ref)
     const label = `${g.gig_date} ${g.artist_name ?? "?"} @ ${g.venue_name ?? "?"}`
-    if (String(g.status).toLowerCase() === "cancelled") {
-      if (!existing) continue
-      const paid = db.prepare("SELECT COUNT(*) AS n FROM audience_bookings WHERE event_id = ? AND payment_status = 'paid'").get(existing.id).n
-      if (paid) gigReport.skipped.push(`${label}: cancelled in Hyphening but has paid bookings`)
-      else {
-        if (!dry) db.prepare("DELETE FROM events WHERE id = ?").run(existing.id)
-        gigReport.removed++
-      }
-      continue
-    }
+    const status = STATUS[String(g.status ?? "").trim().toLowerCase()] ?? "Pending"
+    if (!existing && status === "Cancelled") continue
     if (!/^\d{4}-\d{2}-\d{2}$/.test(String(g.gig_date ?? ""))) {
       gigReport.skipped.push(`${label}: no valid date`)
       continue
     }
-    const artistId = g.artist_code ? userId(`hyphening:artist:${g.artist_code}`) : null
-    const venueId = g.venue_client_id ? userId(`hyphening:client:${g.venue_client_id}`) : null
-    const fee = {
-      artist_id: artistId,
-      venue_id: venueId,
+    const incoming = {
+      artist_id: g.artist_code ? userId(`hyphening:artist:${g.artist_code}`) : null,
+      venue_id: g.venue_client_id ? userId(`hyphening:client:${g.venue_client_id}`) : null,
       artist_fee: num(g.fee_inr),
       advance_paid: num(g.advance_paid),
-      fee_status: String(g.status).toLowerCase() === "paid" ? "Paid" : "Pending",
+      fee_status: status,
+      day: g.gig_date,
     }
-    const date = `${g.gig_date}T14:30:00.000Z` // 8:00pm IST
+    const snapshot = JSON.stringify(incoming)
+
     if (existing) {
-      const cols = Object.entries(fee)
-      if (istDay(existing.date) !== g.gig_date) cols.push(["date", date], ["event_date_only", g.gig_date])
+      const current = { ...existing, day: istDay(existing.date) }
+      // No snapshot yet (imported before snapshots existed): treat what's there as the last import.
+      const last = existing.external_snapshot ? JSON.parse(existing.external_snapshot) : current
+      const cols = []
+      for (const k of SYNCED) {
+        if (incoming[k] === (current[k] ?? null)) continue
+        if ((current[k] ?? null) !== (last[k] ?? null)) {
+          gigReport.kept++ // changed in Muse since the last import: keep it
+          continue
+        }
+        if (k === "day") cols.push(["date", `${incoming.day}T14:30:00.000Z`], ["event_date_only", incoming.day])
+        else cols.push([k, incoming[k]])
+      }
+      cols.push(["external_snapshot", snapshot])
       if (!dry)
         db.prepare(`UPDATE events SET ${cols.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`).run(...cols.map(([, v]) => v), existing.id)
-      gigReport.updated++
+      if (cols.length > 1) gigReport.updated++
+      else gigReport.unchanged++
       continue
     }
     const venueName = clean(g.venue_name, 120) ?? "Venue"
     const city = CITY[String(g.venue_city ?? "").trim().toLowerCase()] ?? clean(g.venue_city, 60)
     const location = city ? `${venueName} • ${city}` : venueName
+    const { day, ...fields } = incoming
     const row = {
       id: crypto.randomUUID(),
       title: clean(`${g.artist_name ? `${String(g.artist_name).trim()} live` : "Live"} at ${venueName}`, 160),
-      date,
-      event_date_only: g.gig_date,
+      date: `${day}T14:30:00.000Z`, // 8:00pm IST
+      event_date_only: day,
       location_name: location,
       location_slug: slug(location).slice(0, 80),
       ticket_price: 0,
       is_listed: 0,
       external_ref: ref,
-      ...fee,
+      external_snapshot: snapshot,
+      ...fields,
     }
     if (!dry) {
       const cols = Object.keys(row)
@@ -250,7 +262,7 @@ try {
 const withBank = (input.artists ?? []).filter((a) => a.bank_details).length
 if (input.gigs)
   console.log(
-    `gigs ${input.gigs.length}: ${gigReport.created} created, ${gigReport.updated} updated, ${gigReport.removed} cancelled ones removed, ${gigReport.skipped.length} skipped`,
+    `gigs ${input.gigs.length}: ${gigReport.created} created, ${gigReport.updated} updated, ${gigReport.unchanged} unchanged, ${gigReport.kept} Muse edits kept, ${gigReport.skipped.length} skipped`,
   )
 for (const s of gigReport.skipped) console.log(`  skipped: ${s}`)
 console.log(

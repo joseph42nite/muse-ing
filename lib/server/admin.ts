@@ -1,11 +1,13 @@
 import crypto from "node:crypto"
 import { hashPassword } from "./password"
 import { all, get, run, transaction } from "./db"
+import { FEE_STATUSES, paymentGigs, paymentSummary } from "./payments"
 
 // Read models for the admin panel. Every function here is reached only through
 // app/api/admin/*, which checks requireRole("admin") first.
 
 const PAID_TICKETS = "payment_status = 'paid'"
+const NOT_CANCELLED = "COALESCE(e.fee_status, '') <> 'Cancelled'"
 
 export function dashboardStats() {
   const count = (sql: string) => get<{ n: number }>(sql)?.n ?? 0
@@ -46,6 +48,7 @@ export function dashboardStats() {
       pendingRefunds: count("SELECT COUNT(*) AS n FROM refund_requests WHERE status = 'pending'"),
       inquiries: count("SELECT COUNT(*) AS n FROM inquiries"),
     },
+    payments: paymentSummary(),
     monthly: months.map((m) => ({
       month: m,
       events: events.get(m) ?? 0,
@@ -198,7 +201,6 @@ export interface EventInput {
   fee_status?: unknown
 }
 
-export const FEE_STATUSES = ["Pending", "Paid"] as const
 
 /** Validates an event payload. With `partial`, only the fields present are checked and returned. */
 function eventFields(b: EventInput, partial: boolean) {
@@ -236,7 +238,7 @@ function eventFields(b: EventInput, partial: boolean) {
   }
   if (has("fee_status")) {
     const st = text(b.fee_status, 20)
-    if (st && !(FEE_STATUSES as readonly string[]).includes(st)) return bad("Fee status must be Pending or Paid.")
+    if (st && !(FEE_STATUSES as readonly string[]).includes(st)) return bad("Fee status must be Pending, Advance Paid, Paid or Cancelled.")
     out.fee_status = st
   }
   if (has("artist_id")) {
@@ -447,12 +449,13 @@ export function updateAccount(id: string, b: AccountInput): WriteResult {
 
 export function listArtists() {
   const now = new Date().toISOString()
-  return all(
+  const pay = new Map(paymentSummary().byArtist.map((a) => [a.artist_id, a]))
+  const rows = all(
     `SELECT u.id, u.name, u.email, u.phone, u.instagram_handle, u.bio, u.created_at,
             ${Object.keys(PROFILE_FIELDS.artist).map((k) => "u." + k).join(", ")},
-            (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id) AS gigs_total,
-            (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id AND e.date >= ?) AS gigs_upcoming,
-            (SELECT MIN(e.date) FROM events e WHERE e.artist_id = u.id AND e.date >= ?) AS next_gig,
+            (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id AND ${NOT_CANCELLED}) AS gigs_total,
+            (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id AND e.date >= ? AND ${NOT_CANCELLED}) AS gigs_upcoming,
+            (SELECT MIN(e.date) FROM events e WHERE e.artist_id = u.id AND e.date >= ? AND ${NOT_CANCELLED}) AS next_gig,
             (SELECT COALESCE(SUM(t.amount), 0) FROM artist_transactions t WHERE t.artist_id = u.id AND t.status = 'paid') AS earnings
        FROM users u
       WHERE u.role = 'artist'
@@ -460,6 +463,28 @@ export function listArtists() {
     now,
     now,
   )
+  // Payment figures come from the gigs themselves, not the rollups imported from Hyphening.
+  return rows.map((r) => ({ ...r, payments: pay.get(r.id) ?? null }))
+}
+
+/** One artist's gigs that carry a fee, oldest first, for the payments dialog. */
+export function artistGigs(artistId: string) {
+  if (!get("SELECT 1 FROM users WHERE id = ? AND role = 'artist'", artistId)) return null
+  const gigs = paymentGigs(artistId)
+  return { gigs, summary: paymentSummary(gigs).byArtist[0] ?? null }
+}
+
+/** Marks every played, unpaid, not-cancelled gig of an artist as Paid. Returns how many changed. */
+export function settleArtist(artistId: string): WriteResult<{ id: string; settled: number }> {
+  if (!get("SELECT 1 FROM users WHERE id = ? AND role = 'artist'", artistId)) return bad("Artist not found.", 404)
+  const r = run(
+    `UPDATE events SET fee_status = 'Paid'
+      WHERE artist_id = ? AND date <= ? AND artist_fee IS NOT NULL
+        AND COALESCE(fee_status, 'Pending') IN ('Pending', 'Advance Paid')`,
+    artistId,
+    new Date().toISOString(),
+  )
+  return { ok: true, id: artistId, settled: Number(r.changes) }
 }
 
 /** The India calendar day of an ISO timestamp, which is how clashes are judged. */
@@ -511,11 +536,12 @@ export function listSchedule(from?: string, artistId?: string): ScheduleRow[] {
     }
     return [...m.values()].filter((g) => g.length > 1)
   }
-  for (const g of group((r) => (r.artist_id ? `${r.artist_id}|${r.day}` : null)))
+  const on = (r: ScheduleRow, k: string | null) => (r.fee_status === "Cancelled" ? null : k)
+  for (const g of group((r) => on(r, r.artist_id ? `${r.artist_id}|${r.day}` : null)))
     for (const r of g) r.clashes.push(`${r.artist_name} has ${g.length} gigs this day`)
-  for (const g of group((r) => (r.venue_id ? `${r.venue_id}|${r.day}` : null)))
+  for (const g of group((r) => on(r, r.venue_id ? `${r.venue_id}|${r.day}` : null)))
     for (const r of g) r.clashes.push(`${r.venue_name} hosts ${g.length} gigs this day`)
-  for (const r of rows) if (!r.artist_id) r.clashes.push("No artist booked")
+  for (const r of rows) if (!r.artist_id && r.fee_status !== "Cancelled") r.clashes.push("No artist booked")
 
   return artistId ? rows.filter((r) => r.artist_id === artistId) : rows
 }

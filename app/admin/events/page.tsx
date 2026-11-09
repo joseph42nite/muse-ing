@@ -5,6 +5,7 @@ import { Plus } from "lucide-react"
 import { AdminTable, Muted, PageHeader, type Column } from "../admin-table"
 import { dateTime, inr, useAdminData } from "../use-admin-data"
 import { EventDialog, type EditableEvent } from "../event-dialog"
+import { FeeStatusPill } from "../fee-status"
 
 interface EventRow extends EditableEvent {
   artist_name: string | null
@@ -36,7 +37,9 @@ const columns: Column<EventRow>[] = [
         <div>
           <p>{inr(e.artist_fee)}</p>
           {e.fee_status && (
-            <p className={`text-[11px] ${e.fee_status === "Pending" ? "text-[#ff7a7a]" : "text-[#F4EFE6]/45"}`}>{e.fee_status}</p>
+            <p>
+              <FeeStatusPill status={e.fee_status} />
+            </p>
           )}
         </div>
       ) : (

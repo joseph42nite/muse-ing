@@ -78,7 +78,7 @@ export async function GET(req: Request) {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : ""
-  const from_ = "FROM (SELECT * FROM events WHERE is_listed = 1) e LEFT JOIN users u ON u.id = e.artist_id"
+  const from_ = "FROM (SELECT * FROM events WHERE is_listed = 1 AND COALESCE(fee_status, '') <> 'Cancelled') e LEFT JOIN users u ON u.id = e.artist_id"
 
   const total = get<{ n: number }>(`SELECT COUNT(*) AS n ${from_} ${whereSql}`, ...params)?.n ?? 0
   const events = all(
@@ -94,7 +94,7 @@ export async function GET(req: Request) {
 
   // City facets, independent of the active city filter so the chips stay stable.
   const cities = all<{ location_name: string }>(
-    "SELECT DISTINCT location_name FROM events WHERE is_listed = 1 AND location_name LIKE '%•%'"
+    "SELECT DISTINCT location_name FROM events WHERE is_listed = 1 AND COALESCE(fee_status, '') <> 'Cancelled' AND location_name LIKE '%•%'"
   )
     .map((r) => r.location_name.split("•")[1]?.trim())
     .filter((c): c is string => Boolean(c))
