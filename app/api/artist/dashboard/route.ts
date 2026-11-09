@@ -47,15 +47,14 @@ export async function GET(req: Request) {
     artist.id
   )
 
-  const totalRevenue = transactions
-    .filter((t) => t.status === "paid")
-    .reduce((sum, t) => sum + Number(t.amount || 0), 0)
-  const dedicationRevenue = transactions
-    .filter((t) => t.status === "paid" && t.type === "dedication")
-    .reduce((sum, t) => sum + Number(t.amount || 0), 0)
-  const tipRevenue = transactions
-    .filter((t) => t.status === "paid" && t.type === "tip")
-    .reduce((sum, t) => sum + Number(t.amount || 0), 0)
+  // What the artist keeps: the amount paid less our platform fee (0 for direct-UPI payments).
+  for (const t of transactions) t.net_amount = Number(t.amount || 0) - Number(t.platform_fee || 0)
+  const net = (rows: any[]) => rows.reduce((sum, t) => sum + t.net_amount, 0)
+  const paid = transactions.filter((t) => t.status === "paid")
+  const totalRevenue = net(paid)
+  const dedicationRevenue = net(paid.filter((t) => t.type === "dedication"))
+  const tipRevenue = net(paid.filter((t) => t.type === "tip"))
+  const owed = paid.filter((t) => t.payout_status === "owed")
 
   const pending = transactions.filter((t) => t.status === "pending")
   const earningsSummary = {
@@ -65,6 +64,7 @@ export async function GET(req: Request) {
     totalTransactions: transactions.length,
     pendingCount: pending.length,
     pendingAmount: pending.reduce((sum, t) => sum + Number(t.amount || 0), 0),
+    payoutOwed: net(owed),
   }
 
   const gigsRaw = all<any>(
@@ -72,8 +72,8 @@ export async function GET(req: Request) {
             COALESCE((SELECT SUM(upvotes) FROM song_requests WHERE event_id = e.id), 0) AS total_upvotes,
             COALESCE((SELECT COUNT(*) FROM song_requests WHERE event_id = e.id AND (dedication_payment_status = 'paid' OR wants_dedication = 1)), 0) AS dedications_count,
             COALESCE((SELECT COUNT(*) FROM artist_transactions WHERE event_id = e.id AND type = 'tip' AND status = 'paid'), 0) AS tips_count,
-            COALESCE((SELECT SUM(amount) FROM artist_transactions WHERE event_id = e.id AND type = 'tip' AND status = 'paid'), 0) AS tips_amount,
-            COALESCE((SELECT SUM(amount) FROM artist_transactions WHERE event_id = e.id AND type = 'dedication' AND status = 'paid'), 0) AS dedications_amount
+            COALESCE((SELECT SUM(amount - platform_fee) FROM artist_transactions WHERE event_id = e.id AND artist_id = e.artist_id AND type = 'tip' AND status = 'paid'), 0) AS tips_amount,
+            COALESCE((SELECT SUM(amount - platform_fee) FROM artist_transactions WHERE event_id = e.id AND artist_id = e.artist_id AND type = 'dedication' AND status = 'paid'), 0) AS dedications_amount
        FROM events e
       WHERE (? = 'admin' OR e.artist_id = ?)
       ORDER BY e.date ASC`,

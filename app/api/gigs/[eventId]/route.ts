@@ -1,13 +1,12 @@
 import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { all, get, run, transaction } from "@/lib/server/db"
-import { createPaymentLink, CashfreeConfigError } from "@/lib/server/cashfree"
 import { last10Digits } from "@/lib/server/format"
+import { DEDICATION_PRICE, MAX_TIP, MIN_TIP, round2, startGatewayPayment } from "@/lib/server/gateway-payments"
 import { addUpvote, toggleUpvote } from "@/lib/server/songs"
 
-const DEDICATION_PRICE = 50
-const MAX_TIP = 100000
 const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max)
+const siteOrigin = (req: Request) => process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin
 
 export async function GET(req: Request, { params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params
@@ -33,10 +32,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ eventId:
        u.name AS artist_name,
        u.instagram_handle AS artist_instagram,
        u.avatar_url AS artist_avatar,
-       u.bio AS artist_bio,
-       u.upi_id AS artist_upi_id,
-       COALESCE(u.payee_name, u.name, 'Live Artist') AS artist_payee_name,
-       COALESCE(u.upipay_provider, 'upi_direct') AS artist_upipay_provider
+       u.bio AS artist_bio
      FROM events e
      LEFT JOIN users u ON u.id = e.artist_id
      WHERE e.id = ?`,
@@ -260,14 +256,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
     return NextResponse.json({ upvoted: toggleUpvote(requestId, voterToken) })
   }
 
-  // 3. Pay ₹50 for Song Dedication & Name Callout (Option 2: Paid after artist confirms the song, or on an Artist Playlist song)
+  // 3. Pay ₹50 for a Song Dedication & Name Callout, once the artist has confirmed the song.
+  //    Paid through Cashfree; the song moves into Priority Dedications when Cashfree confirms it.
   if (action === "pay_dedication_50") {
     const requestId = String(body.request_id ?? "").trim()
     const dedicatedTo = clip(body.dedicated_to, 120)
     const dedicationMessage = clip(body.dedication_message, 500) || null
     const requesterName = clip(body.requester_name, 80)
     const requesterPhone = last10Digits(body.requester_phone)
-    const paymentMode = String(body.payment_mode ?? "instant")
 
     const song = get<any>(
       "SELECT * FROM song_requests WHERE id = ? AND event_id = ?",
@@ -287,6 +283,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
         { status: 400 }
       )
     }
+    if (!event.artist_id) {
+      return NextResponse.json({ error: "This gig has no artist to pay." }, { status: 400 })
+    }
 
     const finalDedicatedTo = dedicatedTo || song.dedicated_to
     const finalRequesterName = requesterName || song.requester_name || "Audience Member"
@@ -296,130 +295,77 @@ export async function POST(req: Request, { params }: { params: Promise<{ eventId
         { status: 400 }
       )
     }
-
-    if (paymentMode === "cashfree") {
-      if (requesterPhone.length !== 10) {
-        return NextResponse.json({ error: "Enter a valid 10-digit phone number to pay online." }, { status: 400 })
-      }
-      const origin = process.env.NEXT_PUBLIC_SITE_URL || new URL(req.url).origin
-      const linkId = `ded_${requestId.slice(0, 12)}_${Date.now()}`
-      try {
-        const link = await createPaymentLink({
-          linkId,
-          amountInr: DEDICATION_PRICE,
-          purpose: `Song Dedication (${song.song_title}) for ${finalDedicatedTo}`,
-          customer: { name: finalRequesterName, phone: requesterPhone },
-          returnUrl: `${origin}/live/${eventId}?dedication_paid=${requestId}`,
-          notifyUrl: `${origin}/api/cashfree/webhook`,
-        })
-        run(
-          `UPDATE song_requests
-              SET wants_dedication = 1,
-                  dedicated_to = ?,
-                  dedication_message = COALESCE(?, dedication_message),
-                  requester_name = ?,
-                  dedication_payment_status = 'pending_gateway',
-                  payment_link_id = ?,
-                  payment_link_url = ?
-            WHERE id = ?`,
-          finalDedicatedTo,
-          dedicationMessage,
-          finalRequesterName,
-          link.link_id,
-          link.link_url,
-          requestId
-        )
-        return NextResponse.json({ ok: true, payment_url: link.link_url })
-      } catch (e: any) {
-        if (!(e instanceof CashfreeConfigError)) {
-          return NextResponse.json({ error: e.message || "Payment gateway error" }, { status: 502 })
-        }
-        // Without Cashfree keys, development falls through to the direct-UPI path below so the flow can be tested.
-        if (process.env.NODE_ENV === "production") {
-          return NextResponse.json({ error: e.message }, { status: 503 })
-        }
-      }
+    if (requesterPhone.length !== 10) {
+      return NextResponse.json({ error: "Enter a valid 10-digit phone number to pay." }, { status: 400 })
     }
 
-    // Direct UPI to the artist sends us no confirmation, so the payment is recorded as reported
-    // and the song only moves into Priority Dedications once the artist confirms it arrived.
-    if (!event.artist_id) {
-      return NextResponse.json({ error: "This gig has no artist to pay." }, { status: 400 })
-    }
-    if (get("SELECT 1 FROM artist_transactions WHERE request_id = ? AND status = 'pending'", requestId)) {
-      return NextResponse.json(
-        { error: "A payment for this dedication is already waiting for the artist to confirm." },
-        { status: 409 }
-      )
-    }
-    transaction(() => {
-      run(
-        `UPDATE song_requests
-            SET wants_dedication = 1,
-                dedicated_to = ?,
-                dedication_message = COALESCE(?, dedication_message),
-                requester_name = ?,
-                dedication_payment_status = 'awaiting_payment'
-          WHERE id = ?`,
-        finalDedicatedTo,
-        dedicationMessage,
-        finalRequesterName,
-        requestId
-      )
-
-      run(
-        `INSERT INTO artist_transactions
-          (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
-         VALUES (?, ?, ?, ?, 'dedication', ?, ?, ?, ?, ?, ?, ?, 'upipay', 'pending')`,
-        crypto.randomUUID(),
-        event.artist_id,
-        eventId,
-        requestId,
-        finalRequesterName,
-        requesterPhone || null,
-        DEDICATION_PRICE,
-        song.song_title,
-        `Dedicated to ${finalDedicatedTo}${dedicationMessage ? ` — "${dedicationMessage}"` : ""}`,
-        clip(body.upi_order_id, 64) || null,
-        clip(body.upi_utr, 64) || null
-      )
+    const started = await startGatewayPayment({
+      kind: "dedication",
+      artistId: event.artist_id,
+      eventId,
+      requestId,
+      payerName: finalRequesterName,
+      payerPhone: requesterPhone,
+      amount: DEDICATION_PRICE,
+      songTitle: song.song_title,
+      note: `Dedicated to ${finalDedicatedTo}${dedicationMessage ? ` — "${dedicationMessage}"` : ""}`,
+      purpose: `Song dedication (${song.song_title}) for ${finalDedicatedTo}`,
+      origin: siteOrigin(req),
     })
+    if (!started.ok) return NextResponse.json({ error: started.error }, { status: started.status })
 
-    return NextResponse.json({ ok: true, pending_confirmation: true })
+    run(
+      `UPDATE song_requests
+          SET wants_dedication = 1,
+              dedicated_to = ?,
+              dedication_message = COALESCE(?, dedication_message),
+              requester_name = ?,
+              dedication_payment_status = 'pending_gateway',
+              payment_link_id = ?,
+              payment_link_url = ?
+        WHERE id = ? AND dedication_payment_status <> 'paid'`,
+      finalDedicatedTo,
+      dedicationMessage,
+      finalRequesterName,
+      started.id,
+      started.payment_url,
+      requestId
+    )
+    return NextResponse.json({ ok: true, payment_id: started.id, payment_url: started.payment_url })
   }
 
-  // 4. Direct Tip to the Artist via UPIPay
+  // 4. Tip the artist, paid through Cashfree.
   if (action === "tip_artist") {
-    const amount = Math.round(Number(body.amount ?? 100) * 100) / 100
+    const amount = round2(Number(body.amount ?? 100))
     const supporterName = clip(body.supporter_name, 80) || "Audience Member"
-    const message = clip(body.message, 500) || "Direct Audience Tip"
-    if (!Number.isFinite(amount) || amount < 10 || amount > MAX_TIP) {
-      return NextResponse.json({ error: `Tips must be between ₹10 and ₹${MAX_TIP.toLocaleString("en-IN")}.` }, { status: 400 })
+    const supporterPhone = last10Digits(body.supporter_phone)
+    const message = clip(body.message, 500) || null
+    if (!Number.isFinite(amount) || amount < MIN_TIP || amount > MAX_TIP) {
+      return NextResponse.json(
+        { error: `Tips must be between ₹${MIN_TIP} and ₹${MAX_TIP.toLocaleString("en-IN")}.` },
+        { status: 400 }
+      )
+    }
+    if (supporterPhone.length !== 10) {
+      return NextResponse.json({ error: "Enter a valid 10-digit phone number to pay." }, { status: 400 })
     }
     if (!event.artist_id) {
       return NextResponse.json({ error: "This gig has no artist to tip." }, { status: 400 })
     }
 
-    run(
-      `INSERT INTO artist_transactions
-        (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
-       VALUES (?, ?, ?, NULL, 'tip', ?, NULL, ?, NULL, ?, ?, ?, 'upipay', 'pending')`,
-      crypto.randomUUID(),
-      event.artist_id,
+    const started = await startGatewayPayment({
+      kind: "tip",
+      artistId: event.artist_id,
       eventId,
-      supporterName,
+      payerName: supporterName,
+      payerPhone: supporterPhone,
       amount,
-      message,
-      clip(body.upi_order_id, 64) || null,
-      clip(body.upi_utr, 64) || null
-    )
-
-    return NextResponse.json({
-      ok: true,
-      pending_confirmation: true,
-      amount,
-      supporter_name: supporterName,
+      note: message,
+      purpose: `Tip for ${event.title}`,
+      origin: siteOrigin(req),
     })
+    if (!started.ok) return NextResponse.json({ error: started.error }, { status: started.status })
+    return NextResponse.json({ ok: true, payment_id: started.id, payment_url: started.payment_url, amount })
   }
 
   return NextResponse.json({ error: "Unknown action." }, { status: 400 })

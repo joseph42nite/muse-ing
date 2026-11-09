@@ -2,8 +2,10 @@ import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { get, run } from "@/lib/server/db"
 import { bookingStatusFor, verifyWebhook, CashfreeConfigError } from "@/lib/server/cashfree"
+import { settleGatewayPayment } from "@/lib/server/gateway-payments"
 
-// Cashfree webhook: flips bookings to paid/failed/cancelled and logs the raw event.
+// Cashfree webhook: flips bookings to paid/failed/cancelled and logs the raw event, and settles
+// tips and dedications (lib/server/gateway-payments.ts).
 // Enable Payment Link webhooks in the Cashfree dashboard -> {SITE_URL}/api/cashfree/webhook
 export async function POST(req: Request) {
   const raw = await req.text()
@@ -42,8 +44,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // Song dedication paid online
-  if (next === "paid") {
+  // Tips and dedications (logged with no booking)
+  if (!booking && get("SELECT 1 FROM gateway_payments WHERE id = ?", linkId)) {
+    run("INSERT INTO payment_events (id, booking_id, event_type, payload) VALUES (?,NULL,?,?)",
+      crypto.randomUUID(), String(evt.type ?? "unknown"), raw)
+  }
+  if (settleGatewayPayment(linkId, String(data.link_status ?? "")) === null && next === "paid") {
+    // Dedication links made before gateway_payments existed
     run(
       "UPDATE song_requests SET dedication_payment_status = 'paid', wants_dedication = 1 WHERE payment_link_id = ?",
       linkId

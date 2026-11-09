@@ -14,6 +14,8 @@ import {
   CreditCard,
   RefreshCw,
   Inbox,
+  Settings,
+  TicketPercent,
   LogOut,
   Menu,
   X,
@@ -30,8 +32,10 @@ const nav: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/venues", label: "Venues", icon: Building2 },
   { href: "/admin/promoters", label: "Promoters", icon: Users },
   { href: "/admin/transactions", label: "Transactions", icon: CreditCard },
+  { href: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { href: "/admin/refunds", label: "Refunds", icon: RefreshCw },
   { href: "/admin/inquiries", label: "Inquiries", icon: Inbox },
+  { href: "/admin/settings", label: "Settings", icon: Settings },
 ]
 
 export default function AdminShell({ user, children }: { user: { name: string; email: string }; children: React.ReactNode }) {

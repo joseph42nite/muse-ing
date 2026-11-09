@@ -1,20 +1,31 @@
 import { NextResponse } from "next/server"
-import { all, get } from "@/lib/server/db"
+import { get } from "@/lib/server/db"
 import { requireRole, forbidden } from "@/lib/server/auth"
+import { listGuests, updateGuest } from "@/lib/server/guests"
+import { readJson } from "@/lib/server/respond"
 
-// Paid bookings + check-ins for one of the venue's events.
+// The door list for one of the venue's gigs (admins see any gig). Used by the venue portal and the
+// admin panel.
+const ownsEvent = (eventId: string, user: { id: string; role: string }) =>
+  !!get("SELECT 1 FROM events WHERE id = ? AND (? = 'admin' OR venue_id = ?)", eventId, user.role, user.id)
+
 export async function GET(req: Request) {
   const user = await requireRole("venue", "admin")
   if (!user) return forbidden()
   const eventId = new URL(req.url).searchParams.get("event_id") ?? ""
-  const ev = get("SELECT 1 FROM events WHERE id = ? AND (? = 'admin' OR venue_id = ?)", eventId, user.role, user.id)
-  if (!ev) return NextResponse.json({ error: "Event not found." }, { status: 404 })
+  if (!ownsEvent(eventId, user)) return NextResponse.json({ error: "Event not found." }, { status: 404 })
+  return NextResponse.json({ guests: listGuests(eventId) })
+}
 
-  const bookings = all(
-    `SELECT id, name, phone, num_people, total_amount, payment_status, created_at
-       FROM audience_bookings WHERE event_id = ? AND payment_status = 'paid' ORDER BY name`,
-    eventId,
-  )
-  const checkins = all("SELECT id, audience_phone, checkin_time FROM venue_checkins WHERE event_id = ?", eventId)
-  return NextResponse.json({ bookings, checkins })
+// Mark a booking arrived / not arrived, or paid at the door / not paid.
+export async function PATCH(req: Request) {
+  const user = await requireRole("venue", "admin")
+  if (!user) return forbidden()
+  const b = await readJson(req)
+  const bookingId = String(b.booking_id ?? "")
+  const booking = get<{ event_id: string }>("SELECT event_id FROM audience_bookings WHERE id = ?", bookingId)
+  if (!booking || !ownsEvent(booking.event_id, user)) return NextResponse.json({ error: "Booking not found." }, { status: 404 })
+  const r = updateGuest(bookingId, { arrived: b.arrived, paid: b.paid }, user.id)
+  if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status })
+  return NextResponse.json({ guest: r.guest })
 }

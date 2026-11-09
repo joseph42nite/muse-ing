@@ -12,7 +12,6 @@ import Link from "next/link"
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "framer-motion"
 import MuseLoadingScreen from "@/components/muse-loading-screen"
 import { extractYouTubeId } from "@/lib/youtube"
-import { generateUPIQR } from "@/lib/upipay"
 import {
   Search,
   Heart,
@@ -23,7 +22,6 @@ import {
   IndianRupee,
   Check,
   ChevronUp,
-  ChevronDown,
   Play,
 } from "lucide-react"
 
@@ -107,12 +105,23 @@ export default function AudienceLiveGigPage({
 
   // Tip Artist Directly Modal State
   const [showTipModal, setShowTipModal] = useState(false)
-  const [tipAmount, setTipAmount] = useState<number>(100)
-  const [tipCustomAmount, setTipCustomAmount] = useState<string>("")
+  const [tipAmount, setTipAmount] = useState<string>("")
   const [tipSupporterName, setTipSupporterName] = useState<string>("")
   const [tipMessage, setTipMessage] = useState<string>("")
   const [tipping, setTipping] = useState(false)
   const [tipError, setTipError] = useState<string | null>(null)
+
+  // Tips and dedications are paid through Cashfree, which needs the payer's phone number.
+  const [payerPhone, setPayerPhone] = useState("")
+  const phoneDigits = payerPhone.replace(/\D/g, "").slice(-10)
+  const rememberPayer = (name: string) => {
+    try {
+      if (name) window.localStorage.setItem("muse_audience_name", name)
+      if (phoneDigits.length === 10) window.localStorage.setItem("muse_audience_phone", phoneDigits)
+    } catch {
+      /* storage unavailable */
+    }
+  }
 
   const fetchGigData = useCallback(
     async (token: string) => {
@@ -146,12 +155,54 @@ export default function AudienceLiveGigPage({
       setPayRequesterName(savedName)
       setTipSupporterName(savedName)
     }
+    try {
+      setPayerPhone(window.localStorage.getItem("muse_audience_phone") || "")
+    } catch {
+      /* storage unavailable */
+    }
     fetchGigData(tok)
 
     const interval = setInterval(() => {
       fetchGigData(tok)
     }, 3500)
     return () => clearInterval(interval)
+  }, [fetchGigData])
+
+  // Back from the Cashfree checkout (?payment=<id>): confirm the payment and say how it went.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const paymentId = params.get("payment")
+    if (!paymentId) return
+    params.delete("payment")
+    const qs = params.toString()
+    window.history.replaceState(null, "", window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash)
+
+    let cancelled = false
+    const check = async (attempt: number) => {
+      const p = await fetch(`/api/payments/${encodeURIComponent(paymentId)}`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+      if (cancelled || !p) return
+      if (p.status === "created" && attempt < 6) {
+        setTimeout(() => check(attempt + 1), 2000)
+        return
+      }
+      const message =
+        p.status === "paid"
+          ? p.kind === "dedication"
+            ? `Paid! Your dedication for "${p.song_title}" is in the priority queue.`
+            : `Thanks! Your ₹${p.amount} tip went through.`
+          : p.status === "created"
+            ? "Still waiting for the payment to confirm. It'll show up here once it does."
+            : "The payment didn't go through. Nothing was charged; you can try again."
+      setSubmitSuccess(message)
+      setTimeout(() => setSubmitSuccess(null), 6000)
+      fetchGigData(getOrCreateVoterToken())
+    }
+    check(0)
+    return () => {
+      cancelled = true
+    }
   }, [fetchGigData])
 
   // Songs list based on playlist tab
@@ -480,6 +531,10 @@ export default function AudienceLiveGigPage({
   const handlePayDirectForSelectedSong = async (song: any, batch?: any) => {
     if (!song) return
     setPayError(null)
+    if (phoneDigits.length !== 10) {
+      setPayError("Enter your 10-digit phone number to pay.")
+      return
+    }
     setPayingSongId(song.id)
 
     try {
@@ -508,23 +563,15 @@ export default function AudienceLiveGigPage({
           dedicated_to: finalDedicatedTo,
           dedication_message: finalMsg,
           requester_name: finalFrom,
-          payment_mode: "instant",
+          requester_phone: phoneDigits,
         }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error || "Payment failed.")
+      if (!res.ok || !body.payment_url) throw new Error(body.error || "Payment failed.")
 
-      if (body.payment_url) {
-        window.location.href = body.payment_url
-        return
-      }
-
-      setShowDedicationModal(false)
-      setSubmitSuccess(
-        `Sent! Your dedication for "${song.song_title}" goes live once ${data?.event?.artist_name || "the artist"} confirms the ₹50 arrived.`
-      )
-      setTimeout(() => setSubmitSuccess(null), 5000)
-      fetchGigData(voterToken)
+      rememberPayer(finalFrom)
+      window.location.href = body.payment_url
+      return
     } catch (err: any) {
       setPayError(err.message)
     } finally {
@@ -536,11 +583,17 @@ export default function AudienceLiveGigPage({
   const handleTipArtist = async (e: React.FormEvent) => {
     e.preventDefault()
     setTipError(null)
+    if (phoneDigits.length !== 10) {
+      setTipError("Enter your 10-digit phone number to pay.")
+      return
+    }
     setTipping(true)
 
-    const finalAmount = tipCustomAmount.trim()
-      ? Number(tipCustomAmount)
-      : tipAmount
+    const finalAmount = Number(tipAmount)
+    if (!tipAmount.trim() || !Number.isFinite(finalAmount) || finalAmount < 10) {
+      setTipError("Enter how much you'd like to tip (₹10 or more).")
+      return
+    }
 
     try {
       const res = await fetch(`/api/gigs/${encodeURIComponent(eventId)}`, {
@@ -550,22 +603,17 @@ export default function AudienceLiveGigPage({
           action: "tip_artist",
           amount: finalAmount,
           supporter_name: tipSupporterName.trim() || "Audience Member",
+          supporter_phone: phoneDigits,
           message: tipMessage.trim(),
         }),
       })
       const body = await res.json()
-      if (!res.ok) throw new Error(body.error || "Tip failed.")
+      if (!res.ok || !body.payment_url) throw new Error(body.error || "Tip failed.")
 
-      setShowTipModal(false)
-      setTipCustomAmount("")
-      setTipMessage("")
-      setSubmitSuccess(
-        `Thanks! ${data?.event?.artist_name || "The artist"} will confirm your ₹${finalAmount} tip once it arrives.`
-      )
-      setTimeout(() => setSubmitSuccess(null), 5000)
+      rememberPayer(tipSupporterName.trim())
+      window.location.href = body.payment_url
     } catch (err: any) {
       setTipError(err.message)
-    } finally {
       setTipping(false)
     }
   }
@@ -601,6 +649,10 @@ export default function AudienceLiveGigPage({
   const artistAvatar =
     event.artist_avatar ||
     "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80"
+
+  // what the disc shows: the song playing, else the first song in the set that has a video
+  const discSong =
+    playerSong || (data?.allConfirmedSongs || []).find((s: any) => getYouTubeFrame(s)) || null
 
   const vote = playerSong ? getVoteState(playerSong) : { count: 0, hasVoted: false }
   const artistPhoto = artistAvatar.includes("images.unsplash.com")
@@ -756,9 +808,14 @@ export default function AudienceLiveGigPage({
               {/* disc stage is laid out in flow below; its red capsule reaches up behind the header.
                   The glass menu button floats over the top-right corner of every screen. */}
               <header className="relative z-10 flex h-11 shrink-0 items-center justify-between px-[5cqw] mt-[max(16px,4cqw)]">
-                <button type="button" aria-label="Open the setlist" onClick={() => setListOpen(true)} className="-m-2 p-2">
-                  <ChevronDown className="h-6 w-6" strokeWidth={1.4} />
-                </button>
+                {/* the Muse-ing mark, a glass button back to the home page, mirroring the menu button */}
+                <Link
+                  href="/"
+                  aria-label="Muse-ing home"
+                  className="glass glass-button title-x grid h-11 w-11 place-items-center rounded-full text-[14px] leading-none"
+                >
+                  M-
+                </Link>
               </header>
 
               {/* the artist's name across the top of the capsule, with Follow below it */}
@@ -801,8 +858,9 @@ export default function AudienceLiveGigPage({
                     className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0b0a0e] p-[2.4cqw] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.8)]"
                     style={{ width: "min(59cqw, 62cqh)", height: "min(59cqw, 62cqh)" }}
                   >
-                    <div className="h-full w-full overflow-hidden rounded-full ring-1 ring-white/10">
-                      <img key={playerSongId} src={getYouTubeFrame(playerSong) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
+                    {/* the record is the song's YouTube thumbnail; before anything plays, the first song in the set */}
+                    <div className="relative h-full w-full overflow-hidden rounded-full ring-1 ring-white/10">
+                      <img key={discSong?.id ?? "artist"} src={getYouTubeFrame(discSong) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
                     </div>
                   </div>
                 </div>
@@ -853,11 +911,13 @@ export default function AudienceLiveGigPage({
                   <ChevronUp className="h-6 w-6" strokeWidth={1.4} />
                 </button>
                 <div className="min-w-0 flex-1 px-3 pt-1 text-center">
-                  <div className="flex items-center justify-center gap-[2cqw]">
-                    <p className="micro min-w-0 truncate text-[max(10px,2.8cqw)]! text-[#F4EFE6]/90">{event.artist_name || "Live set"}</p>
-                    <FollowPill />
-                  </div>
-                  {venue && <p className="micro mt-[1cqw] truncate text-[max(9px,2.2cqw)]! text-[#F4EFE6]/45">{venue}</p>}
+                  <p className="micro truncate text-[max(10px,2.8cqw)]! text-[#F4EFE6]/90">{event.artist_name || "Live set"}</p>
+                  {instagramUrl && (
+                    <div className="mt-[max(8px,2cqw)] flex justify-center">
+                      <FollowPill />
+                    </div>
+                  )}
+                  {venue && <p className="micro mt-[max(8px,2cqw)] truncate text-[max(9px,2.2cqw)]! text-[#F4EFE6]/45">{venue}</p>}
                 </div>
                 {/* room for the floating glass menu button */}
                 <span className="h-11 w-11 shrink-0" aria-hidden="true" />
@@ -1257,7 +1317,7 @@ export default function AudienceLiveGigPage({
                 />
                 <div>
                   <span className="micro text-[#F4EFE6]/60 block">
-                    100% Direct to Artist
+                    Tip the artist
                   </span>
                   <h3
                     className="title-x text-[19px] leading-[1]!"
@@ -1276,38 +1336,22 @@ export default function AudienceLiveGigPage({
             </div>
 
             <form onSubmit={handleTipArtist} className="space-y-3">
-              {/* Preset Tip Amounts */}
-              <div className="grid grid-cols-4 gap-2">
-                {[50, 100, 200, 500].map((amt) => {
-                  const selected = !tipCustomAmount.trim() && tipAmount === amt
-                  return (
-                    <button
-                      key={amt}
-                      type="button"
-                      onClick={() => {
-                        setTipAmount(amt)
-                        setTipCustomAmount("")
-                      }}
-                      className={`py-2.5 rounded-full text-xs font-semibold tracking-wider border transition-all cursor-pointer ${
-                        selected
-                          ? "bg-[#F4EFE6] text-[#0b0a0e] border-[#F4EFE6] shadow-xs"
-                          : "bg-[#121014] text-[#F4EFE6] border-white/15 hover:border-[#F4EFE6]/60"
-                      }`}
-                    >
-                      ₹{amt}
-                    </button>
-                  )
-                })}
+              <div className="relative">
+                <span className="pointer-events-none absolute left-5 top-1/2 -translate-y-1/2 title-x text-[22px] text-[#F4EFE6]/60">₹</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={10}
+                  step="1"
+                  required
+                  autoFocus
+                  value={tipAmount}
+                  onChange={(e) => setTipAmount(e.target.value)}
+                  placeholder="Any amount"
+                  aria-label="Tip amount in rupees"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-full bg-white/[0.04] border border-white/15 title-x text-[22px] text-[#F4EFE6] placeholder:text-[#F4EFE6]/30 focus:outline-none focus:border-[#F4EFE6]/60 transition-colors"
+                />
               </div>
-
-              <input
-                type="number"
-                min={10}
-                value={tipCustomAmount}
-                onChange={(e) => setTipCustomAmount(e.target.value)}
-                placeholder="Or enter custom amount (₹)"
-                className="w-full px-4 py-2.5 rounded-full bg-white/[0.04] border border-white/15 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#F4EFE6]/60 transition-colors"
-              />
 
               <input
                 type="text"
@@ -1325,59 +1369,22 @@ export default function AudienceLiveGigPage({
                 className="w-full px-4 py-2.5 rounded-full bg-white/[0.04] border border-white/15 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#F4EFE6]/60 transition-colors"
               />
 
-              {tipError && <p className="text-xs text-[#ff9a9a]">{tipError}</p>}
+              <input
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                required
+                value={payerPhone}
+                onChange={(e) => setPayerPhone(e.target.value)}
+                placeholder="Your phone number (for the payment) *"
+                className="w-full px-4 py-2.5 rounded-full bg-white/[0.04] border border-white/15 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#F4EFE6]/60 transition-colors"
+              />
 
-              {(() => {
-                if (!event?.artist_upi_id) return <p className="text-[11px] text-[#F4EFE6]/60">This artist hasn't added a UPI ID yet.</p>
-                const amt = Number(tipCustomAmount.trim() || tipAmount || 100)
-                const tipQr = generateUPIQR({
-                  vpa: event.artist_upi_id,
-                  name: event?.artist_payee_name || event?.artist_name || "Live Artist",
-                  amount: amt,
-                  orderId: `UPIPAY_TIP_${Date.now().toString().slice(-5)}`,
-                  note: tipMessage.trim() || `Tip for ${event?.artist_name || "Artist"}`,
-                  mode: "fixed",
-                })
-                return (
-                  <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/10 space-y-2.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-semibold text-[#F4EFE6]">
-                        Direct UPIPay to:{" "}
-                        <code className="font-mono text-[#F4EFE6]/80">{tipQr.vpa}</code>
-                      </span>
-                      <span className="font-mono text-[10px] bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-full font-bold">
-                        0% Fee
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1.5">
-                      <a
-                        href={tipQr.intentLinks.gpay}
-                        className="py-1.5 rounded-full bg-[#121014] hover:bg-[#F4EFE6] hover:text-[#0b0a0e] border border-white/15 text-[10px] font-semibold text-center transition shadow-xs"
-                      >
-                        GPay
-                      </a>
-                      <a
-                        href={tipQr.intentLinks.phonepe}
-                        className="py-1.5 rounded-full bg-[#121014] hover:bg-[#F4EFE6] hover:text-[#0b0a0e] border border-white/15 text-[10px] font-semibold text-center transition shadow-xs"
-                      >
-                        PhonePe
-                      </a>
-                      <a
-                        href={tipQr.intentLinks.paytm}
-                        className="py-1.5 rounded-full bg-[#121014] hover:bg-[#F4EFE6] hover:text-[#0b0a0e] border border-white/15 text-[10px] font-semibold text-center transition shadow-xs"
-                      >
-                        Paytm
-                      </a>
-                      <a
-                        href={tipQr.intentLinks.upiUri}
-                        className="py-1.5 rounded-full bg-[#121014] hover:bg-[#F4EFE6] hover:text-[#0b0a0e] border border-white/15 text-[10px] font-semibold text-center transition shadow-xs"
-                      >
-                        UPI App
-                      </a>
-                    </div>
-                  </div>
-                )
-              })()}
+              <p className="text-[11px] text-[#F4EFE6]/50">
+                You&apos;ll pay securely with UPI, card or netbanking on the next screen.
+              </p>
+
+              {tipError && <p className="text-xs text-[#ff9a9a]">{tipError}</p>}
 
               <button
                 type="submit"
@@ -1387,10 +1394,17 @@ export default function AudienceLiveGigPage({
                 <IndianRupee className="w-3.5 h-3.5" />
                 <span>
                   {tipping
-                    ? "Sending UPIPay Tip..."
-                    : `Complete ₹${tipCustomAmount.trim() || tipAmount} UPIPay to Artist`}
+                    ? "Opening payment…"
+                    : Number(tipAmount) > 0
+                      ? `Pay ₹${Number(tipAmount).toLocaleString("en-IN")}`
+                      : "Pay"}
                 </span>
               </button>
+              <p className="text-center text-[10.5px] text-[#F4EFE6]/45">
+                Paid via Cashfree. See our{" "}
+                <Link href="/terms" target="_blank" className="underline underline-offset-2 hover:text-[#F4EFE6]">Terms</Link> and{" "}
+                <Link href="/refunds" target="_blank" className="underline underline-offset-2 hover:text-[#F4EFE6]">Refund Policy</Link>.
+              </p>
             </form>
           </div>
         </div>
@@ -1406,7 +1420,7 @@ export default function AudienceLiveGigPage({
             <div className="flex items-center justify-between">
               <div>
                 <span className="micro text-[#F4EFE6]/60 block">
-                  Song Dedication • Direct to Artist
+                  Song Dedication
                 </span>
                 <h3
                   className="title-x text-[19px] leading-[1]!"
@@ -1426,8 +1440,8 @@ export default function AudienceLiveGigPage({
             <p className="text-xs text-[#F4EFE6]/60 leading-relaxed">
               Enter <strong>3 song names</strong> below.{" "}
               <strong>{event.artist_name}</strong> will select the song they can
-              perform best, and you can pay directly to the artist for that
-              selected song.
+              perform best, then you pay ₹50 to put that song in the priority
+              queue with your shoutout.
             </p>
 
             {/* Existing 3-Song Dedication Batches (Artist Selection & Direct Payment) */}
@@ -1505,55 +1519,17 @@ export default function AudienceLiveGigPage({
                         })}
                       </div>
 
-                      {selectedSong && !paidSong && !selectedSong.payment_reported && (() => {
-                        if (!event?.artist_upi_id) return <p className="text-[11px] text-[#F4EFE6]/60">This artist hasn't added a UPI ID yet.</p>
-                        const dedQr = generateUPIQR({
-                          vpa: event.artist_upi_id,
-                          name: event?.artist_payee_name || event?.artist_name || "Live Artist",
-                          amount: 50,
-                          orderId: `UPIPAY_DED_${selectedSong.id.slice(0, 6)}`,
-                          note: `Dedication: ${selectedSong.song_title}`,
-                          mode: "fixed",
-                        })
-                        return (
+                      {selectedSong && !paidSong && !selectedSong.payment_reported && (
                           <div className="space-y-2 pt-1">
-                            <div className="p-3 rounded-2xl bg-[#121014] border border-white/15 space-y-1.5">
-                              <div className="flex items-center justify-between text-[10px]">
-                                <span className="font-semibold text-[#F4EFE6]">
-                                  UPIPay VPA: <code className="font-mono text-[#F4EFE6]/80">{dedQr.vpa}</code>
-                                </span>
-                                <span className="font-mono bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full font-bold">
-                                  ₹50 Fixed
-                                </span>
-                              </div>
-                              <div className="grid grid-cols-4 gap-1.5">
-                                <a
-                                  href={dedQr.intentLinks.gpay}
-                                  className="py-1.5 rounded-full bg-white/[0.06] border border-white/15 text-[10px] font-semibold text-center hover:bg-[#F4EFE6] hover:text-[#0b0a0e] transition shadow-xs"
-                                >
-                                  GPay
-                                </a>
-                                <a
-                                  href={dedQr.intentLinks.phonepe}
-                                  className="py-1.5 rounded-full bg-white/[0.06] border border-white/15 text-[10px] font-semibold text-center hover:bg-[#F4EFE6] hover:text-[#0b0a0e] transition shadow-xs"
-                                >
-                                  PhonePe
-                                </a>
-                                <a
-                                  href={dedQr.intentLinks.paytm}
-                                  className="py-1.5 rounded-full bg-white/[0.06] border border-white/15 text-[10px] font-semibold text-center hover:bg-[#F4EFE6] hover:text-[#0b0a0e] transition shadow-xs"
-                                >
-                                  Paytm
-                                </a>
-                                <a
-                                  href={dedQr.intentLinks.upiUri}
-                                  className="py-1.5 rounded-full bg-white/[0.06] border border-white/15 text-[10px] font-semibold text-center hover:bg-[#F4EFE6] hover:text-[#0b0a0e] transition shadow-xs"
-                                >
-                                  UPI App
-                                </a>
-                              </div>
-                            </div>
-
+                            <input
+                              type="tel"
+                              inputMode="numeric"
+                              autoComplete="tel"
+                              value={payerPhone}
+                              onChange={(e) => setPayerPhone(e.target.value)}
+                              placeholder="Your phone number (for the payment) *"
+                              className="w-full px-4 py-2.5 rounded-full bg-white/[0.04] border border-white/15 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#F4EFE6]/60 transition-colors"
+                            />
                             <button
                               type="button"
                               disabled={payingSongId === selectedSong.id}
@@ -1565,13 +1541,18 @@ export default function AudienceLiveGigPage({
                               <IndianRupee className="w-3.5 h-3.5" />
                               <span>
                                 {payingSongId === selectedSong.id
-                                  ? "Processing Direct UPIPay..."
-                                  : `Pay ₹50 via UPIPay for "${selectedSong.song_title}"`}
+                                  ? "Opening payment…"
+                                  : `Pay ₹50 for "${selectedSong.song_title}"`}
                               </span>
                             </button>
+                            {payError && <p className="text-xs text-[#ff9a9a]">{payError}</p>}
+                            <p className="text-center text-[10.5px] text-[#F4EFE6]/45">
+                              Paid via Cashfree. See our{" "}
+                              <Link href="/terms" target="_blank" className="underline underline-offset-2 hover:text-[#F4EFE6]">Terms</Link> and{" "}
+                              <Link href="/refunds" target="_blank" className="underline underline-offset-2 hover:text-[#F4EFE6]">Refund Policy</Link>.
+                            </p>
                           </div>
-                        )
-                      })()}
+                      )}
                     </div>
                   )
                 })}

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CalendarDays, ListMusic, LogOut, MapPin, Mic2 } from "lucide-react"
+import { GuestList } from "@/components/guest-list"
 
 interface Song {
   id: string
@@ -43,6 +44,7 @@ export default function VenuePage() {
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming")
   const [openId, setOpenId] = useState<string | null>(null)
+  const [section, setSection] = useState<"guests" | "playlist">("guests")
 
   useEffect(() => {
     ;(async () => {
@@ -97,7 +99,9 @@ export default function VenuePage() {
           </div>
           <span className="micro block pt-1 text-white/65">Venue</span>
           <h1 className="title-x text-[36px] leading-[0.95] sm:text-[56px]">{venue || "Your venue"}</h1>
-          <p className="fine max-w-md pt-1">Your booked gigs, who&apos;s performing and the songs they&apos;ll sing.</p>
+          <p className="fine max-w-md pt-1">
+            Your booked gigs, who&apos;s coming, who&apos;s performing and the songs they&apos;ll sing. Tick guests off at the door.
+          </p>
         </div>
       </section>
 
@@ -168,8 +172,24 @@ export default function VenuePage() {
                 </button>
                 {open && (
                   <div className="border-t border-white/10 px-5 pb-5 pt-4 sm:px-6">
-                    <p className="micro mb-3 text-[#F4EFE6]/55">Playlist</p>
-                    {e.playlist.length === 0 ? (
+                    <div className="mb-4 flex gap-2">
+                      {(["guests", "playlist"] as const).map((k) => (
+                        <button
+                          key={k}
+                          onClick={() => setSection(k)}
+                          className={`micro rounded-full border px-3.5 py-1.5 transition ${
+                            section === k
+                              ? "border-[#F4EFE6] bg-[#F4EFE6] text-[#0b0a0e]"
+                              : "border-white/15 text-[#F4EFE6]/70 hover:border-white/35"
+                          }`}
+                        >
+                          {k === "guests" ? "Guests" : "Playlist"}
+                        </button>
+                      ))}
+                    </div>
+                    {section === "guests" ? (
+                      <GuestList eventId={e.id} />
+                    ) : e.playlist.length === 0 ? (
                       <p className="fine">{e.artist_name ? `${e.artist_name} hasn't added songs yet.` : "No artist booked yet."}</p>
                     ) : (
                       <ol className="space-y-1.5">

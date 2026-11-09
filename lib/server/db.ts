@@ -168,6 +168,49 @@ CREATE TABLE IF NOT EXISTS artist_transactions (
 );
 CREATE INDEX IF NOT EXISTS artist_tx_artist_idx ON artist_transactions (artist_id, created_at DESC);
 
+-- Tips and dedications collected through Cashfree. A row is created with the payment link and
+-- becomes an artist_transactions row once Cashfree reports it paid. The platform fee is fixed
+-- when the link is made, so a later rate change never alters a payment already in flight.
+CREATE TABLE IF NOT EXISTS gateway_payments (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('tip', 'dedication')),
+  artist_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE SET NULL,
+  request_id TEXT REFERENCES song_requests(id) ON DELETE SET NULL,
+  payer_name TEXT NOT NULL,
+  payer_phone TEXT NOT NULL,
+  amount REAL NOT NULL,
+  platform_fee REAL NOT NULL DEFAULT 0,
+  song_title TEXT,
+  note TEXT,
+  link_url TEXT,
+  status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'paid', 'failed', 'cancelled')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  settled_at TEXT
+);
+CREATE INDEX IF NOT EXISTS gateway_payments_request_idx ON gateway_payments (request_id, status);
+
+-- Discount codes that belong to an artist or a promoter. A code covers a set number of seats
+-- (tickets); once they're taken the discount no longer applies.
+CREATE TABLE IF NOT EXISTS coupons (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('artist', 'promoter')),
+  owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_id TEXT REFERENCES events(id) ON DELETE CASCADE,
+  discount_percent REAL NOT NULL CHECK (discount_percent > 0 AND discount_percent <= 100),
+  seat_limit INTEGER NOT NULL CHECK (seat_limit > 0),
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- Settings the admin can change from the panel (e.g. platform_fee_percent).
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
 CREATE TABLE IF NOT EXISTS inquiries (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -224,10 +267,23 @@ const ADDED_COLUMNS = [
   "ALTER TABLE events ADD COLUMN external_ref TEXT",
   "ALTER TABLE events ADD COLUMN external_snapshot TEXT",
   "CREATE UNIQUE INDEX IF NOT EXISTS events_external_ref_idx ON events (external_ref)",
+  // Cashfree-collected tips and dedications: our cut, and whether the artist's share has been paid out.
+  "ALTER TABLE artist_transactions ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE artist_transactions ADD COLUMN payout_status TEXT",
+  // Our cut of a ticket sale, fixed when the booking's payment link is made.
+  "ALTER TABLE audience_bookings ADD COLUMN platform_fee REAL NOT NULL DEFAULT 0",
+  // Coupons: which code was used, the price before it, and what it took off.
+  "ALTER TABLE audience_bookings ADD COLUMN coupon_id TEXT REFERENCES coupons(id) ON DELETE SET NULL",
+  "ALTER TABLE audience_bookings ADD COLUMN list_amount REAL",
+  "ALTER TABLE audience_bookings ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0",
+  "CREATE INDEX IF NOT EXISTS bookings_coupon_idx ON audience_bookings (coupon_id, payment_status)",
+  // Door list: when the guest arrived, and when an unpaid booking was paid at the door.
+  "ALTER TABLE audience_bookings ADD COLUMN arrived_at TEXT",
+  "ALTER TABLE audience_bookings ADD COLUMN door_paid_at TEXT",
 ]
 
 // Bump when SCHEMA or ADDED_COLUMNS change so a dev server's cached connection re-migrates.
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 11
 
 // One-time data fixes, each applied once per database and recorded in app_migrations.
 const DATA_MIGRATIONS: { id: string; sql: string }[] = [
@@ -236,6 +292,11 @@ const DATA_MIGRATIONS: { id: string; sql: string }[] = [
     id: "2026-11-list-imported-gigs",
     sql: `UPDATE events SET is_listed = 1
            WHERE external_ref LIKE 'hyphening:gig:%' AND is_listed = 0 AND COALESCE(fee_status, '') <> 'Cancelled'`,
+  },
+  {
+    // Starting platform fee on tickets, tips and dedications; the admin can change it in Settings.
+    id: "2026-11-platform-fee-10",
+    sql: "INSERT OR IGNORE INTO app_settings (key, value) VALUES ('platform_fee_percent', '10')",
   },
 ]
 

@@ -4,8 +4,7 @@ import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { DEMO_ARTIST, DEMO_LOGIN_ENABLED } from "@/lib/demo"
-import { Mic2, Sparkles, ArrowLeft } from "lucide-react"
+import { Mic2, ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -74,31 +73,6 @@ export default function LoginPage() {
           See where you&apos;re playing next, build your pre-gig setlist, take the room&apos;s requests live and put the lyrics on
           the big screen.
         </p>
-
-        {/* One-click demo artist */}
-        {DEMO_LOGIN_ENABLED && (
-        <div className="mt-7 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
-          <div className="min-w-0">
-            <p className="micro flex items-center gap-1.5 text-[#F4EFE6]">
-              <Sparkles className="h-3.5 w-3.5" />
-              Try the demo artist
-            </p>
-            <p className="mt-1 truncate text-[11px] text-[#F4EFE6]/55">Arjun Mehta · Live at Toit Indiranagar</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setEmail(DEMO_ARTIST.email)
-              setPassword(DEMO_ARTIST.password)
-              doLogin(DEMO_ARTIST.email, DEMO_ARTIST.password)
-            }}
-            disabled={isLoading}
-            className="btn-ghost h-9! shrink-0 px-4! text-[10px]! disabled:opacity-60"
-          >
-            1-click login
-          </button>
-        </div>
-        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-5">
           <div>

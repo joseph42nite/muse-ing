@@ -13,6 +13,14 @@ export function dashboardStats() {
   const count = (sql: string) => get<{ n: number }>(sql)?.n ?? 0
   const ticketRevenue = get<{ n: number }>(`SELECT COALESCE(SUM(total_amount), 0) AS n FROM audience_bookings WHERE ${PAID_TICKETS}`)?.n ?? 0
   const artistRevenue = get<{ n: number }>("SELECT COALESCE(SUM(amount), 0) AS n FROM artist_transactions WHERE status = 'paid'")?.n ?? 0
+  // Tips and dedications collected through Cashfree: our cut, and the artists' share not yet paid out.
+  const platformFees =
+    (get<{ n: number }>("SELECT COALESCE(SUM(platform_fee), 0) AS n FROM artist_transactions WHERE status = 'paid'")?.n ?? 0) +
+    (get<{ n: number }>(`SELECT COALESCE(SUM(platform_fee), 0) AS n FROM audience_bookings WHERE ${PAID_TICKETS}`)?.n ?? 0)
+  const tipsOwed =
+    get<{ n: number }>(
+      "SELECT COALESCE(SUM(amount - platform_fee), 0) AS n FROM artist_transactions WHERE status = 'paid' AND payout_status = 'owed'",
+    )?.n ?? 0
 
   // Last six calendar months, oldest first, so empty months still show up on the chart.
   const months: string[] = []
@@ -42,6 +50,8 @@ export function dashboardStats() {
     totals: {
       events: count("SELECT COUNT(*) AS n FROM events"),
       revenue: ticketRevenue + artistRevenue,
+      platformFees,
+      tipsOwed,
       promoters: count("SELECT COUNT(*) AS n FROM users WHERE role = 'promoter'"),
       venues: count("SELECT COUNT(*) AS n FROM users WHERE role = 'venue'"),
       artists: count("SELECT COUNT(*) AS n FROM users WHERE role = 'artist'"),
@@ -106,12 +116,12 @@ export function listTransactions(limit = 500) {
   return all(
     `SELECT * FROM (
        SELECT b.id, 'ticket' AS kind, b.name AS payer_name, b.phone AS payer_phone, b.email AS payer_email,
-              b.total_amount AS amount, b.payment_status AS status, b.payment_link_id AS reference,
+              b.total_amount AS amount, b.platform_fee, b.payment_status AS status, b.payment_link_id AS reference,
               'cashfree' AS provider, e.title AS event_title, b.num_people, NULL AS note, b.created_at
          FROM audience_bookings b LEFT JOIN events e ON e.id = b.event_id
        UNION ALL
        SELECT t.id, t.type AS kind, t.payer_name, t.payer_phone, NULL AS payer_email,
-              t.amount, t.status, COALESCE(t.upi_utr, t.upi_order_id) AS reference,
+              t.amount, t.platform_fee, t.status, COALESCE(t.upi_utr, t.upi_order_id) AS reference,
               t.provider, e.title AS event_title, NULL AS num_people, t.note, t.created_at
          FROM artist_transactions t LEFT JOIN events e ON e.id = t.event_id
      ) ORDER BY created_at DESC LIMIT ?`,
@@ -456,7 +466,9 @@ export function listArtists() {
             (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id AND ${NOT_CANCELLED}) AS gigs_total,
             (SELECT COUNT(*) FROM events e WHERE e.artist_id = u.id AND e.date >= ? AND ${NOT_CANCELLED}) AS gigs_upcoming,
             (SELECT MIN(e.date) FROM events e WHERE e.artist_id = u.id AND e.date >= ? AND ${NOT_CANCELLED}) AS next_gig,
-            (SELECT COALESCE(SUM(t.amount), 0) FROM artist_transactions t WHERE t.artist_id = u.id AND t.status = 'paid') AS earnings
+            (SELECT COALESCE(SUM(t.amount), 0) FROM artist_transactions t WHERE t.artist_id = u.id AND t.status = 'paid') AS earnings,
+            (SELECT COALESCE(SUM(t.amount - t.platform_fee), 0) FROM artist_transactions t
+              WHERE t.artist_id = u.id AND t.status = 'paid' AND t.payout_status = 'owed') AS tips_owed
        FROM users u
       WHERE u.role = 'artist'
       ORDER BY next_gig IS NULL, next_gig, u.name`,
@@ -465,6 +477,24 @@ export function listArtists() {
   )
   // Payment figures come from the gigs themselves, not the rollups imported from Hyphening.
   return rows.map((r) => ({ ...r, payments: pay.get(r.id) ?? null }))
+}
+
+/** Records that the artist has been paid their share of every Cashfree-collected tip and dedication. */
+export function payOutArtistTips(artistId: string): WriteResult<{ id: string; paid_out: number; amount: number }> {
+  if (!get("SELECT 1 FROM users WHERE id = ? AND role = 'artist'", artistId)) return { ok: false, status: 404, error: "Artist not found." }
+  return transaction(() => {
+    const amount =
+      get<{ n: number }>(
+        `SELECT COALESCE(SUM(amount - platform_fee), 0) AS n FROM artist_transactions
+          WHERE artist_id = ? AND status = 'paid' AND payout_status = 'owed'`,
+        artistId,
+      )?.n ?? 0
+    const r = run(
+      "UPDATE artist_transactions SET payout_status = 'paid_out' WHERE artist_id = ? AND status = 'paid' AND payout_status = 'owed'",
+      artistId,
+    )
+    return { ok: true as const, id: artistId, paid_out: Number(r.changes), amount }
+  })
 }
 
 /** One artist's gigs that carry a fee, oldest first, for the payments dialog. */

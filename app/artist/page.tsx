@@ -30,7 +30,6 @@ import {
 } from "lucide-react"
 import QrCodeModal from "@/components/qr-code-modal"
 import { extractYouTubeId } from "@/lib/youtube"
-import { DEMO_ARTIST, DEMO_LOGIN_ENABLED } from "@/lib/demo"
 import { cn } from "@/lib/utils"
 import { Field, FormDialog } from "../admin/admin-form"
 import { PageHeader } from "../admin/admin-table"
@@ -545,16 +544,6 @@ export default function ArtistDashboardPage() {
     router.push("/login")
   }
 
-  const demoLogin = async () => {
-    setLoading(true)
-    await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(DEMO_ARTIST),
-    })
-    await fetchDashboard()
-  }
-
   /* ── Derived ── */
 
   const {
@@ -567,7 +556,7 @@ export default function ArtistDashboardPage() {
     pendingBatches = [],
     playedSongs = [],
     transactions = [],
-    earningsSummary = { totalRevenue: 0, dedicationRevenue: 0, tipRevenue: 0, pendingCount: 0, pendingAmount: 0 },
+    earningsSummary = { totalRevenue: 0, dedicationRevenue: 0, tipRevenue: 0, pendingCount: 0, pendingAmount: 0, payoutOwed: 0 },
   } = data || {}
 
   // Running order: on stage first, paid dedications, then the artist's own order, then most loved; played last
@@ -626,11 +615,6 @@ export default function ArtistDashboardPage() {
             <Link href="/login" className="btn-light justify-center">
               Sign in
             </Link>
-            {DEMO_LOGIN_ENABLED && (
-              <button type="button" onClick={demoLogin} className="btn-ghost justify-center">
-                Try the demo artist
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1163,8 +1147,16 @@ export default function ArtistDashboardPage() {
   const setB = (k: string) => (e: { target: { value: string } }) => setBank((b) => ({ ...b, [k]: e.target.value }))
   const money = (
     <div className="space-y-8">
-      <PageHeader title="Money" subtitle="Dedications and tips paid straight to your UPI. Confirm what arrived, and keep your payout details current." />
+      <PageHeader
+        title="Money"
+        subtitle="Dedications and tips the audience paid online. Muse-ing pays your share to the account below, so keep your payout details current."
+      />
       {paymentsToConfirm}
+      {earningsSummary.payoutOwed > 0 && (
+        <p className="fine text-[13px]!">
+          {rupees(earningsSummary.payoutOwed)} is on its way to you from Muse-ing.
+        </p>
+      )}
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "Total", value: earningsSummary.totalRevenue },
@@ -1189,7 +1181,12 @@ export default function ArtistDashboardPage() {
                     <p className="truncate font-medium">{tx.payer_name}</p>
                     <p className="truncate text-[12px] text-[#F4EFE6]/45">{tx.song_title || tx.note || (tx.type === "tip" ? "Tip" : "Dedication")}</p>
                   </div>
-                  <span className="font-mono">{rupees(tx.amount)}</span>
+                  <div className="text-right">
+                    <span className="block font-mono">{rupees(tx.net_amount ?? tx.amount)}</span>
+                    {tx.payout_status && (
+                      <span className="micro block text-[#F4EFE6]/40">{tx.payout_status === "owed" ? "To be paid out" : "Paid out"}</span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

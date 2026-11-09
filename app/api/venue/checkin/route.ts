@@ -31,9 +31,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `${guest.name} is already checked in.` }, { status: 409 })
   }
 
+  const now = new Date().toISOString()
   run(
     "INSERT INTO venue_checkins (id, event_id, audience_phone, checkin_time, verified_by) VALUES (?,?,?,?,?)",
-    crypto.randomUUID(), eventId, guest.phone, new Date().toISOString(), user.id,
+    crypto.randomUUID(), eventId, guest.phone, now, user.id,
   )
+  // Mark the matching paid bookings arrived on the door list too.
+  for (const r of all<{ id: string; phone: string }>(
+    "SELECT id, phone FROM audience_bookings WHERE event_id = ? AND payment_status = 'paid' AND arrived_at IS NULL",
+    eventId,
+  )) {
+    if (last10(r.phone) === key) run("UPDATE audience_bookings SET arrived_at = ? WHERE id = ?", now, r.id)
+  }
   return NextResponse.json({ ok: true, guest })
 }

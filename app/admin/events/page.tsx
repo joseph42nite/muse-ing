@@ -1,7 +1,9 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Users } from "lucide-react"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { GuestList } from "@/components/guest-list"
 import { AdminTable, Muted, PageHeader, type Column } from "../admin-table"
 import { dateTime, inr, useAdminData } from "../use-admin-data"
 import { EventDialog, type EditableEvent } from "../event-dialog"
@@ -16,7 +18,7 @@ interface EventRow extends EditableEvent {
   bookings: number
 }
 
-const columns: Column<EventRow>[] = [
+const eventColumns = (openGuests: (e: EventRow) => void): Column<EventRow>[] => [
   {
     header: "Event",
     cell: (e) => (
@@ -48,6 +50,23 @@ const columns: Column<EventRow>[] = [
   },
   { header: "Sold", cell: (e) => e.tickets_sold, className: "text-right" },
   { header: "Revenue", cell: (e) => <span className="font-semibold">{inr(e.ticket_revenue)}</span>, className: "text-right" },
+  {
+    header: " ",
+    className: "text-right",
+    cell: (e) => (
+      <button
+        type="button"
+        onClick={(ev) => {
+          ev.stopPropagation()
+          openGuests(e)
+        }}
+        className="btn-ghost btn-sm whitespace-nowrap"
+        title="Guest list: arrived and paid at the door"
+      >
+        <Users className="h-3.5 w-3.5" /> Guests{e.bookings ? ` · ${e.bookings}` : ""}
+      </button>
+    ),
+  },
 ]
 
 type Filter = "upcoming" | "past" | "all"
@@ -58,6 +77,8 @@ export default function EventsPage() {
   const [adding, setAdding] = useState(false)
   const [filter, setFilter] = useState<Filter>("upcoming")
   const [q, setQ] = useState("")
+  const [guestsFor, setGuestsFor] = useState<EventRow | null>(null)
+  const columns = useMemo(() => eventColumns(setGuestsFor), [])
 
   const rows = useMemo(() => {
     if (!data) return null
@@ -107,6 +128,17 @@ export default function EventsPage() {
         empty={filter === "upcoming" ? "Nothing coming up. Add an event to fill the gig list." : "No events here."}
         onRowClick={setEditing}
       />
+      <Dialog open={!!guestsFor} onOpenChange={(o) => !o && setGuestsFor(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto p-6 sm:max-w-2xl sm:p-8">
+          <DialogHeader>
+            <DialogTitle className="title-x text-[24px] sm:text-[28px]">Guests</DialogTitle>
+            <DialogDescription className="fine text-[12.5px]!">
+              {guestsFor ? `${guestsFor.title} · ${dateTime(guestsFor.date)}` : ""}. Mark who has arrived, and who paid at the door.
+            </DialogDescription>
+          </DialogHeader>
+          {guestsFor && <GuestList eventId={guestsFor.id} />}
+        </DialogContent>
+      </Dialog>
       <EventDialog
         open={adding || !!editing}
         event={editing}

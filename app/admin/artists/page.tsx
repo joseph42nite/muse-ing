@@ -7,7 +7,7 @@ import { AdminTable, Muted, PageHeader, type Column } from "../admin-table"
 import { dateTime, inr, useAdminData } from "../use-admin-data"
 import { AccountDialog, type EditableAccount } from "../account-dialog"
 import { EventDialog } from "../event-dialog"
-import { Notice } from "../admin-form"
+import { adminWrite, Notice } from "../admin-form"
 import { ArtistPaymentsDialog } from "../artist-payments-dialog"
 
 interface Bucket {
@@ -37,6 +37,7 @@ interface ArtistRow extends EditableAccount {
   gigs_upcoming: number
   next_gig: string | null
   earnings: number
+  tips_owed: number
   payments: Payments | null
 }
 
@@ -47,6 +48,17 @@ export default function ArtistsPage() {
   const [booking, setBooking] = useState<ArtistRow | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [paying, setPaying] = useState<ArtistRow | null>(null)
+
+  const payOutTips = async (a: ArtistRow) => {
+    if (!window.confirm(`Mark ${inr(a.tips_owed)} of tips and dedications as paid out to ${a.name}?`)) return
+    try {
+      await adminWrite(`/api/admin/artists/${encodeURIComponent(a.id)}/tip-payout`, "POST")
+      setNotice(`Marked ${inr(a.tips_owed)} as paid out to ${a.name}.`)
+      reload()
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Couldn't mark the payout.")
+    }
+  }
 
   const columns: Column<ArtistRow>[] = [
     {
@@ -122,7 +134,25 @@ export default function ArtistsPage() {
     },
     { header: "Upcoming", cell: (a) => a.gigs_upcoming, className: "text-right" },
     { header: "All gigs", cell: (a) => a.gigs_total, className: "text-right" },
-    { header: "Tips & dedications", cell: (a) => inr(a.earnings), className: "text-right" },
+    {
+      header: "Tips & dedications",
+      className: "text-right",
+      cell: (a) => (
+        <div>
+          <span className="block">{inr(a.earnings)}</span>
+          {a.tips_owed > 0 && (
+            <button
+              type="button"
+              onClick={() => payOutTips(a)}
+              className="mt-0.5 text-[11px] text-[#ff7a7a] underline-offset-2 hover:underline"
+              title="Mark their share of Cashfree-collected tips and dedications as paid"
+            >
+              {inr(a.tips_owed)} to pay out · Mark paid
+            </button>
+          )}
+        </div>
+      ),
+    },
     {
       header: " ",
       className: "text-right",

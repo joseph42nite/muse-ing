@@ -12,6 +12,8 @@ interface Stats {
   totals: {
     events: number
     revenue: number
+    platformFees: number
+    tipsOwed: number
     promoters: number
     venues: number
     artists: number
@@ -88,6 +90,8 @@ export default function AdminOverview() {
   const stats: { label: string; value: string; href: string; alert?: boolean }[] = [
     { label: "Events", value: String(t.events), href: "/admin/events" },
     { label: "Revenue", value: inr(t.revenue), href: "/admin/transactions" },
+    { label: "Our fees", value: inr(t.platformFees), href: "/admin/transactions" },
+    { label: "Tips to pay out", value: inr(t.tipsOwed), href: "/admin/artists", alert: t.tipsOwed > 0 },
     { label: "Artists", value: String(t.artists), href: "/admin/artists" },
     { label: "Venues", value: String(t.venues), href: "/admin/venues" },
     { label: "Promoters", value: String(t.promoters), href: "/admin/promoters" },
