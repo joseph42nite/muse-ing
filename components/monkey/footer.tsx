@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { ArrowUp, ArrowUpRight } from "lucide-react"
+import { LEGAL, POLICY_LINKS } from "@/lib/legal"
 
 const COLUMNS = [
   {
@@ -38,8 +39,8 @@ export default function Footer({ jump }: { jump?: (p: number) => void }) {
             <br />
             shaped by the room
           </p>
-          <a href="mailto:hello@museing.live" className="pill-dark micro mt-6">
-            hello@museing.live <ArrowUpRight className="h-3 w-3" />
+          <a href={`mailto:${LEGAL.email}`} className="pill-dark micro mt-6">
+            {LEGAL.email} <ArrowUpRight className="h-3 w-3" />
           </a>
         </div>
         <nav aria-label="Footer" className="grid grid-cols-2 gap-8 sm:grid-cols-3">
@@ -77,6 +78,13 @@ export default function Footer({ jump }: { jump?: (p: number) => void }) {
 
       <div className="mx-auto mt-8 flex max-w-[1400px] flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5 text-[11px] text-[#F4EFE6]/50">
         <span>© 2026 Muse-ing. Live music, real-time setlists.</span>
+        <nav aria-label="Policies" className="flex flex-wrap gap-x-4 gap-y-1.5">
+          {POLICY_LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="transition hover:text-white">
+              {l.label}
+            </Link>
+          ))}
+        </nav>
         <button type="button" onClick={() => (jump ? jump(0) : window.scrollTo({ top: 0, behavior: "smooth" }))} className="micro flex items-center gap-1.5 transition hover:text-white">
           Back to top <ArrowUp className="h-3 w-3" />
         </button>

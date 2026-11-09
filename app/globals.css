@@ -314,26 +314,11 @@ a.card-noir:hover {
 }
 
 /* ---- Loading screen (components/muse-loading-screen.tsx) ---- */
-/* Film grain over the studio red, the same texture the landing's backdrop carries. */
-.muse-grain {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  animation: muse-grain 0.6s steps(3) infinite;
-}
-/* Shift the noise texture, not the layer, so the grain never pokes past the screen edge */
-@keyframes muse-grain {
-  0% { background-position: 0 0; }
-  33% { background-position: -37px 23px; }
-  66% { background-position: 29px -41px; }
-  100% { background-position: 0 0; }
-}
 /* The cycling feature line under the progress bar. */
 @keyframes muse-fade {
   0% { opacity: 0; transform: translateY(4px); }
   20%, 80% { opacity: 1; transform: none; }
   100% { opacity: 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .muse-grain { animation: none; }
 }
 
 /* ---- Liquid Glass ----
@@ -524,4 +509,60 @@ a.card-noir:hover {
       backdrop-filter: none;
     }
   }
+}
+
+/* Policy pages (/terms, /privacy, /refunds, /contact): long-form reading on the dark site */
+.legal h1 {
+  font-family: var(--font-display), "Arial Black", system-ui, sans-serif;
+  font-weight: 800;
+  font-stretch: 125%;
+  font-variation-settings: "wdth" 125;
+  text-transform: uppercase;
+  line-height: 0.95;
+  letter-spacing: -0.015em;
+  font-size: clamp(34px, 7vw, 64px);
+}
+.legal .lede {
+  margin-top: 1.25rem;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: rgba(244, 239, 230, 0.75);
+}
+.legal h2 {
+  margin-top: 2.75rem;
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  font-stretch: 112%;
+  font-variation-settings: "wdth" 112;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f4efe6;
+}
+.legal p,
+.legal li {
+  margin-top: 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: rgba(244, 239, 230, 0.72);
+}
+.legal ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.legal li {
+  margin-top: 0.5rem;
+}
+.legal a {
+  color: #f4efe6;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(244, 239, 230, 0.35);
+}
+.legal a:hover {
+  text-decoration-color: #f4efe6;
+}
+.legal strong {
+  color: #f4efe6;
+  font-weight: 600;
 }
