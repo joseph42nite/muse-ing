@@ -50,6 +50,14 @@ export async function generateMetadata({ params }: { params: Promise<{ eventId: 
 const IST = "Asia/Kolkata"
 const fmt = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleString("en-IN", { timeZone: IST, ...o })
 
+/** Font size that fits the longest word of `s` across the viewport, so a name never breaks mid-word. */
+function fitTitle(s: string, maxPx: number, share = 88) {
+  const longest = Math.max(1, ...s.split(/\s+/).map((w) => w.length))
+  // The expanded display face runs about 0.95em per uppercase glyph.
+  const vw = (share / (longest * 0.95)).toFixed(2)
+  return `clamp(30px, ${vw}vw, ${maxPx}px)`
+}
+
 export default async function EventDetailPage({ params }: { params: Promise<{ eventId: string }> }) {
   const { eventId } = await params
   const ev = load(eventId)
@@ -62,131 +70,183 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
   const time = valid ? fmt(when, { hour: "numeric", minute: "2-digit", hour12: true }).toUpperCase() : null
   const [venue, city] = (ev.location_name ?? "Venue to be announced").split("•").map((s) => s.trim())
   const past = valid && when.getTime() < Date.now() - 6 * 3600e3
-  const price = ev.ticket_price > 0 ? `₹${ev.ticket_price.toLocaleString("en-IN")}` : "Free"
+  const paid = ev.ticket_price > 0
+  const price = paid ? `₹${ev.ticket_price.toLocaleString("en-IN")}` : "Free"
   const handle = ev.artist_instagram?.replace(/^@+/, "")
-  const liveHref = `/live?location=${encodeURIComponent(ev.location_slug ?? "")}&date=${encodeURIComponent(
-    ev.event_date_only ?? "",
-  )}`
+  const liveHref = `/live/${encodeURIComponent(ev.id)}`
   const status = ev.cancelled ? "Cancelled" : past ? "Played" : null
+
+  // The artist's name is the headline; the gig's own title shows above it only when it says more.
+  const headline = ev.artist_name?.trim() || ev.title
+  const showTitle = !!ev.artist_name && !ev.title.toLowerCase().startsWith(ev.artist_name.trim().toLowerCase())
+
+  const cta = ev.cancelled ? (
+    <Link href="/events" className="btn-light">
+      See other gigs <ArrowRight className="h-4 w-4" />
+    </Link>
+  ) : past ? (
+    <Link href={liveHref} className="btn-light">
+      <Music className="h-4 w-4" /> See the setlist
+    </Link>
+  ) : (
+    <>
+      {paid ? (
+        <Link href={`/book/${ev.id}`} className="btn-light">
+          Book a table · {price} <ArrowRight className="h-4 w-4" />
+        </Link>
+      ) : (
+        <Link href={liveHref} className="btn-light">
+          Free entry · Join the live room <ArrowRight className="h-4 w-4" />
+        </Link>
+      )}
+      {paid && (
+        <Link href={liveHref} className="btn-ghost">
+          <Music className="h-4 w-4" /> Preview the setlist
+        </Link>
+      )}
+    </>
+  )
 
   return (
     <>
       <main className="relative min-h-screen overflow-hidden bg-[#070709] text-[#F4EFE6] selection:bg-[#F4EFE6] selection:text-[#070709]">
-        {/* The studio's red light from above, as on the gig index and the footer */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-[80vh] bg-[radial-gradient(90%_70%_at_50%_0%,rgba(90,9,16,0.6)_0%,rgba(26,5,7,0.38)_45%,transparent_100%)]"
-        />
+        {/* Fold: the landing's red studio (its stops, centred lower, behind the name), fading into the page black */}
+        <section aria-label="Gig" className="relative flex min-h-[92svh] flex-col">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(90%_75%_at_45%_60%,#9e0a14_0%,#6b0510_40%,#170306_80%,#070709_100%)]"
+          />
+          {/* A floor glow, as in the studio, and a fade into the page below */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-x-0 bottom-0 h-[45%] bg-[radial-gradient(60%_80%_at_50%_100%,rgba(217,35,35,0.18)_0%,transparent_70%),linear-gradient(180deg,transparent,#070709)]"
+          />
 
-        <header className="relative z-10 flex items-center justify-between px-5 pt-7 sm:px-8 sm:pt-10">
-          <Link href="/" aria-label="Muse-ing home" className="title-x text-[30px] sm:text-[36px]">
-            M-
-          </Link>
-          <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/55 max-md:hidden">Live music · Real-time setlists</p>
-          <nav aria-label="Primary" className="flex items-center gap-2">
-            <Link href="/events" className="pill-dark micro">
-              <ArrowLeft className="h-3 w-3" /> All events
+          <header className="relative z-10 flex items-center justify-between px-5 pt-7 sm:px-8 sm:pt-10">
+            <Link href="/" aria-label="Muse-ing home" className="title-x text-[30px] sm:text-[36px]">
+              M-
             </Link>
-            <Link href="/login" className="pill-dark micro max-sm:hidden">
-              Artist login <Mic2 className="h-3 w-3" />
-            </Link>
-          </nav>
-        </header>
+            <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/60 max-md:hidden">Live music · Real-time setlists</p>
+            <nav aria-label="Primary" className="flex items-center gap-2">
+              <Link href="/events" className="pill-dark micro">
+                <ArrowLeft className="h-3 w-3" /> All events
+              </Link>
+              <Link href="/login" className="pill-dark micro max-sm:hidden">
+                Artist login <Mic2 className="h-3 w-3" />
+              </Link>
+            </nav>
+          </header>
 
-        <article className="relative z-10">
-          {/* Title fold: dots, the artist, a big decoded-style title, a hairline and two fine columns */}
-          <section aria-label="Gig" className="px-5 pt-16 sm:px-8 sm:pt-24">
-            <div className="dots">
-              <i />
-            </div>
-            <p className="micro mt-5 text-[#F4EFE6]/65">
-              {ev.artist_name ? `${ev.artist_name}${ev.artist_category ? ` · ${ev.artist_category}` : ""}` : "Live at Muse-ing"}
-            </p>
-            <h1 className="title-x mt-3 max-w-[16ch] text-[clamp(28px,8.6vw,148px)] leading-[0.88] [overflow-wrap:anywhere]">{ev.title}</h1>
-            <div className="mt-6 h-px w-full bg-[#F4EFE6]/70 sm:mt-8" />
-            <div className="mt-3 flex flex-wrap justify-between gap-x-6 gap-y-3 sm:mt-4 sm:justify-start sm:gap-x-[14vw]">
-              <p className="micro max-w-[200px] leading-[1.5]">
-                {day} <span className="text-[#F4EFE6]/55">{date}</span>
-              </p>
-              <p className="micro max-w-[220px] leading-[1.5]">
-                {venue} {city && <span className="text-[#F4EFE6]/55">{city}</span>}
-              </p>
-              {time && (
-                <p className="micro leading-[1.5]">
-                  Starts <span className="text-[#F4EFE6]/55">{time} IST</span>
-                </p>
+          <div className="relative z-10 mt-auto px-5 pb-12 pt-20 sm:px-8 sm:pb-16">
+            <div className="rise flex items-center gap-4">
+              <div className="dots">
+                <i />
+              </div>
+              {status && (
+                <span
+                  className={`micro rounded-full border px-3 py-1 ${
+                    ev.cancelled ? "border-[#ff7a7a]/60 text-[#ff9a9a]" : "border-[#F4EFE6]/30 text-[#F4EFE6]/75"
+                  }`}
+                >
+                  {status}
+                </span>
               )}
             </div>
-          </section>
+            <p className="micro rise mt-5 text-[#F4EFE6]/70">
+              {showTitle ? ev.title : ev.artist_category || "Live music"}
+            </p>
+            <h1
+              className="title-x rise mt-3 leading-[0.86] [hyphens:none] [overflow-wrap:normal]"
+              style={{ fontSize: fitTitle(headline, 168) }}
+            >
+              {headline}
+            </h1>
+            {/* Under the name, in ink and kept small like the landing's LIVE MUSIC */}
+            <p
+              className="title-x rise-late mt-3 text-[#0b0a0e]! leading-[1.2]! tracking-[0.18em]! [text-shadow:none]! [hyphens:none]"
+              style={{ fontSize: "clamp(14px, 3.6vw, 30px)" }}
+            >
+              Live at {venue}
+            </p>
 
-          <div className="grid gap-6 px-5 pt-12 sm:px-8 sm:pt-16 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-10">
-            {/* Artist poster: their photo if we have one, otherwise a type-only poster in the studio red */}
-            <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] border border-[#F4EFE6]/10 bg-[radial-gradient(120%_90%_at_50%_10%,#9e0a14_0%,#6b0510_45%,#170306_100%)] lg:max-h-[78vh] lg:w-full">
+            <div className="mt-8 h-px w-full bg-[#F4EFE6]/70" />
+            <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:mt-4 sm:grid-cols-4">
+              <p className="micro leading-[1.5]">
+                {day} <span className="block text-[#F4EFE6]/60">{date}</span>
+              </p>
+              <p className="micro leading-[1.5]">
+                Starts <span className="block text-[#F4EFE6]/60">{time ? `${time} IST` : "To be announced"}</span>
+              </p>
+              <p className="micro leading-[1.5]">
+                {venue} <span className="block text-[#F4EFE6]/60">{city || "Venue"}</span>
+              </p>
+              <p className="micro leading-[1.5]">
+                Entry <span className="block text-[#F4EFE6]/60">{paid ? `${price} per person` : "Free"}</span>
+              </p>
+            </div>
+
+            <div className="rise-late mt-9 flex flex-wrap gap-3">{cta}</div>
+          </div>
+        </section>
+
+        <article className="relative z-10">
+          <div className="grid gap-6 px-5 pt-10 sm:px-8 sm:pt-16 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-10">
+            {/* Poster: the artist's photo if we have one, otherwise the date in the display face on studio red */}
+            <div className="relative aspect-[4/5] overflow-hidden rounded-[20px] border border-[#F4EFE6]/10 bg-[radial-gradient(120%_90%_at_50%_10%,#9e0a14_0%,#6b0510_45%,#170306_100%)] lg:max-h-[80vh] lg:w-full">
               {ev.artist_avatar ? (
-                // Artist photos come from anywhere, so a plain img rather than next/image.
-                <img src={ev.artist_avatar} alt={ev.artist_name ?? ev.title} className="absolute inset-0 h-full w-full object-cover" />
+                <>
+                  {/* Artist photos come from anywhere, so a plain img rather than next/image. */}
+                  <img src={ev.artist_avatar} alt={ev.artist_name ?? ev.title} className="absolute inset-0 h-full w-full object-cover" />
+                  <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_50%,rgba(7,7,9,0.75))]" />
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-4 p-6 sm:p-8">
+                    <span className="micro text-[#F4EFE6]/80">{ev.artist_name}</span>
+                    <span className="title-x text-[28px] text-[#F4EFE6]/90">M-</span>
+                  </div>
+                </>
               ) : (
                 <div className="absolute inset-0 flex flex-col justify-between p-6 sm:p-8">
                   <div className="flex items-start justify-between">
                     <div className="dots">
                       <i />
                     </div>
-                    <span className="micro text-[#F4EFE6]/70">{valid ? fmt(when, { day: "2-digit", month: "short" }) : "TBA"}</span>
+                    <span className="micro text-[#F4EFE6]/70">{valid ? fmt(when, { weekday: "short" }) : "TBA"}</span>
                   </div>
-                  <p className="title-x text-[clamp(34px,7vw,92px)] leading-[0.86] break-words">{ev.artist_name ?? "Live"}</p>
+                  <div>
+                    <p className="title-x text-[clamp(96px,22vw,240px)] leading-[0.8] lg:text-[clamp(96px,14vw,240px)]">
+                      {valid ? fmt(when, { day: "2-digit" }) : "—"}
+                    </p>
+                    <p className="title-x mt-2 text-[clamp(36px,8vw,84px)] leading-[0.9] text-[#0b0a0e]! [text-shadow:none]! lg:text-[clamp(36px,5vw,84px)]">
+                      {valid ? fmt(when, { month: "short" }) : "Soon"}
+                    </p>
+                  </div>
                   <div className="flex items-end justify-between gap-4">
-                    <span className="micro text-[#F4EFE6]/70">{venue}</span>
+                    <span className="micro text-[#F4EFE6]/75">
+                      {time ? `${time} · ` : ""}
+                      {venue}
+                    </span>
                     <span className="title-x text-[28px] text-[#F4EFE6]/90">M-</span>
                   </div>
                 </div>
               )}
-              <div aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,transparent_55%,rgba(7,7,9,0.55))]" />
             </div>
 
             <div className="flex flex-col gap-6">
-              {/* Booking card */}
+              {/* The night at a glance, in the landing's micro / fine pairing */}
               <div className="card-noir p-6 sm:p-8">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="micro text-[#F4EFE6]/55">Tickets from</p>
-                    <p className="title-x mt-2 text-[44px] sm:text-[56px]">{price}</p>
-                  </div>
-                  {status && (
-                    <span
-                      className={`micro shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 ${
-                        ev.cancelled ? "border-[#ff7a7a]/50 text-[#ff7a7a]" : "border-[#F4EFE6]/25 text-[#F4EFE6]/70"
-                      }`}
-                    >
-                      {status}
-                    </span>
-                  )}
-                </div>
+                <p className="micro text-[#F4EFE6]/55">{paid ? "Tickets from" : "Entry"}</p>
+                <p className="title-x mt-2 text-[44px] sm:text-[56px]">{price}</p>
                 <p className="fine mt-3 max-w-sm text-[12.5px]!">
                   {ev.cancelled
                     ? "This night won't go ahead. Have a look at what else is on."
-                    : "Book your table, then shape the night: upvote songs, send requests and dedicate a track from your seat."}
+                    : past
+                      ? "This night has been played. See what the room sang along to."
+                      : paid
+                        ? "Book your table, then shape the night: upvote songs, send requests and dedicate a track from your seat."
+                        : "Walk in, scan your table's QR code and shape the night: upvote songs, send requests and dedicate a track."}
                 </p>
-                <div className="mt-7 flex flex-wrap gap-3">
-                  {ev.cancelled ? (
-                    <Link href="/events" className="btn-light">
-                      See other gigs <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  ) : (
-                    <>
-                      {!past && (
-                        <Link href={`/book/${ev.id}`} className="btn-light">
-                          Book now <ArrowRight className="h-4 w-4" />
-                        </Link>
-                      )}
-                      <Link href={liveHref} className="btn-ghost">
-                        <Music className="h-4 w-4" /> {past ? "See the setlist" : "Preview the setlist"}
-                      </Link>
-                    </>
-                  )}
-                </div>
+                <div className="mt-7 flex flex-wrap gap-3">{cta}</div>
               </div>
 
-              {/* The details, in the landing's micro / fine pairing */}
               <dl className="card-noir divide-y divide-[#F4EFE6]/10 px-6 sm:px-8">
                 {[
                   { k: "Date", v: valid ? `${day}, ${date}` : date },
@@ -230,7 +290,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
               <div className="dots">
                 <i />
               </div>
-              <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">About the artist</h2>
+              <h2 className="title-x mt-4 text-[30px] sm:text-[38px]">About {ev.artist_name ?? "the artist"}</h2>
               <div className="mt-5 h-px w-full bg-[#F4EFE6]/20" />
               <p className="mt-6 max-w-2xl text-[15px] leading-relaxed text-[#F4EFE6]/75 sm:text-[16px]">{ev.artist_bio}</p>
             </section>
