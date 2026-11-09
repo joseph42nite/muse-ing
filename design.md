@@ -64,7 +64,7 @@ The camera keyframes are `CAMERA_KEYS` in `components/monkey/store.ts`, calibrat
 - **Colour:** **MUSE-ING** is cream (`#f4efe6`) with a soft dark drop shadow (`rgba(0,0,0,0.45)`, 60px blur, 18px down), matching the loading screen's title so the handoff from loader to film is seamless. It's cream rather than pure white because the bloom pass (threshold 0.95) would make 1.0 white glow.
 - **Arrival:** the title glitches in letter by letter through block glyphs.
 - **Fold:** as you scroll (`t` 0.005–0.05), "ING" slides into the dash, then the dash slides into "MUSE", leaving **M-** where the word began.
-- **LIVE MUSIC:** cream (`#F4EFE6`), like the loading screen's line, 800 weight expanded, 72px on the 2048px canvas with 18px tracking, kept small so it doesn't compete with the word. It stays put while the title folds.
+- **LIVE MUSIC:** ink (`#0b0a0e`), black against the studio red, 800 weight expanded, 72px on the 2048px canvas with 18px tracking, kept small so it doesn't compete with the word. It stays put while the title folds.
 - **Exit:** the whole plate fades out over `t` 0.06–0.11.
 
 ### Scene 4: gigs
@@ -165,7 +165,7 @@ The lighting on the monkey is fixed. Restyle the studio with the backdrop, floor
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Cream | `#F4EFE6` | All type, the dots, the menu lines, the progress bar, the primary button (`.btn-light`) |
+| Cream | `#F4EFE6` | All type (except the landing's LIVE MUSIC, in ink), the dots, the menu lines, the progress bar, the primary button (`.btn-light`) |
 | White | `#FFFFFF` | Hover states, the smash flash |
 | Ink | `#0b0a0e` / `#070709` | Card and menu panels, page background behind the canvas |
 | Studio red | See the backdrop and floor in section 5 | The scene itself |

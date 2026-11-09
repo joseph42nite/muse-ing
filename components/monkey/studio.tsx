@@ -364,14 +364,14 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     const mR = mL + wM
 
     g.clearRect(0, 0, cv.width, cv.height)
-    // The smaller line tucked under the word, in cream like the loading screen's "Live music", widely
-    // tracked and kept small so it doesn't compete with the word; it stays put while the word folds
+    // The smaller line tucked under the word, in ink (black) against the studio red, widely tracked
+    // and kept small so it doesn't compete with the word; it stays put while the word folds
     if (sub) {
       g.save()
       g.font = `800 expanded 72px ${anim.current.family}`
       if ("fontStretch" in g) (g as CanvasRenderingContext2D & { fontStretch: string }).fontStretch = "expanded"
       if ("letterSpacing" in g) (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "18px"
-      g.fillStyle = "#f4efe6"
+      g.fillStyle = "#0b0a0e"
       g.textAlign = "center"
       g.textBaseline = "middle"
       g.fillText(subGlyphs, cv.width / 2, SUB_Y, cv.width * 0.9)
