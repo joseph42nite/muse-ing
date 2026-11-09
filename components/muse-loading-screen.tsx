@@ -126,7 +126,7 @@ export default function MuseLoadingScreen({ isLoading = false, minDurationMs = 2
       className="fixed inset-0 z-[100] flex select-none flex-col overflow-hidden bg-[#070709] text-[#F4EFE6] transition-opacity ease-in-out"
       style={{ opacity: leaving ? 0 : 1, transitionDuration: `${FADE_MS}ms`, pointerEvents: leaving ? "none" : "auto" }}
     >
-      {/* The red studio: backdrop gradient from the landing, a floor glow and film grain */}
+      {/* The red studio: backdrop gradient from the landing and a floor glow */}
       <div
         aria-hidden
         className="absolute inset-0 bg-[radial-gradient(85%_70%_at_50%_42%,#9e0a14_0%,#6b0510_38%,#170306_78%,#070709_100%)]"
@@ -135,7 +135,6 @@ export default function MuseLoadingScreen({ isLoading = false, minDurationMs = 2
         aria-hidden
         className="absolute inset-x-0 bottom-0 h-[38vh] bg-[radial-gradient(70%_100%_at_50%_100%,rgba(122,10,18,0.55),transparent_70%)]"
       />
-      <div aria-hidden className="muse-grain pointer-events-none absolute inset-0 opacity-[0.16] mix-blend-overlay" />
 
       <header className="relative z-10 flex items-center justify-between px-7 pt-7 sm:px-12 sm:pt-10">
         <div className="dots">

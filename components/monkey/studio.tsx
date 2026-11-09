@@ -8,7 +8,7 @@ import { FLOOR, GLITCH_GLYPHS, scroll, smooth, travel } from "./store"
 
 /*
  * The studio he stands in, after the reference: a seamless deep-red backdrop that glows in the
- * middle of the frame and falls away to near-black at the edges under film grain, a glossy red
+ * middle of the frame and falls away to near-black at the edges, a glossy red
  * floor that softly mirrors him and fades into the backdrop, white light bars floating at
  * every depth, and dust in the air. The giant hero title hangs here too, behind his head.
  */
@@ -21,7 +21,7 @@ function rand(seed: number) {
 }
 
 /**
- * Screen-space backdrop: a radial red glow, vignette and moving grain, wherever the camera points.
+ * Screen-space backdrop: a radial red glow and vignette, wherever the camera points.
  * The sphere rides on the camera so it never falls past the far plane, however far back the shot is.
  */
 export function Backdrop() {
@@ -47,18 +47,25 @@ export function Backdrop() {
           uniform float uTime;
           uniform vec2 uRes;
           float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+          // The loading screen's studio red, stop for stop, so the hand-off from the loader is exact:
+          // radial-gradient(85% 70% at 50% 42%, #9e0a14 0%, #6b0510 38%, #170306 78%, #070709 100%).
+          // Mixed in sRGB like CSS does, then turned linear because the composer's output pass
+          // converts back to sRGB (without this the reds came out lifted and pink).
+          vec3 toLinear(vec3 c){ return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c)); }
           void main(){
             vec2 uv = gl_FragCoord.xy / uRes;
-            vec2 q = (uv - vec2(0.5, 0.52)) * vec2(uRes.x / uRes.y, 1.0);
-            float r = length(q);
-            vec3 core = vec3(0.62, 0.035, 0.05);
-            vec3 mid = vec3(0.42, 0.02, 0.035);
-            vec3 edge = vec3(0.09, 0.005, 0.012);
-            vec3 c = mix(core, mid, smoothstep(0.0, 0.55, r));
-            c = mix(c, edge, smoothstep(0.45, 1.25, r));
-            // Film grain, fresh every frame
-            c += (hash(uv * uRes + fract(uTime * 7.0) * 100.0) - 0.5) * 0.05;
-            gl_FragColor = vec4(c, 1.0);
+            float d = length(vec2((uv.x - 0.5) / 0.85, (uv.y - 0.58) / 0.70));
+            vec3 s0 = vec3(158.0, 10.0, 20.0) / 255.0;
+            vec3 s1 = vec3(107.0, 5.0, 16.0) / 255.0;
+            vec3 s2 = vec3(23.0, 3.0, 6.0) / 255.0;
+            vec3 s3 = vec3(7.0, 7.0, 9.0) / 255.0;
+            vec3 c = mix(s0, s1, clamp(d / 0.38, 0.0, 1.0));
+            c = mix(c, s2, clamp((d - 0.38) / 0.40, 0.0, 1.0));
+            c = mix(c, s3, clamp((d - 0.78) / 0.22, 0.0, 1.0));
+            // No film grain (the rest of the site has none): only a still, sub-visible dither of
+            // about one 8-bit step, added in sRGB so it stays that small in the dark edges
+            c += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+            gl_FragColor = vec4(toLinear(max(c, 0.0)), 1.0);
           }
         `}
       />
@@ -240,7 +247,7 @@ export function Dust() {
 const TITLE_H = 900
 /** Baselines (middle of the letters) for the word and the line under it, in canvas pixels. */
 const WORD_Y = 290
-const SUB_Y = 468
+const SUB_Y = 456
 
 /** How far below the top of the frame the title plate starts, as a share of the frame height (the overlay's hairline sits under it). */
 const TITLE_TOP = 0.09
@@ -357,13 +364,14 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     const mR = mL + wM
 
     g.clearRect(0, 0, cv.width, cv.height)
-    // The smaller line tucked under the word, in ink and widely tracked; it stays put while the word folds
+    // The smaller line tucked under the word, in cream like the loading screen's "Live music", widely
+    // tracked and kept small so it doesn't compete with the word; it stays put while the word folds
     if (sub) {
       g.save()
-      g.font = `800 expanded 118px ${anim.current.family}`
+      g.font = `800 expanded 72px ${anim.current.family}`
       if ("fontStretch" in g) (g as CanvasRenderingContext2D & { fontStretch: string }).fontStretch = "expanded"
-      if ("letterSpacing" in g) (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "26px"
-      g.fillStyle = "#0b0a0e"
+      if ("letterSpacing" in g) (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "18px"
+      g.fillStyle = "#f4efe6"
       g.textAlign = "center"
       g.textBaseline = "middle"
       g.fillText(subGlyphs, cv.width / 2, SUB_Y, cv.width * 0.9)

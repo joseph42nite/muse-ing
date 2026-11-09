@@ -64,7 +64,7 @@ The camera keyframes are `CAMERA_KEYS` in `components/monkey/store.ts`, calibrat
 - **Colour:** **MUSE-ING** is cream (`#f4efe6`) with a soft dark drop shadow (`rgba(0,0,0,0.45)`, 60px blur, 18px down), matching the loading screen's title so the handoff from loader to film is seamless. It's cream rather than pure white because the bloom pass (threshold 0.95) would make 1.0 white glow.
 - **Arrival:** the title glitches in letter by letter through block glyphs.
 - **Fold:** as you scroll (`t` 0.005–0.05), "ING" slides into the dash, then the dash slides into "MUSE", leaving **M-** where the word began.
-- **LIVE MUSIC:** ink (`#0b0a0e`), 800 weight expanded, 118px on the 2048px canvas with 26px tracking. It stays put while the title folds.
+- **LIVE MUSIC:** cream (`#F4EFE6`), like the loading screen's line, 800 weight expanded, 72px on the 2048px canvas with 18px tracking, kept small so it doesn't compete with the word. It stays put while the title folds.
 - **Exit:** the whole plate fades out over `t` 0.06–0.11.
 
 ### Scene 4: gigs
@@ -116,7 +116,7 @@ The monkey is built entirely in code in `components/monkey/monkey.tsx`. There ar
 
 | Element | Design |
 | --- | --- |
-| Backdrop | A camera-following sphere with a screen-space radial gradient: core `rgb(0.62, 0.035, 0.05)`, mid `rgb(0.42, 0.02, 0.035)`, edge `rgb(0.09, 0.005, 0.012)`. It has fresh film grain every frame |
+| Backdrop | A camera-following sphere with a screen-space radial gradient that is the loading screen's, stop for stop: `radial-gradient(85% 70% at 50% 42%, #9e0a14 0%, #6b0510 38%, #170306 78%, #070709 100%)`, mixed in sRGB and converted to linear so the composer's output pass lands on the same hex. No film grain, only a still sub-visible dither so the falloff doesn't band |
 | Floor | A glossy red reflective floor: `MeshReflectorMaterial`, colour `#7a0a12`, mirror 0.6, mix strength 3.2, with a worn tile texture and an edge fade |
 | Light bars | 16 floating white capsules (HDR, not tone-mapped, so they bloom). They wrap along z as he walks |
 | Dust | 500 pale pink points drifting with the walk |
@@ -165,7 +165,7 @@ The lighting on the monkey is fixed. Restyle the studio with the backdrop, floor
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Cream | `#F4EFE6` | All type (except the landing's LIVE MUSIC, in ink), the dots, the menu lines, the progress bar, the primary button (`.btn-light`) |
+| Cream | `#F4EFE6` | All type, the dots, the menu lines, the progress bar, the primary button (`.btn-light`) |
 | White | `#FFFFFF` | Hover states, the smash flash |
 | Ink | `#0b0a0e` / `#070709` | Card and menu panels, page background behind the canvas |
 | Studio red | See the backdrop and floor in section 5 | The scene itself |
@@ -252,11 +252,11 @@ Every glass surface has five layers:
 
 `components/muse-loading-screen.tsx` is the one loading screen for the whole site: `app/loading.tsx` while a route loads, the live portal's intro, and the landing while the studio and his head are built (`isLoading={!ready}`, label "Sculpting the studio").
 
-- **Scene:** a cut of scene 1. The studio-red backdrop gradient with a floor glow and moving film grain (`.muse-grain`).
+- **Scene:** a cut of scene 1. The studio-red backdrop gradient with a floor glow. No film grain, to match the rest of the site.
 - **Title:** **MUSE-ING** decodes in left to right. Unresolved letters are cream blocks the size of their letter, flickering through the landing's █▓▒░ opacities, so nothing reflows. It then folds to **M-** (USE and ING fade, then close up), with **LIVE MUSIC** under it. The word is sized `clamp(40px, 14vw, 220px)` so it fits in one line at any width.
 - **Chrome:** the three dots, the centre tag and the site menu along the top. A cream hairline progress bar along the bottom, with the label and percentage on the left and Muse-ing's features cycling on the right.
 - **Timing:** decode 0.9 s, fold at 1.35 s, a minimum time on screen (2.2–2.6 s), then a 0.45 s fade. Progress fills to 90% and completes when loading ends. If one loader replaces another within 0.4 s, the new one carries on from the old one's time instead of restarting.
-- Reduced motion shows **M-** straight away with no grain.
+- Reduced motion shows **M-** straight away.
 
 ## 11. Responsive rules
 
@@ -284,7 +284,7 @@ Every glass surface has five layers:
 | `components/muse-loading-screen.tsx` | The site loading screen (section 10) |
 | `components/monkey/street.tsx` | An unused cyberpunk street set, kept for later |
 | `components/site-menu.tsx` | The Liquid Glass menu (sections 8 and 9) |
-| `app/globals.css` | `.title-x`, `.micro`, `.fine`, `.dots`, `.rise*`, `.pill-dark`, `.card-noir`, `.btn-light`, `.btn-ghost`, `.field-noir`, `.glass*`, `.muse-grain` |
+| `app/globals.css` | `.title-x`, `.micro`, `.fine`, `.dots`, `.rise*`, `.pill-dark`, `.card-noir`, `.btn-light`, `.btn-ghost`, `.field-noir`, `.glass*` |
 
 ---
 
