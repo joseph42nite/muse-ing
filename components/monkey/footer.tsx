@@ -26,7 +26,7 @@ const COLUMNS = [
 ] as const
 
 /** The page footer, after the scroll story: the wordmark, the site links and the fine print. */
-export default function Footer({ jump }: { jump: (p: number) => void }) {
+export default function Footer({ jump }: { jump?: (p: number) => void }) {
   const link = "text-[15px] text-[#F4EFE6]/70 transition hover:text-white"
   return (
     <footer className="relative overflow-hidden bg-[radial-gradient(120%_80%_at_50%_0%,#5a0910_0%,#1a0507_55%,#070709_100%)] px-5 pb-8 pt-16 text-[#F4EFE6] sm:px-8 sm:pt-24">
@@ -53,10 +53,15 @@ export default function Footer({ jump }: { jump: (p: number) => void }) {
                       <Link href={l.href} className={link}>
                         {l.label}
                       </Link>
-                    ) : (
+                    ) : jump ? (
                       <button type="button" onClick={() => jump(l.to)} className={link}>
                         {l.label}
                       </button>
+                    ) : (
+                      // Off the landing there is no scroll story to glide through, so go to the form there
+                      <Link href="/#book" className={link}>
+                        {l.label}
+                      </Link>
                     )}
                   </li>
                 ))}
@@ -72,7 +77,7 @@ export default function Footer({ jump }: { jump: (p: number) => void }) {
 
       <div className="mx-auto mt-8 flex max-w-[1400px] flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-5 text-[11px] text-[#F4EFE6]/50">
         <span>© 2026 Muse-ing. Live music, real-time setlists.</span>
-        <button type="button" onClick={() => jump(0)} className="micro flex items-center gap-1.5 transition hover:text-white">
+        <button type="button" onClick={() => (jump ? jump(0) : window.scrollTo({ top: 0, behavior: "smooth" }))} className="micro flex items-center gap-1.5 transition hover:text-white">
           Back to top <ArrowUp className="h-3 w-3" />
         </button>
       </div>

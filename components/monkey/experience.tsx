@@ -52,6 +52,11 @@ export default function Experience() {
     window.addEventListener("resize", onScroll)
     const snap = startSnap(runwayMax)
     glide.current = snap.glideTo
+    // Arriving from another page's "Book a table" / "Host with us" link: glide on to the form
+    if (window.location.hash === "#book") {
+      history.replaceState(null, "", window.location.pathname)
+      snap.glideTo(1)
+    }
     return () => {
       window.removeEventListener("scroll", onScroll)
       window.removeEventListener("resize", onScroll)

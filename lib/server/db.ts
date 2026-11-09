@@ -227,7 +227,17 @@ const ADDED_COLUMNS = [
 ]
 
 // Bump when SCHEMA or ADDED_COLUMNS change so a dev server's cached connection re-migrates.
-const SCHEMA_VERSION = 7
+const SCHEMA_VERSION = 8
+
+// One-time data fixes, each applied once per database and recorded in app_migrations.
+const DATA_MIGRATIONS: { id: string; sql: string }[] = [
+  {
+    // Hyphening gigs were first imported hidden from the website. Gigs show by default now.
+    id: "2026-11-list-imported-gigs",
+    sql: `UPDATE events SET is_listed = 1
+           WHERE external_ref LIKE 'hyphening:gig:%' AND is_listed = 0 AND COALESCE(fee_status, '') <> 'Cancelled'`,
+  },
+]
 
 function migrate(conn: DatabaseSync) {
   conn.exec(SCHEMA)
@@ -236,6 +246,19 @@ function migrate(conn: DatabaseSync) {
       conn.exec(sql)
     } catch {
       // column already exists
+    }
+  }
+  conn.exec("CREATE TABLE IF NOT EXISTS app_migrations (id TEXT PRIMARY KEY, applied_at TEXT NOT NULL)")
+  for (const m of DATA_MIGRATIONS) {
+    if (conn.prepare("SELECT 1 FROM app_migrations WHERE id = ?").get(m.id)) continue
+    conn.exec("BEGIN")
+    try {
+      conn.exec(m.sql)
+      conn.prepare("INSERT INTO app_migrations (id, applied_at) VALUES (?, ?)").run(m.id, new Date().toISOString())
+      conn.exec("COMMIT")
+    } catch (e) {
+      conn.exec("ROLLBACK")
+      throw e
     }
   }
 }

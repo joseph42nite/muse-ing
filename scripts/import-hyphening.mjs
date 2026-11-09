@@ -124,9 +124,9 @@ function upsert(role, ref, name, preferredEmail, fallbackEmail, fields) {
   }
 }
 
-// Gigs become Muse events. Hyphening only stores the day, so new gigs start at 8pm India time and
-// are created off the public site (is_listed = 0). Each event remembers what was last imported
-// (external_snapshot). On a re-run a field is only updated if it still holds that value, so anything
+// Gigs become Muse events. Hyphening only stores the day, so new gigs start at 8pm India time. They
+// show on the public site like any other gig (untick "Show on website" in the admin to hide one).
+// Each event remembers what was last imported (external_snapshot). On a re-run a field is only updated if it still holds that value, so anything
 // changed in the admin panel (a payment status, fee, artist, time…) is kept. A gig cancelled in
 // Hyphening is marked Cancelled here, never deleted.
 const gigReport = { created: 0, updated: 0, unchanged: 0, kept: 0, skipped: [] }
@@ -193,7 +193,7 @@ function importGigs(gigs) {
       location_name: location,
       location_slug: slug(location).slice(0, 80),
       ticket_price: 0,
-      is_listed: 0,
+      is_listed: 1,
       external_ref: ref,
       external_snapshot: snapshot,
       ...fields,
