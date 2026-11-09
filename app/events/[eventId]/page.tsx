@@ -43,7 +43,9 @@ export async function generateMetadata({ params }: { params: Promise<{ eventId: 
   if (!ev) return { title: "Event not found | Muse-ing" }
   return {
     title: `${ev.title} | Muse-ing`,
-    description: ev.description ?? `Live at ${ev.location_name ?? "a Muse-ing venue"}. Book your table.`,
+    description:
+      ev.description ??
+      `Live at ${ev.location_name ?? "a Muse-ing venue"}. ${ev.ticket_price > 0 ? "Book your table." : "Free entry: walk in and shape the setlist."}`,
   }
 }
 
