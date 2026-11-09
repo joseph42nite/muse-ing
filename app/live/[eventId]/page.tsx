@@ -575,38 +575,42 @@ export default function AudienceLiveGigPage({
   const Actions = ({ dark }: { dark?: boolean }) => {
     const ink = dark ? "text-[#F4EFE6]" : "text-[#1c1c1f]"
     const sub = dark ? "text-[#F4EFE6]/55" : "text-[#1c1c1f]/45"
+    const ring = dark ? "border border-[#F4EFE6]/25 bg-white/[0.04]" : "border border-[#1c1c1f]/20"
+    const circle = "flex h-[max(44px,11.5cqw)] w-[max(44px,11.5cqw)] items-center justify-center rounded-full transition active:scale-90"
+    const icon = "h-[max(18px,4.8cqw)] w-[max(18px,4.8cqw)]"
+    const label = `text-[max(11px,2.7cqw)] leading-none tracking-wide ${sub}`
+    const Item = ({ onClick, aria, children, text, disabled, filled }: any) => (
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={aria}
+        className="flex flex-1 flex-col items-center gap-[max(8px,2.2cqw)] disabled:opacity-40"
+      >
+        <span className={`${circle} ${filled || ring} ${ink}`}>{children}</span>
+        <span className={label}>{text}</span>
+      </button>
+    )
     return (
       <div className="flex items-start justify-between">
-        <button type="button" aria-label="Request songs" onClick={() => setShowRequestModal(true)} className={`mt-[2.6cqw] ${ink}`}>
-          <Plus className="h-[5cqw] w-[5cqw]" strokeWidth={1.5} />
-        </button>
-        <div className="flex items-start gap-[3cqw]">
-          <button type="button" onClick={openTip} className="flex w-[19cqw] flex-col items-center gap-[1.6cqw]">
-            <IndianRupee className={`mt-[2.4cqw] h-[5cqw] w-[5cqw] ${ink}`} strokeWidth={1.5} />
-            <span className={`text-[2.3cqw] leading-tight ${sub}`}>Tip the artist</span>
-          </button>
-          <button
-            type="button"
-            disabled={!playerSong}
-            onClick={heartNow}
-            aria-label={vote.hasVoted ? "Remove your heart" : "Heart this song"}
-            className="flex flex-col items-center gap-[1.6cqw] disabled:opacity-40"
-          >
-            <span
-              className={`flex h-[10cqw] w-[10cqw] items-center justify-center rounded-full transition active:scale-90 ${
-                vote.hasVoted ? "bg-[#F4EFE6] text-[#8f0d16]" : dark ? "border border-[#F4EFE6]/70 text-[#F4EFE6]" : "bg-[#1c1c1f] text-white"
-              }`}
-            >
-              <Heart className="h-[4.2cqw] w-[4.2cqw] fill-current" strokeWidth={0} />
-            </span>
-            <span className={`text-[2.3cqw] leading-tight ${sub}`}>{vote.count}</span>
-          </button>
-          <button type="button" onClick={openDedicate} className="flex w-[19cqw] flex-col items-center gap-[1.6cqw]">
-            <Sparkles className={`mt-[2.4cqw] h-[5cqw] w-[5cqw] ${ink}`} strokeWidth={1.5} />
-            <span className={`text-[2.3cqw] leading-tight ${sub}`}>Dedicate a song to someone special</span>
-          </button>
-        </div>
-        <span className="w-[5cqw]" aria-hidden="true" />
+        <Item onClick={() => setShowRequestModal(true)} aria="Request songs" text="Request">
+          <Plus className={icon} strokeWidth={1.5} />
+        </Item>
+        <Item onClick={openTip} aria="Tip the artist" text="Tip">
+          <IndianRupee className={icon} strokeWidth={1.5} />
+        </Item>
+        <Item
+          onClick={heartNow}
+          disabled={!playerSong}
+          aria={vote.hasVoted ? "Remove your heart" : "Heart this song"}
+          text={vote.count}
+          filled={vote.hasVoted ? "bg-[#F4EFE6] !text-[#8f0d16]" : undefined}
+        >
+          <Heart className={`${icon} fill-current`} strokeWidth={0} />
+        </Item>
+        <Item onClick={openDedicate} aria="Dedicate a song to someone special" text="Dedicate">
+          <Sparkles className={icon} strokeWidth={1.5} />
+        </Item>
       </div>
     )
   }
@@ -669,64 +673,71 @@ export default function AudienceLiveGigPage({
         <AnimatePresence mode="wait" initial={false}>
           {/* ───────── Screen 2 · Now playing ───────── */}
           {view === "player" && (
-            <motion.section key="player" {...slide} className="absolute inset-0 overflow-hidden bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]">
-              {/* red capsule with the artist */}
-              <div
-                className="absolute left-1/2 top-0 w-[62cqw] -translate-x-1/2 overflow-hidden rounded-b-full bg-[#8f0d16] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.8)]"
-                style={{ height: "calc(46% + 33cqw)" }}
-              >
-                <img src={artistPhoto} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover grayscale contrast-125 brightness-75 mix-blend-multiply" />
-                <div className="absolute inset-0 bg-gradient-to-b from-[#8f0d16]/20 via-[#8f0d16]/45 to-[#3a060b]/85" />
-              </div>
-
-              {/* the artist's name across the top of the capsule, with Follow beside it */}
-              <div
-                className="pointer-events-none absolute left-1/2 z-10 flex w-[62cqw] -translate-x-1/2 flex-col items-center gap-[2.4cqw]"
-                style={{ top: "calc((46% + 33cqw) * 0.46 - 46cqw)" }}
-              >
-                <p className="title-x text-center text-[8cqw] opacity-45">{(event.artist_name || "Live").split("&")[0].trim()}</p>
-                <FollowPill />
-              </div>
-
-              <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-[7cqw] pt-[9cqw]">
-                <button type="button" aria-label="Setlist" onClick={() => setView("list")}>
+            <motion.section key="player" {...slide} className="absolute inset-0 flex flex-col overflow-hidden bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]">
+              {/* disc stage is laid out in flow below; its red capsule reaches up behind the header */}
+              <header className="relative z-10 flex shrink-0 items-center justify-between px-[6cqw] pt-[max(20px,5cqw)]">
+                <button type="button" aria-label="Setlist" onClick={() => setView("list")} className="-m-2 p-2">
                   <ChevronDown className="h-6 w-6" strokeWidth={1.4} />
                 </button>
-                <button type="button" aria-label="Setlist" onClick={() => setView("list")}>
+                <button type="button" aria-label="Setlist" onClick={() => setView("list")} className="-m-2 p-2">
                   <MenuLines dark />
                 </button>
               </header>
 
-              {/* disc + progress arc */}
-              <div className="absolute left-1/2 top-[46%] h-0 w-0">
-                <svg viewBox="-100 -100 200 200" className="absolute -translate-x-1/2 -translate-y-1/2 overflow-visible" style={{ width: "86cqw", height: "86cqw" }} aria-hidden="true">
-                  <path d="M -96 0 A 96 96 0 0 0 96 0" fill="none" stroke="#F4EFE6" strokeOpacity="0.2" strokeWidth="0.9" />
-                  {(() => {
-                    const a = Math.PI - songProgress * Math.PI
-                    const x = 96 * Math.cos(a)
-                    const y = 96 * Math.sin(a)
-                    return (
-                      <>
-                        <path d={`M -96 0 A 96 96 0 0 0 ${x.toFixed(2)} ${y.toFixed(2)}`} fill="none" stroke="#F4EFE6" strokeWidth="1.4" />
-                        <circle cx={x} cy={y} r="5.5" fill="#F4EFE6" stroke="#0b0a0e" strokeWidth="2.6" />
-                      </>
-                    )
-                  })()}
-                </svg>
-                <div className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0b0a0e] p-[2.6cqw] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.8)]" style={{ width: "59cqw", height: "59cqw" }}>
-                  <div className="h-full w-full overflow-hidden rounded-full ring-1 ring-white/10">
-                    <img key={playerSongId} src={getYouTubeFrame(playerSong) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
+              {/* the artist's name across the top of the capsule, with Follow below it */}
+              <div className="relative z-10 mx-auto -mt-[3cqw] flex w-[60cqw] shrink-0 flex-col items-center gap-[3cqw]">
+                <p className="title-x line-clamp-2 text-center text-[7cqw] leading-[0.95]! opacity-60">{(event.artist_name || "Live").split("&")[0].trim()}</p>
+                <FollowPill />
+              </div>
+
+              {/* disc + progress arc, sized to whatever height is left */}
+              <div className="relative min-h-0 flex-1" style={{ containerType: "size" }}>
+                <div className="absolute left-1/2 h-0 w-0" style={{ top: "calc(50% - min(59cqw, 62cqh) * 0.14)" }}>
+                  {/* red capsule with the artist, running from behind the disc to the top of the screen */}
+                  <div
+                    className="absolute left-0 -translate-x-1/2 overflow-hidden rounded-b-full bg-[#8f0d16] shadow-[0_30px_60px_-20px_rgba(0,0,0,0.8)]"
+                    style={{ width: "calc(min(59cqw, 62cqh) * 1.06)", bottom: "calc(min(59cqw, 62cqh) * -0.56)", height: "200vh" }}
+                  >
+                    <img src={artistPhoto} alt="" aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[70vh] w-full object-cover grayscale contrast-125 brightness-75 mix-blend-multiply" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-[#8f0d16]/20 from-[60%] via-[#8f0d16]/45 to-[#3a060b]/85" />
+                  </div>
+                  <svg
+                    viewBox="-100 -100 200 200"
+                    className="absolute -translate-x-1/2 -translate-y-1/2 overflow-visible"
+                    style={{ width: "calc(min(59cqw, 62cqh) * 1.42)", height: "calc(min(59cqw, 62cqh) * 1.42)" }}
+                    aria-hidden="true"
+                  >
+                    <path d="M -96 0 A 96 96 0 0 0 96 0" fill="none" stroke="#F4EFE6" strokeOpacity="0.2" strokeWidth="0.9" />
+                    {(() => {
+                      const a = Math.PI - songProgress * Math.PI
+                      const x = 96 * Math.cos(a)
+                      const y = 96 * Math.sin(a)
+                      return (
+                        <>
+                          <path d={`M -96 0 A 96 96 0 0 0 ${x.toFixed(2)} ${y.toFixed(2)}`} fill="none" stroke="#F4EFE6" strokeWidth="1.4" />
+                          <circle cx={x} cy={y} r="4.5" fill="#F4EFE6" stroke="#0b0a0e" strokeWidth="2.2" />
+                        </>
+                      )
+                    })()}
+                  </svg>
+                  <div
+                    className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#0b0a0e] p-[2.4cqw] shadow-[0_20px_40px_-12px_rgba(0,0,0,0.8)]"
+                    style={{ width: "min(59cqw, 62cqh)", height: "min(59cqw, 62cqh)" }}
+                  >
+                    <div className="h-full w-full overflow-hidden rounded-full ring-1 ring-white/10">
+                      <img key={playerSongId} src={getYouTubeFrame(playerSong) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              <div className="absolute inset-x-0 px-[9cqw] text-center" style={{ top: "calc(46% + 38cqw)" }}>
-                <p className="micro text-[2.4cqw]! text-[#F4EFE6]/60 tabular-nums">{playerSong ? fmt(clock) : " "}</p>
-                <p className="title-x mt-[3cqw] truncate text-[5.4cqw]">{playerTitle || "Up next soon"}</p>
-                <p className="micro mt-[1.6cqw] truncate text-[2.4cqw]! text-[#F4EFE6]/55">
-                  {playerArtist}
-                </p>
-                <div className="mt-[5cqw]">
+              <div className="relative z-10 shrink-0 px-[8cqw] text-center">
+                {playerSong && <p className="micro text-[max(10px,2.4cqw)]! text-[#F4EFE6]/60 tabular-nums">{fmt(clock)}</p>}
+                <p className="title-x mt-[2cqw] truncate text-[6cqw]">{playerTitle || "Up next soon"}</p>
+                {playerArtist && (
+                  <p className="micro mt-[1.6cqw] truncate text-[max(10px,2.4cqw)]! text-[#F4EFE6]/55">{playerArtist}</p>
+                )}
+                <div className="mt-[max(20px,6cqw)] mb-[max(20px,6cqw)]">
                   <Actions dark />
                 </div>
               </div>
@@ -735,10 +746,10 @@ export default function AudienceLiveGigPage({
               <button
                 type="button"
                 onClick={() => setView("lyrics")}
-                className="absolute inset-x-0 bottom-0 flex h-[19cqw] flex-col items-center justify-center rounded-t-[11cqw] border-t border-white/10 bg-[#0b0a0e] text-[#F4EFE6]"
+                className="relative z-10 flex shrink-0 flex-col items-center justify-center gap-[max(10px,2.6cqw)] rounded-t-[9cqw] border-t border-white/10 bg-[#0b0a0e] pt-[max(16px,4cqw)] pb-[max(16px,4cqw,env(safe-area-inset-bottom))] text-[#F4EFE6]"
               >
-                <span className="micro text-[2.8cqw]!">Lyrics</span>
-                <span className="mt-[3cqw] h-[3px] w-[26cqw] rounded-full bg-[#F4EFE6]/70" />
+                <span className="micro text-[max(11px,2.6cqw)]!">Lyrics</span>
+                <span className="h-[3px] w-[22cqw] rounded-full bg-[#F4EFE6]/50" />
               </button>
             </motion.section>
           )}
@@ -835,7 +846,7 @@ export default function AudienceLiveGigPage({
                 })()}
               </div>
 
-              <div className="absolute inset-x-0 bottom-0 z-10 px-[9cqw] pb-[9cqw] text-center">
+              <div className="absolute inset-x-0 bottom-0 z-10 px-[8cqw] pb-[max(8cqw,env(safe-area-inset-bottom))] text-center">
                 <p className="micro text-[2.4cqw]! text-[#F4EFE6]/60 tabular-nums">{playerSong ? fmt(clock) : " "}</p>
                 <p className="title-x mt-[2.5cqw] truncate text-[4.8cqw]">{playerTitle || "Up next soon"}</p>
                 <div className="mt-[5cqw]">
