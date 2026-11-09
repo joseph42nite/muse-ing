@@ -47,6 +47,9 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
+  // Makes share-image and canonical URLs absolute in production
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  applicationName: "Muse-ing",
   title: "Muse-ing — Interactive Live Artists, Hosted Events & Real-Time Setlists",
   description:
     "Discover live performing artists, explore events hosted currently across venues, scan table QR codes to shape the setlist, or book & host an experience.",

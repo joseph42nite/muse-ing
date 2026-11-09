@@ -1,4 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <rect width="64" height="64" rx="16" fill="#F4EFE6" />
-  <text x="14" y="44" font-family="Georgia, 'Times New Roman', serif" font-size="38" font-weight="normal" fill="#181615">m<tspan fill="#D92323">-</tspan></text>
+  <!-- Muse-ing "M-" mark: Archivo ExtraBold Expanded (wght 800, wdth 125), the landing's title face, as outlines -->
+  <rect width="64" height="64" rx="14" fill="#0b0a0e"/>
+  <path fill="#F4EFE6" d="M8 43.5V20.5H18.7L22.7 30.5Q22.9 31.1 23.2 32Q23.6 33 23.9 34Q24.2 34.9 24.5 35.7H24.7Q24.9 35 25.2 34.1Q25.6 33.1 25.9 32.2Q26.2 31.2 26.5 30.5L30.5 20.5H40.9V43.5H34V31.6Q34 30.9 34 30Q34.1 29.2 34.1 28.3Q34.1 27.5 34.1 26.9H33.9Q33.7 27.5 33.4 28.4Q33.1 29.3 32.8 30.1Q32.5 31 32.2 31.6L27.4 43.5H21.1L16.3 31.6Q15.9 30.7 15.6 29.8Q15.3 28.9 15.1 28.1Q14.8 27.4 14.6 26.9H14.4Q14.4 27.4 14.4 28.1Q14.4 28.9 14.5 29.8Q14.5 30.7 14.5 31.6V43.5ZM45.4 36.9V31.8H56V36.9Z"/>
 </svg>
