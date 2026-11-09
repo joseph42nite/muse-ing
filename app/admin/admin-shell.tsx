@@ -85,7 +85,7 @@ export default function AdminShell({ user, children }: { user: { name: string; e
   return (
     <div className="admin-noir">
       {/* Desktop sidebar */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col justify-between gap-8 border-r border-white/[0.07] bg-[#0b0a0e]/80 p-6 backdrop-blur-xl lg:flex">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col justify-between gap-8 glass-bar p-6 lg:flex">
         <div className="space-y-8">
           {brand}
           {links}
@@ -94,7 +94,7 @@ export default function AdminShell({ user, children }: { user: { name: string; e
       </aside>
 
       {/* Phone / tablet header */}
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.07] bg-[#0b0a0e]/85 px-5 py-4 backdrop-blur-xl sm:px-8 lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between glass-bar px-5 py-4 sm:px-8 lg:hidden">
         {brand}
         <button
           onClick={() => setOpen((o) => !o)}
@@ -105,7 +105,7 @@ export default function AdminShell({ user, children }: { user: { name: string; e
         </button>
       </header>
       {open && (
-        <div className="fixed inset-x-0 bottom-0 top-[73px] z-20 flex flex-col justify-between gap-6 overflow-y-auto bg-[#0b0a0e]/95 px-5 py-6 backdrop-blur-xl sm:px-8 lg:hidden">
+        <div className="fixed inset-x-0 bottom-0 top-[73px] z-20 flex flex-col justify-between gap-6 overflow-y-auto glass-thick rounded-none px-5 py-6 sm:px-8 lg:hidden">
           {links}
           {footer}
         </div>

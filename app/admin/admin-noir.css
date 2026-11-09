@@ -46,14 +46,25 @@
   color: #f4efe6;
 }
 :root:has(.admin-noir) [data-slot="dialog-content"] {
-  border-radius: 22px;
-  border: 1px solid rgba(244, 239, 230, 0.12);
-  background: linear-gradient(165deg, #1e1a20, #0b0a0f);
+  /* A Liquid Glass sheet (tinted, since it holds forms): see .glass-thick in globals.css */
+  border-radius: 28px;
+  border: 0;
   color: #f4efe6;
+  background:
+    radial-gradient(120% 60% at 15% 0%, rgba(255, 255, 255, 0.12), transparent 55%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.05)),
+    rgba(16, 14, 20, 0.7);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  backdrop-filter: blur(30px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0.5px rgba(255, 255, 255, 0.4),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    0 40px 100px -30px rgba(0, 0, 0, 0.8);
 }
 :root:has(.admin-noir) [data-slot="dialog-overlay"] {
-  background: rgba(7, 7, 9, 0.75);
-  backdrop-filter: blur(6px);
+  background: rgba(7, 7, 9, 0.45);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
 
 .admin-noir [data-slot="table-head"] {

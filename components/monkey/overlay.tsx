@@ -2,7 +2,8 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { ArrowRight, ArrowUpRight, MapPin, Menu, Mic2, X } from "lucide-react"
+import { ArrowRight, ArrowUpRight, MapPin } from "lucide-react"
+import SiteMenu from "@/components/site-menu"
 import { COPY, GLITCH_GLYPHS, scroll, smooth, SMASH, win } from "./store"
 
 interface OverlayEvent {
@@ -106,7 +107,6 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sent, setSent] = useState<string | null>(null)
-  const [menu, setMenu] = useState(false)
 
   useEffect(() => {
     let off = false
@@ -197,7 +197,6 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
   }
 
   const go = (p: number, then?: () => void) => {
-    setMenu(false)
     then?.()
     jump(p)
   }
@@ -222,39 +221,9 @@ export default function Overlay({ jump }: { jump: (p: number) => void }) {
       {/* Header: a quiet tag in the middle and the menu right (artist login lives in the menu) */}
       <header className="pointer-events-auto absolute inset-x-0 top-0 z-20 flex items-center justify-end px-7 pt-7 sm:px-12 sm:pt-10">
         <p className="micro absolute left-1/2 -translate-x-1/2 text-[#F4EFE6]/55 max-md:hidden">Live music · Real-time setlists</p>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMenu((m) => !m)}
-            aria-label={menu ? "Close menu" : "Open menu"}
-            aria-expanded={menu}
-            className="grid h-10 w-10 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e] transition hover:bg-white"
-          >
-            {menu ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
-        </div>
-        {menu && (
-          <nav
-            aria-label="Primary"
-            className="absolute right-7 top-[84px] flex w-56 flex-col rounded-2xl border border-white/10 bg-[#0b0a0e]/92 p-2 shadow-[0_20px_60px_-12px_rgba(0,0,0,0.8)] backdrop-blur-md sm:right-12 sm:top-[104px]"
-          >
-            {[
-              ["Upcoming gigs", () => go(0.68)],
-              ["Book or host", () => go(1, () => setInquiry("reserve"))],
-              ["Join as artist", () => go(1, () => setInquiry("artist"))],
-            ].map(([l, f]) => (
-              <button key={l as string} type="button" onClick={f as () => void} className="title-x rounded-xl px-3 py-2.5 text-left text-[15px] transition hover:bg-white/5 hover:text-white">
-                {l as string}
-              </button>
-            ))}
-            <Link href="/events" className="title-x rounded-xl px-3 py-2.5 text-[15px] transition hover:bg-white/5 hover:text-white">
-              All events
-            </Link>
-            <Link href="/login" className="title-x flex items-center gap-2 rounded-xl px-3 py-2.5 text-[15px] text-[#F4EFE6] transition hover:bg-white/5">
-              Artist login <Mic2 className="h-3.5 w-3.5" />
-            </Link>
-          </nav>
-        )}
+        <SiteMenu
+          onPick={(t) => (t === "gigs" ? go(0.68) : go(1, () => setInquiry(t === "join" ? "artist" : "reserve")))}
+        />
       </header>
 
       {/* Scene 1: the giant title hangs in the 3D scene behind his head (studio.tsx); here, the

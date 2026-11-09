@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic"
 import { useCallback, useEffect, useRef, useState } from "react"
+import MuseLoadingScreen from "@/components/muse-loading-screen"
 import Footer from "./footer"
 import { loadHead } from "./head-client"
 import Overlay from "./overlay"
@@ -52,10 +53,11 @@ export default function Experience() {
     window.addEventListener("resize", onScroll)
     const snap = startSnap(runwayMax)
     glide.current = snap.glideTo
-    // Arriving from another page's "Book a table" / "Host with us" link: glide on to the form
-    if (window.location.hash === "#book") {
+    // Arriving from another page's menu or footer link: glide on to the gigs or the form
+    const to = { "#gigs": 0.68, "#book": 1, "#join": 1 }[window.location.hash]
+    if (to !== undefined) {
       history.replaceState(null, "", window.location.pathname)
-      snap.glideTo(1)
+      snap.glideTo(to)
     }
     return () => {
       window.removeEventListener("scroll", onScroll)
@@ -70,16 +72,16 @@ export default function Experience() {
   return (
     <>
     <div ref={runway} className="relative bg-[#070709]" style={{ height: `${SCROLL_LENGTH_VH}vh` }}>
-      <div className="sticky top-0 h-screen w-screen overflow-hidden">
+      <div className="sticky top-0 h-screen w-full overflow-hidden">
         {hasWebGL && <Stage onReady={onReady} active={onStage} />}
         <Overlay jump={jump} />
-        <div
-          className={`pointer-events-none absolute inset-0 flex items-center justify-center bg-[#070709] text-[11px] font-semibold uppercase tracking-[0.24em] text-[#F4EFE6]/70 transition-opacity duration-700 ${
-            ready ? "opacity-0" : "opacity-100"
-          }`}
-        >
-          Sculpting…
-        </div>
+        {/* The site loading screen, held until the studio and his head are built */}
+        <MuseLoadingScreen
+          isLoading={!ready}
+          minDurationMs={2200}
+          label="Sculpting the studio"
+          onPick={(t) => jump(t === "gigs" ? 0.68 : 1)}
+        />
       </div>
     </div>
     <Footer jump={jump} />

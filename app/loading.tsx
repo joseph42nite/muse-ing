@@ -1,9 +1,6 @@
 import MuseLoadingScreen from "@/components/muse-loading-screen"
 
+// Shown while a route's server components load. The screen paints its own studio background.
 export default function Loading() {
-  return (
-    <div className="fixed inset-0 z-[100] bg-[#F4EFE6] text-[#181615] overflow-hidden">
-      <MuseLoadingScreen isLoading={true} />
-    </div>
-  )
+  return <MuseLoadingScreen isLoading />
 }

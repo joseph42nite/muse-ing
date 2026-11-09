@@ -81,7 +81,7 @@ export default function VenuePage() {
 
   return (
     <div className="min-h-screen bg-[#0b0a0e] text-[#F4EFE6]">
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-[#0b0a0e]/90 px-5 py-3.5 backdrop-blur-md sm:px-10">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 glass-bar px-5 py-3.5 sm:px-10">
         <Link href="/" aria-label="Muse-ing home" className="title-x text-[26px] sm:text-[30px]">
           M-
         </Link>

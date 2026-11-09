@@ -28,7 +28,7 @@ The page does not use Framer Motion. All motion comes from one damped scroll val
     <div sticky h-screen>
       <Stage/>                       WebGL canvas (client only, ssr: false)
       <Overlay/>                     DOM copy, gigs, form and header
-      "Sculpting…" loader            fades out once the canvas is ready
+      <MuseLoadingScreen/>           the site loader, held until the canvas is ready
   <Footer/>                          normal document flow after the film
 ```
 
@@ -61,9 +61,10 @@ The camera keyframes are `CAMERA_KEYS` in `components/monkey/store.ts`, calibrat
 ### Scene 1: the title fold
 
 - **Placement:** **MUSE-ING** is drawn on a canvas texture on a plate behind his head, so it sits in the 3D scene rather than the DOM. It spans 96% of the frame width and sits 9% from the top.
+- **Colour:** **MUSE-ING** is cream (`#f4efe6`) with a soft dark drop shadow (`rgba(0,0,0,0.45)`, 60px blur, 18px down), matching the loading screen's title so the handoff from loader to film is seamless. It's cream rather than pure white because the bloom pass (threshold 0.95) would make 1.0 white glow.
 - **Arrival:** the title glitches in letter by letter through block glyphs.
 - **Fold:** as you scroll (`t` 0.005–0.05), "ING" slides into the dash, then the dash slides into "MUSE", leaving **M-** where the word began.
-- **LIVE MUSIC:** cream (`#f4efe6`), 800 weight expanded, 118px on the 2048px canvas with 26px tracking. It stays put while the title folds.
+- **LIVE MUSIC:** ink (`#0b0a0e`), 800 weight expanded, 118px on the 2048px canvas with 26px tracking. It stays put while the title folds.
 - **Exit:** the whole plate fades out over `t` 0.06–0.11.
 
 ### Scene 4: gigs
@@ -164,7 +165,7 @@ The lighting on the monkey is fixed. Restyle the studio with the backdrop, floor
 
 | Token | Value | Use |
 | --- | --- | --- |
-| Cream | `#F4EFE6` | All type, the dots, the menu button, the progress bar, the primary button (`.btn-light`) |
+| Cream | `#F4EFE6` | All type (except the landing's LIVE MUSIC, in ink), the dots, the menu lines, the progress bar, the primary button (`.btn-light`) |
 | White | `#FFFFFF` | Hover states, the smash flash |
 | Ink | `#0b0a0e` / `#070709` | Card and menu panels, page background behind the canvas |
 | Studio red | See the backdrop and floor in section 5 | The scene itself |
@@ -174,12 +175,63 @@ There is no amber or yellow on the landing. Accents and hovers are cream or whit
 
 ---
 
-## 8. Interface around the film
+## 8. Liquid Glass
+
+Muse-ing's controls follow Apple's Liquid Glass: a clear material that floats over the content, lets the colour behind it through, and catches light on its edges. The styles live in `app/globals.css` under `@layer components`, so Tailwind utilities still override position, size and colour.
+
+### Where it goes
+
+Glass is for the **controls and navigation layer** that floats over content. Never put content itself in glass.
+
+| Use glass | Keep solid |
+| --- | --- |
+| The menu button and panel | Content panels (`.card-noir`), gig cards, tables, lists |
+| Header and nav pills (`.pill-dark`) | The cream primary button (`.btn-light`), the one solid call to action |
+| Secondary buttons (`.btn-ghost`) | Page backgrounds, the studio, the footer |
+| Sticky top bars and side rails | Form fields (they stay underline fields) |
+| Sheets and dialogs, mobile drawers, toasts | Long-form text |
+
+### The three strengths
+
+| Class | Look | Use |
+| --- | --- | --- |
+| `.glass` | Clear: a white sheen from 20% to 6% over the blurred backdrop | Small controls over imagery or the studio red: the menu, `.pill-dark`, `.btn-ghost` |
+| `.glass-thick` | Tinted dark (`rgba(16,14,20,0.62)`), blur 30px, saturate 170%, softer highlight | Surfaces that hold text or forms: drawers, notices; admin dialogs use the same recipe |
+| `.glass-bar` | Tinted dark (`rgba(11,10,14,0.6)`), square, a hairline light rim | Sticky top bars and side rails (admin, artist dashboard, venue page) |
+
+### The recipe
+
+Every glass surface has five layers:
+
+1. **Backdrop:** `backdrop-filter: blur(22px) saturate(185%) brightness(1.06)`, so the colour behind (usually the studio red) shows through richer, not greyer.
+2. **Sheen:** a diagonal white gradient over it.
+3. **Specular highlight** (`::before`): a radial white glow on the top-left, where light catches the curve, and a faint one bottom-right.
+4. **Rim** (`::after`): a 1px border masked to the edge, brightest top-left (70%) and bottom-right (38%), nearly clear between.
+5. **Depth:** an inset top highlight, an inner glow, and a long soft drop shadow (`0 24px 60px -18px rgba(0,0,0,0.6)`).
+
+### Motion
+
+- **Spring:** glass moves on `cubic-bezier(0.32, 0.72, 0, 1)`.
+- **Press:** controls grow to 1.04 on hover, with a brighter sheen, and squash to 0.95 on press.
+- **Appearing:** panels grow out of the control that opened them (scale 0.6 → 1, blur 6px → 0, from the button's corner) and shrink back into it.
+- **Menu icon:** the menu's three lines morph into an X.
+
+### Accessibility
+
+- **Contrast:** text on glass is cream at 90% or more. Over busy imagery, use `.glass-thick`.
+- **Focus:** every glass control shows a 2px cream focus ring.
+- **Reduced transparency:** glass becomes a solid dark surface (`rgba(20,18,24,0.96)`) with no blur.
+- **Reduced motion:** springs and scaling turn off and only fades remain.
+
+## 9. Interface around the film
 
 - **Header:**
-  - One cream menu button at the top right: 40px, 28px from the edges on phones and 48px / 40px on desktop.
+  - One menu button at the top right, 28px from the edges on phones and 48px / 40px on desktop. It's the shared `components/site-menu.tsx`, also on the loading screen.
   - A quiet "Live music · Real-time setlists" tag in the centre on desktop.
-  - The menu opens a dark panel with Upcoming gigs, Book or host, Join as artist, All events and Artist login. Artist login lives only here.
+- **Menu:** `components/site-menu.tsx`, a Liquid Glass button and panel (section 8).
+  - Items: Upcoming gigs, Book or host, Join as artist (with a one-line hint on wider screens), a hairline, then All events and Artist login.
+  - On the landing the first three glide the film (`onPick`). Elsewhere they link to `/#gigs`, `/#book` and `/#join`, which the landing glides to on arrival.
+  - It closes on Escape, a click outside, or picking an item.
 - **Bottom bar:**
   - The scene label ("03 / 05 · The strut") and a thin progress bar on the left.
   - "Gig index" on the right.
@@ -196,7 +248,17 @@ There is no amber or yellow on the landing. Accents and hovers are cream or whit
 
 ---
 
-## 9. Responsive rules
+## 10. Loading screen
+
+`components/muse-loading-screen.tsx` is the one loading screen for the whole site: `app/loading.tsx` while a route loads, the live portal's intro, and the landing while the studio and his head are built (`isLoading={!ready}`, label "Sculpting the studio").
+
+- **Scene:** a cut of scene 1. The studio-red backdrop gradient with a floor glow and moving film grain (`.muse-grain`).
+- **Title:** **MUSE-ING** decodes in left to right. Unresolved letters are cream blocks the size of their letter, flickering through the landing's █▓▒░ opacities, so nothing reflows. It then folds to **M-** (USE and ING fade, then close up), with **LIVE MUSIC** under it. The word is sized `clamp(40px, 14vw, 220px)` so it fits in one line at any width.
+- **Chrome:** the three dots, the centre tag and the site menu along the top. A cream hairline progress bar along the bottom, with the label and percentage on the left and Muse-ing's features cycling on the right.
+- **Timing:** decode 0.9 s, fold at 1.35 s, a minimum time on screen (2.2–2.6 s), then a 0.45 s fade. Progress fills to 90% and completes when loading ends. If one loader replaces another within 0.4 s, the new one carries on from the old one's time instead of restarting.
+- Reduced motion shows **M-** straight away with no grain.
+
+## 11. Responsive rules
 
 - **Gutters:** 20px on phones (`px-5`), 32px from `sm` (`px-8`).
 - **Overflow:** no horizontal page scroll at any width. The footer wordmark uses `whitespace-nowrap` and is sized to fit.
@@ -206,7 +268,7 @@ There is no amber or yellow on the landing. Accents and hovers are cream or whit
 
 ---
 
-## 10. Files
+## 12. Files
 
 | File | Role |
 | --- | --- |
@@ -219,16 +281,19 @@ There is no amber or yellow on the landing. Accents and hovers are cream or whit
 | `components/monkey/smoke.tsx` | Cigarette smoke and the exhale |
 | `components/monkey/overlay.tsx` | Header, menu, scene copy, decode titles, gigs, form, bottom bar |
 | `components/monkey/footer.tsx` | Page footer |
+| `components/muse-loading-screen.tsx` | The site loading screen (section 10) |
 | `components/monkey/street.tsx` | An unused cyberpunk street set, kept for later |
-| `app/globals.css` | `.title-x`, `.micro`, `.fine`, `.dots`, `.rise*`, `.pill-dark`, `.card-noir`, `.btn-light`, `.btn-ghost`, `.field-noir` |
+| `components/site-menu.tsx` | The Liquid Glass menu (sections 8 and 9) |
+| `app/globals.css` | `.title-x`, `.micro`, `.fine`, `.dots`, `.rise*`, `.pill-dark`, `.card-noir`, `.btn-light`, `.btn-ghost`, `.field-noir`, `.glass*`, `.muse-grain` |
 
 ---
 
-## 11. Guardrails
+## 13. Guardrails
 
 - Don't change the lights on the monkey.
 - Keep the single black suit; there's no outfit switcher.
 - No amber or yellow on the landing; accents stay cream or white.
+- Liquid Glass is for controls and navigation only, never content. Use the shared classes (section 8) rather than one-off blur styles.
 - The walk must never glide. Anything that moves with the world reads `travel.z`.
 - Keep scenes few and well placed. Add copy inside an existing scene before adding a scroll section.
 - Check every change on phone and desktop widths with no console errors. The page takes 30–50 s to load in the in-app browser.

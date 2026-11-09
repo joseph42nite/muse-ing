@@ -208,23 +208,6 @@
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
-.pill-dark {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 30px;
-  padding: 0 0.85rem;
-  border-radius: 999px;
-  background: rgba(10, 10, 14, 0.82);
-  border: 1px solid rgba(244, 239, 230, 0.12);
-  color: #f4efe6;
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  transition: border-color 0.25s ease, background 0.25s ease;
-}
-.pill-dark:hover {
-  border-color: rgba(244, 239, 230, 0.6);
-}
 
 .eyebrow {
   display: inline-flex;
@@ -304,25 +287,6 @@ a.card-noir:hover {
   transform: translateY(-2px);
   box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  height: 46px;
-  padding: 0 1.4rem;
-  border-radius: 999px;
-  border: 1px solid rgba(244, 239, 230, 0.22);
-  color: #f4efe6;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  transition: background 0.25s ease, border-color 0.25s ease;
-}
-.btn-ghost:hover {
-  background: rgba(244, 239, 230, 0.07);
-  border-color: rgba(244, 239, 230, 0.6);
-}
 
 .field-noir {
   width: 100%;
@@ -347,4 +311,217 @@ a.card-noir:hover {
 }
 .no-scrollbar::-webkit-scrollbar {
   display: none;
+}
+
+/* ---- Loading screen (components/muse-loading-screen.tsx) ---- */
+/* Film grain over the studio red, the same texture the landing's backdrop carries. */
+.muse-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: muse-grain 0.6s steps(3) infinite;
+}
+/* Shift the noise texture, not the layer, so the grain never pokes past the screen edge */
+@keyframes muse-grain {
+  0% { background-position: 0 0; }
+  33% { background-position: -37px 23px; }
+  66% { background-position: 29px -41px; }
+  100% { background-position: 0 0; }
+}
+/* The cycling feature line under the progress bar. */
+@keyframes muse-fade {
+  0% { opacity: 0; transform: translateY(4px); }
+  20%, 80% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .muse-grain { animation: none; }
+}
+
+/* ---- Liquid Glass ----
+   Apple's Liquid Glass, for the controls and navigation that float over content (never the content
+   itself). Three strengths share one recipe: a backdrop blurred and saturated so the colour behind
+   shows through, a specular highlight on the top-left, a bright 1px rim and a soft inner glow.
+     .glass        clear: small controls over imagery or the studio red (menu, .pill-dark, .btn-ghost)
+     .glass-thick  tinted dark: surfaces that hold text and forms (dialogs, drawers, notices)
+     .glass-bar    tinted dark, square: sticky top bars and side rails
+   It lives in the components layer so utilities (position, size, colour) still win. See design.md. */
+@layer components {
+  .glass,
+  .glass-thick,
+  .pill-dark,
+  .btn-ghost {
+    position: relative;
+    isolation: isolate;
+    color: #f4efe6;
+    -webkit-backdrop-filter: blur(22px) saturate(185%) brightness(1.06);
+    backdrop-filter: blur(22px) saturate(185%) brightness(1.06);
+    box-shadow:
+      inset 0 1px 0.5px rgba(255, 255, 255, 0.5),
+      inset 0 -1px 1px rgba(255, 255, 255, 0.1),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      inset 0 10px 30px -18px rgba(255, 255, 255, 0.4),
+      0 24px 60px -18px rgba(0, 0, 0, 0.6),
+      0 2px 8px -2px rgba(0, 0, 0, 0.3);
+  }
+  .glass,
+  .pill-dark,
+  .btn-ghost {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.06) 45%, rgba(255, 255, 255, 0.12) 100%);
+  }
+  .glass-thick {
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.02) 45%, rgba(255, 255, 255, 0.06)),
+      rgba(16, 14, 20, 0.62);
+    -webkit-backdrop-filter: blur(30px) saturate(170%);
+    backdrop-filter: blur(30px) saturate(170%);
+  }
+  /* Specular highlight: light caught on the curved top-left of the glass */
+  .glass::before,
+  .glass-thick::before,
+  .pill-dark::before,
+  .btn-ghost::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 70% at 18% 0%, rgba(255, 255, 255, 0.3), transparent 55%),
+      radial-gradient(90% 60% at 100% 100%, rgba(255, 255, 255, 0.07), transparent 60%);
+  }
+  .glass-thick::before {
+    opacity: 0.55;
+  }
+  /* Edge light: a 1px rim, brightest at the top-left and bottom-right, like light through a lens */
+  .glass::after,
+  .glass-thick::after,
+  .pill-dark::after,
+  .btn-ghost::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: linear-gradient(140deg, rgba(255, 255, 255, 0.7), rgba(255, 255, 255, 0.08) 35%, rgba(255, 255, 255, 0.04) 65%, rgba(255, 255, 255, 0.38));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  .glass-bar {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)),
+      rgba(11, 10, 14, 0.6);
+    -webkit-backdrop-filter: blur(26px) saturate(180%);
+    backdrop-filter: blur(26px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.1),
+      0 12px 30px -20px rgba(0, 0, 0, 0.7);
+  }
+
+  /* Pills: header and nav links over the page (30px) */
+  .pill-dark {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 32px;
+    padding: 0 0.95rem;
+    border-radius: 999px;
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), background 0.25s ease;
+  }
+  /* Secondary buttons beside the cream primary (.btn-light) */
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 46px;
+    padding: 0 1.4rem;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), background 0.25s ease;
+  }
+  .glass-button {
+    transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1), background 0.25s ease;
+  }
+  .pill-dark:hover,
+  .btn-ghost:hover,
+  .glass-button:hover {
+    transform: scale(1.04);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.1) 45%, rgba(255, 255, 255, 0.16));
+  }
+  .pill-dark:active,
+  .btn-ghost:active,
+  .glass-button:active {
+    transform: scale(0.95);
+  }
+  .glass-button:focus-visible,
+  .glass-item:focus-visible,
+  .pill-dark:focus-visible,
+  .btn-ghost:focus-visible {
+    outline: 2px solid rgba(244, 239, 230, 0.85);
+    outline-offset: 2px;
+  }
+
+  /* The site menu (components/site-menu.tsx): three lines that morph into an X, and the panel */
+  .glass-line {
+    position: absolute;
+    left: 0;
+    height: 2px;
+    width: 100%;
+    border-radius: 2px;
+    background: #f4efe6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+    transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
+  }
+  .glass-panel {
+    opacity: 0;
+    transform: scale(0.6) translateY(-8px);
+    filter: blur(6px);
+    pointer-events: none;
+    transition:
+      opacity 0.22s ease,
+      transform 0.45s cubic-bezier(0.32, 0.72, 0, 1),
+      filter 0.3s ease;
+  }
+  .glass-panel-open {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    pointer-events: auto;
+  }
+  .glass-item {
+    color: rgba(244, 239, 230, 0.92);
+    transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .glass-item:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .glass-panel,
+    .glass-line,
+    .glass-button,
+    .pill-dark,
+    .btn-ghost {
+      transition: opacity 0.15s ease;
+    }
+  }
+  /* Reduce transparency: solid dark surfaces, no blur */
+  @media (prefers-reduced-transparency: reduce) {
+    .glass,
+    .glass-thick,
+    .glass-bar,
+    .pill-dark,
+    .btn-ghost {
+      background: rgba(20, 18, 24, 0.96);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
 }

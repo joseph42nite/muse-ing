@@ -303,7 +303,7 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     const w = h * cam.aspect
     const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion)
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(cam.quaternion)
-    // Full width on phones, but capped by the frame height on wide screens: otherwise the dark
+    // Full width on phones, but capped by the frame height on wide screens: otherwise the
     // word runs out into the near-black vignette at the edges and the line under it drops down
     // behind his head. Keep TITLE_MAX_H in step with the overlay's hairline (overlay.tsx).
     const wide = w * 0.96 > h * TITLE_MAX_H
@@ -357,13 +357,13 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     const mR = mL + wM
 
     g.clearRect(0, 0, cv.width, cv.height)
-    // The smaller line tucked under the word, in off-white and widely tracked; it stays put while the word folds
+    // The smaller line tucked under the word, in ink and widely tracked; it stays put while the word folds
     if (sub) {
       g.save()
       g.font = `800 expanded 118px ${anim.current.family}`
       if ("fontStretch" in g) (g as CanvasRenderingContext2D & { fontStretch: string }).fontStretch = "expanded"
       if ("letterSpacing" in g) (g as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing = "26px"
-      g.fillStyle = "#f4efe6"
+      g.fillStyle = "#0b0a0e"
       g.textAlign = "center"
       g.textBaseline = "middle"
       g.fillText(subGlyphs, cv.width / 2, SUB_Y, cv.width * 0.9)
@@ -373,7 +373,12 @@ export function BackTitle({ text, sub = "" }: { text: string; sub?: string }) {
     g.save()
     g.translate(ox, WORD_Y)
     g.scale(k, k)
-    g.fillStyle = "#0c0204"
+    // Cream with a soft dark drop shadow, the same as the loading screen's MUSE-ING. Cream, not pure
+    // white: the bloom pass (threshold 0.95) would make a 1.0 white glow.
+    g.fillStyle = "#f4efe6"
+    g.shadowColor = "rgba(0, 0, 0, 0.45)"
+    g.shadowBlur = 60
+    g.shadowOffsetY = 18
     g.textBaseline = "middle"
     const draw = (i: number, x: number) => g.fillText(glyphs[i], x / k, 0)
     // The letters between the M and the dash, swallowed by the M as it slides over them

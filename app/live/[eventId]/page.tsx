@@ -619,7 +619,7 @@ export default function AudienceLiveGigPage({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Follow ${event.artist_name || "the artist"} on Instagram`}
-      className="micro pointer-events-auto inline-flex shrink-0 items-center gap-[1.4cqw] rounded-full border border-[#F4EFE6]/40 bg-black/25 px-[2.6cqw] py-[1.2cqw] text-[2.1cqw]! text-[#F4EFE6] backdrop-blur-sm transition hover:border-[#F4EFE6]"
+      className="micro pointer-events-auto inline-flex shrink-0 items-center gap-[1.4cqw] glass glass-button rounded-full px-[2.6cqw] py-[1.2cqw] text-[2.1cqw]! text-[#F4EFE6]"
     >
       <InstagramGlyph className="h-[2.8cqw] w-[2.8cqw]" />
       Follow
@@ -654,7 +654,7 @@ export default function AudienceLiveGigPage({
       </div>
 
       {submitSuccess && (
-        <div className="fixed top-5 inset-x-4 z-50 max-w-sm mx-auto px-4 py-3 rounded-2xl border border-white/10 bg-[#121014]/95 text-[#F4EFE6] text-xs font-medium flex items-center justify-between shadow-xl backdrop-blur-md">
+        <div className="fixed top-5 inset-x-4 z-50 max-w-sm mx-auto px-4 py-3 glass-thick rounded-2xl text-[#F4EFE6] text-xs font-medium flex items-center justify-between">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-[#F4EFE6] shrink-0" />
             <span>{submitSuccess}</span>
