@@ -50,7 +50,7 @@ export const metadata: Metadata = {
   // Makes share-image and canonical URLs absolute in production
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
   applicationName: "Muse-ing",
-  title: "Muse-ing — Interactive Live Artists, Hosted Events & Real-Time Setlists",
+  title: "Muse-ing | Interactive Live Artists, Hosted Events & Real-Time Setlists",
   description:
     "Discover live performing artists, explore events hosted currently across venues, scan table QR codes to shape the setlist, or book & host an experience.",
   keywords: [
@@ -62,7 +62,7 @@ export const metadata: Metadata = {
     "table voting",
   ],
   openGraph: {
-    title: "Muse-ing — Interactive Live Music Experience",
+    title: "Muse-ing | Interactive Live Music Experience",
     description:
       "Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications.",
     type: "website",
@@ -71,7 +71,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Muse-ing — Interactive Live Music Experience",
+    title: "Muse-ing | Interactive Live Music Experience",
     description:
       "Connecting independent artists with live venue crowds through real-time setlists, requests, and dedications.",
   },

@@ -3,7 +3,7 @@ import Link from "next/link"
 import { LEGAL } from "@/lib/legal"
 
 export const metadata: Metadata = {
-  title: "Terms & Conditions — Muse-ing",
+  title: "Terms & Conditions | Muse-ing",
   description: "The terms for using Muse-ing to book gigs, request songs, send dedications and tip artists.",
 }
 

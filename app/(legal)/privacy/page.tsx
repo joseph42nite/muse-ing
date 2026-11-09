@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { LEGAL } from "@/lib/legal"
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Muse-ing",
+  title: "Privacy Policy | Muse-ing",
   description: "What personal data Muse-ing collects, why, who it is shared with and how to reach us about it.",
 }
 

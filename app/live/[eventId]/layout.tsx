@@ -43,13 +43,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   if (!gig) {
-    return { title: "Gig not found · Muse-ing", robots: { index: false } }
+    return { title: "Gig not found | Muse-ing", robots: { index: false } }
   }
 
   const artist = gig.artist_name?.trim() || "Live artist"
   const venue = gig.location_name?.trim()
   const when = formatDate(gig.event_date_only || gig.date)
-  const title = `${artist}${venue ? ` live at ${venue}` : " live"} · Muse-ing`
+  const title = `${artist}${venue ? ` live at ${venue}` : " live"} | Muse-ing`
   const description = [
     `${gig.title?.trim() || `${artist} live`}${when ? `, ${when}` : ""}${venue ? ` at ${venue}` : ""}.`,
     `Request songs, vote the setlist, and send ${artist} a dedication from your table.`,

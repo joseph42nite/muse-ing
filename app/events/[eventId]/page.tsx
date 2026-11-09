@@ -40,9 +40,9 @@ function load(eventId: string) {
 export async function generateMetadata({ params }: { params: Promise<{ eventId: string }> }): Promise<Metadata> {
   const { eventId } = await params
   const ev = load(eventId)
-  if (!ev) return { title: "Event not found — Muse-ing" }
+  if (!ev) return { title: "Event not found | Muse-ing" }
   return {
-    title: `${ev.title} — Muse-ing`,
+    title: `${ev.title} | Muse-ing`,
     description: ev.description ?? `Live at ${ev.location_name ?? "a Muse-ing venue"}. Book your table.`,
   }
 }

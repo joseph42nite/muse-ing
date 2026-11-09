@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import { LEGAL } from "@/lib/legal"
 
 export const metadata: Metadata = {
-  title: "Refund & Cancellation Policy — Muse-ing",
+  title: "Refund & Cancellation Policy | Muse-ing",
   description: "When Muse-ing refunds tickets, dedications and tips, and how long refunds take.",
 }
 

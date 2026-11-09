@@ -6,7 +6,7 @@ import Footer from "@/components/monkey/footer"
 import EventsExplorer from "./events-explorer"
 
 export const metadata: Metadata = {
-  title: "Explore Live Events — Muse-ing",
+  title: "Explore Live Events | Muse-ing",
   description:
     "Browse live gigs across cities, filter by date and price, and book your table or tickets in a few taps.",
 }
