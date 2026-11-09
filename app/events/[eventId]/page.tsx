@@ -84,7 +84,7 @@ export default async function EventDetailPage({ params }: { params: Promise<{ ev
       <article className="mx-auto w-full max-w-5xl px-8 sm:px-12 pt-10 sm:pt-14 pb-24">
         <div className="grid gap-10 md:grid-cols-[1.1fr_1fr] md:gap-14">
           <div className="self-start overflow-hidden rounded-2xl bg-[#121110] shadow-[0_24px_60px_-8px_rgba(24,22,21,0.32)]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={ev.artist_avatar || FALLBACK_COVER}
               alt={ev.artist_name ?? ev.title}

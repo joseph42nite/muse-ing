@@ -76,31 +76,48 @@ function smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return 
 const smax = (a, b, k) => -smin(-a, -b, k);
 
 /* The smirk lifts the mouth's left corner (his left, our right: +x). */
-const smirk = x => .1 * smooth(-.1, .38, x);
+const smirk = x => .085 * smooth(-.12, .42, x);
 
 /* A chimp's head: a low skull set back, the forehead sloping away behind a
-   brow shelf, and a snout that juts — the long upper lip out past the nose.
-   Every primitive is blended, never stacked. */
+   brow shelf, a flat triangular primate nose with flared nostril wings and
+   deep oblique nostrils, and a broad arched muzzle with a long upper lip. */
 function headSDF(x, y, z) {
   const ax = Math.abs(x);
-  let d = sdE(x, y, z, 0, .06, -.24, .9, .84, .96);                         /* skull          */
-  d = smin(d, sdE(x, y, z, 0, .36, .22, .62, .26, .5), .2);                 /* sloped brow    */
-  d = smax(d, -sdE(ax, y, z, .99, .2, .1, .2, .26, .34), .18);              /* temples        */
-  d = smin(d, sdE(x, y, z, 0, -.04, .38, .74, .58, .55), .22);              /* face mass      */
-  d = smin(d, sdCap(ax, y, z, .64, .26, .5, 0, .31, .86, .17), .1);         /* brow shelf     */
-  d = smax(d, -sdE(ax, y, z, .29, .1, .88, .19, .12, .15), .07);            /* eye sockets    */
-  d = smin(d, sdE(ax, y, z, .45, -.08, .6, .22, .17, .2), .12);             /* cheekbones     */
-  d = smin(d, sdE(x, y, z, 0, -.42, .78, .44, .38, .5), .18);               /* the snout      */
-  d = smin(d, sdCap(x, y, z, 0, .2, .88, 0, -.06, 1.06, .07), .1);          /* nose bridge    */
-  d = smin(d, sdE(x, y, z, 0, -.1, 1.06, .22, .1, .1), .07);                /* broad flat nose */
-  d = smax(d, -sdE(ax, y, z, .085, -.15, 1.13, .048, .028, .055), .02);     /* flared nostrils */
+  let d = sdE(x, y, z, 0, .08, -.22, .92, .86, .96);                         /* cranium        */
+  d = smin(d, sdE(x, y, z, 0, .38, .22, .64, .28, .52), .2);                 /* sloped forehead*/
+  d = smax(d, -sdE(ax, y, z, .98, .2, .12, .18, .25, .32), .16);             /* temples        */
+  d = smin(d, sdE(x, y, z, 0, -.02, .38, .76, .58, .55), .22);               /* mid-face mass  */
+  d = smin(d, sdCap(ax, y, z, .62, .26, .52, 0, .31, .88, .17), .1);         /* brow ridge     */
+  d = smax(d, -sdE(ax, y, z, .28, .11, .88, .19, .12, .15), .07);            /* eye sockets    */
+  d = smin(d, sdE(ax, y, z, .46, -.07, .62, .24, .18, .22), .13);            /* cheekbones     */
+
+  /* broad barrel muzzle */
+  d = smin(d, sdE(x, y, z, 0, -.40, .79, .49, .39, .51), .18);
+
+  /* primate nose: recessed bridge saddle under the visor, broad flat triangular
+     nasal tip & septum, and thick rounded nostril wings (alae) on either side */
+  d = smax(d, -sdE(x, y, z, 0, .06, 1.02, .16, .055, .06), .04);             /* recessed bridge saddle */
+  d = smin(d, sdCap(x, y, z, 0, .14, .88, 0, -.02, 1.03, .068), .075);       /* low nasal bridge */
+  d = smin(d, sdE(x, y, z, 0, -.09, 1.09, .14, .095, .09), .06);             /* broad nasal dorsum */
+  d = smin(d, sdCap(x, y, z, 0, -.01, 1.04, 0, -.16, 1.15, .060), .05);      /* septum column  */
+  d = smin(d, sdCap(ax, y, z, .055, -.01, 1.05, .175, -.15, 1.07, .076), .055); /* flared nostril wings */
+  d = smin(d, sdE(ax, y, z, .185, -.145, 1.04, .072, .065, .07), .045);      /* outer alar rim */
+
+  /* deep, obliquely slanted teardrop nostrils */
+  const nx = (ax - .090) * .90 + (y + .122) * .42;
+  const ny = -(ax - .090) * .42 + (y + .122) * .90;
+  const nz = z - 1.135;
+  d = smax(d, -sdE(nx, ny, nz, 0, 0, 0, .046, .062, .080), .018);            /* nostril cavities*/
+
+  /* philtrum & arched upper lip barrel */
   const ly = y - smirk(x);
-  d = smin(d, sdE(x, ly, z, 0, -.42, 1.08, .36, .22, .22), .08);            /* long upper lip */
-  d = smin(d, sdE(x, ly, z, 0, -.72, 1.06, .3, .1, .19), .06);              /* lower lip      */
-  d = smax(d, -sdCap(ax, ly, z, .33, -.63, 1.02, 0, -.63, 1.27, .018), .03); /* the lip line  */
-  d = smin(d, sdE(x, y, z, 0, -.74, .58, .5, .32, .48), .2);                /* chin and jaw   */
-  d = smin(d, sdCap(x, y, z, 0, -.75, -.1, 0, -1.7, -.12, .52), .3);        /* neck           */
-  return Math.max(d, -(y + 1.6));
+  d = smin(d, sdE(x, ly, z, 0, -.41, 1.09, .41, .24, .24), .09);             /* long upper lip */
+  d = smax(d, -sdCap(0, y, z, 0, -.20, 1.16, 0, -.42, 1.24, .022) - ax * .45, .025); /* philtrum groove */
+  d = smin(d, sdE(x, ly, z, 0, -.70, 1.05, .34, .11, .21), .06);             /* lower lip      */
+  d = smax(d, -sdCap(ax, ly, z, .36, -.60, .98, 0, -.60, 1.28, .020), .028); /* mouth cleft    */
+  d = smin(d, sdE(x, y, z, 0, -.76, .60, .50, .32, .48), .2);                /* chin and jaw   */
+  d = smin(d, sdCap(x, y, z, 0, -.75, -.08, 0, -1.75, -.10, .44), .24);      /* neck           */
+  return Math.max(d, -(y + 1.65));
 }
 
 /* An ear, in its own frame: a cup across x. The bowl faces +x and is
@@ -108,21 +125,23 @@ function headSDF(x, y, z) {
    back is a shallow dome. Built as a surface, not projected — a thin cup
    is the one shape a star-projection cannot see into. */
 function earGeometry() {
-  const NR = 28, NT = 72, RY = .42, RZ = .33;
+  const NR = 28, NT = 72, RY = .38, RZ = .29;
   const front = r => {
-    const rim = .85;
-    let x = r < rim ? .045 - .07 * (1 - (r / rim) * (r / rim)) : .045 * Math.cos((r - rim) / (1 - rim) * Math.PI / 2);
+    const rim = .82;
+    let x = r < rim ? .048 - .085 * (1 - (r / rim) * (r / rim)) : .048 * Math.cos((r - rim) / (1 - rim) * Math.PI / 2);
     return x;
   };
-  const back = r => -.035 * Math.sqrt(Math.max(0, 1 - r * r));
+  const back = r => -.038 * Math.sqrt(Math.max(0, 1 - r * r));
   const P = [], I = [];
   const vert = (r, th, isFront) => {
     const sy = Math.sin(th), cz = Math.cos(th);
-    /* a heavier lobe below, a flatter top */
-    const ry = RY * (sy < 0 ? 1.06 : .96), y = ry * r * sy, z = RZ * r * cz;
+    const ry = RY * (sy < 0 ? 1.08 : .95), y = ry * r * sy, z = RZ * r * cz;
     let x = isFront ? front(r) : back(r);
-    /* antihelix: a ridge inside the rim, on the back half of the bowl */
-    if (isFront) x += .018 * Math.exp(-Math.pow((r - .62) / .08, 2)) * smooth(.2, -.6, cz);
+    /* antihelix & tragus folds inside the bowl */
+    if (isFront) {
+      x += .022 * Math.exp(-Math.pow((r - .58) / .09, 2)) * smooth(.3, -.65, cz);
+      x += .020 * Math.exp(-Math.pow((r - .42) / .10, 2)) * smooth(-.1, .55, cz) * smooth(.1, -.4, sy);
+    }
     P.push(x, y, z);
   };
   for (const f of [true, false]) {
@@ -174,13 +193,14 @@ function projectSphere(sdf, W, H, o, tMax) {
    point on the sculpted surface through the projection's depth grid, so
    each wrinkle is placed in head space, where it was designed. */
 function skinMask(x, y, z) {
-  const front = smooth(.2, .45, z);
-  /* the brow's edge wanders, and fades over a wider band than the cheeks */
-  const top = smooth(.3, .52, y);
-  const upper = Math.hypot(x / .74, (y - .12) / .5) + (vnoise(x * 7, y * 7, 4.4) - .5) * .16 * top;
-  const lower = Math.hypot(x / .5, (y + .5) / .42);
-  const e = Math.min(upper, lower);
-  return (1 - smooth(lerp(.8, .64, top), lerp(1.05, 1.14, top), e)) * front;
+  const front = smooth(.18, .46, z);
+  const top = smooth(.26, .50, y);
+  const noise = (vnoise(x * 7, y * 7, 4.4) - .5) * .12;
+  /* smooth hourglass facial mask blending brow/cheekbones into the muzzle without a sharp corner */
+  const upper = Math.hypot(x / .68, (y - .12) / .46);
+  const lower = Math.hypot(x / .48, (y + .44) / .44);
+  const e = smin(upper, lower, .34) + noise * (.4 + .6 * top);
+  return (1 - smooth(lerp(.76, .64, top), lerp(1.02, 1.10, top), e)) * front;
 }
 
 function paintSkin(proj, W, H, o, TW, TH) {
@@ -206,83 +226,111 @@ function paintSkin(proj, W, H, o, TW, TH) {
       const k = r * TW + c, p = k * 4;
 
       const m = skinMask(x, y, z);
-      let h = 0, cav = 0, rg = .9;
+      let h = 0, cav = 0, rg = .88;
 
       /* fur ground: streaks combed down the head, under the shells */
       const streak = hash3((x * 70) | 0, (y * 9 + z * 6) | 0, (z * 70) | 0);
-      const hf = (streak - .5) * .35;
+      const hf = (streak - .5) * .32;
 
       if (m > .001) {
         let w = 0;
         /* forehead furrows above the visor, bowed with the brow */
-        const fh = (y - .36 + .2 * x * x) * 15;
-        w += .42 * crease(fh, .14) * smooth(.34, .4, y) * (1 - smooth(.6, .7, y)) * (1 - smooth(.3, .56, ax))
+        const fh = (y - .35 + .22 * x * x) * 16;
+        w += .48 * crease(fh, .15) * smooth(.31, .37, y) * (1 - smooth(.58, .68, y)) * (1 - smooth(.32, .56, ax))
           * (.55 + .45 * vnoise(x * 6, y * 2, 3.1));
-        /* folds ringing the eyes, below the visor line */
-        const ro = Math.hypot(ax - .29, (y - .13) / .85) + (vnoise(x * 9, y * 9, 1.3) - .5) * .05;
-        w += .24 * crease((ro - .17) * 15, .17) * smooth(.17, .21, ro) * (1 - smooth(.3, .38, ro)) * smooth(.1, .0, y)
-          * (.4 + .6 * vnoise(x * 5, y * 3, 7.7));
+        /* concentric bags & folds ringing the eyes and upper cheeks below the visor */
+        const ro = Math.hypot((ax - .27) * 1.1, (y - .11) / .82) + (vnoise(x * 9, y * 9, 1.3) - .5) * .045;
+        w += .36 * crease((ro - .15) * 18, .17) * smooth(.14, .19, ro) * (1 - smooth(.34, .44, ro)) * smooth(.06, -.02, y)
+          * (.45 + .55 * vnoise(x * 5, y * 3, 7.7));
         /* crow's feet out of the outer corners */
-        const cr = Math.hypot(ax - .6, y - .12), ca = Math.atan2(y - .12, ax - .6);
-        w += .3 * crease(ca * 2.4, .16) * smooth(.03, .08, cr) * (1 - smooth(.16, .26, cr));
+        const cr = Math.hypot(ax - .58, y - .10), ca = Math.atan2(y - .10, ax - .58);
+        w += .32 * crease(ca * 2.6, .16) * smooth(.03, .08, cr) * (1 - smooth(.16, .26, cr));
         /* across the nose bridge */
-        w += .3 * crease(y * 34, .16) * (1 - smooth(.06, .12, ax)) * smooth(.16, .2, y) * (1 - smooth(.3, .36, y));
-        /* fine horizontal lines across the long upper lip */
-        const fm = (y + .2 + .3 * x * x) * 16;
-        w += .22 * crease(fm + (vnoise(x * 6, y * 4, 2.2) - .5) * 1.2, .15) * (.35 + .65 * vnoise(x * 4.5, y * 2, 9.4))
-          * smooth(-.58, -.52, y) * (1 - smooth(-.26, -.2, y)) * (1 - smooth(.24, .38, ax));
-        /* a soft groove down the middle of it */
-        w += .14 * Math.exp(-Math.pow(x / .04, 2)) * smooth(-.58, -.5, y) * (1 - smooth(-.24, -.18, y));
-        /* nasolabial folds: from the nose wings round to the mouth corners */
-        const nl = Math.hypot(ax - .78, y + .36);
-        w += .5 * Math.exp(-Math.pow((nl - .56) / .04, 2)) * smooth(-.72, -.64, y) * (1 - smooth(-.16, -.1, y));
-        /* lip lines, fine and vertical, on the lips only */
+        w += .28 * crease(y * 34, .16) * (1 - smooth(.07, .14, ax)) * smooth(-.02, .05, y) * (1 - smooth(.22, .28, y));
+        /* deep weathered vertical/radial creases fanning down the long chimpanzee upper lip */
+        const lipFan = (x / (.78 - (y + .38) * .45)) * 22 + (vnoise(x * 8, y * 5, 6.1) - .5) * .9;
+        w += .34 * crease(lipFan, .17) * (.45 + .55 * vnoise(x * 5, y * 3, 4.2))
+          * smooth(-.60, -.52, y) * (1 - smooth(-.20, -.14, y)) * (1 - smooth(.28, .42, ax)) * smooth(.88, 1.02, z);
+        /* subtle horizontal tension creases across the upper muzzle */
+        const fm = (y + .22 + .28 * x * x) * 15;
+        w += .18 * crease(fm + (vnoise(x * 6, y * 4, 2.2) - .5) * 1.1, .15) * (.35 + .65 * vnoise(x * 4.5, y * 2, 9.4))
+          * smooth(-.54, -.46, y) * (1 - smooth(-.22, -.16, y)) * (1 - smooth(.26, .40, ax));
+        /* philtrum groove down the middle of the upper lip */
+        w += .20 * Math.exp(-Math.pow(x / .036, 2)) * smooth(-.56, -.46, y) * (1 - smooth(-.20, -.15, y));
+        /* prominent nasolabial folds sweeping from nostril wings around the muzzle */
+        const nl = Math.hypot(ax - .74, y + .34);
+        w += .58 * Math.exp(-Math.pow((nl - .54) / .038, 2)) * smooth(-.70, -.58, y) * (1 - smooth(-.08, -.02, y));
+        /* fine vertical lip lines on the lips */
         const ly = y - smirk(x);
-        const lips = (1 - smooth(.28, .38, ax)) * smooth(-.84, -.78, ly) * (1 - smooth(-.56, -.52, ly)) * smooth(.95, 1.05, z);
-        w += .22 * crease(x * 58 + .4 * Math.sin(ly * 30), .2) * lips;
-        /* the smirk folds the raised corner */
-        w += .45 * Math.exp(-Math.pow((Math.hypot(x - .37, y + .58) - .06) / .016, 2)) * smooth(.25, .32, x);
-        /* the chin's orange-peel */
-        const chin = smooth(-.82, -.9, y) * (1 - smooth(.25, .4, ax));
+        const lips = (1 - smooth(.30, .40, ax)) * smooth(-.82, -.75, ly) * (1 - smooth(-.52, -.48, ly)) * smooth(.94, 1.04, z);
+        w += .26 * crease(x * 54 + .35 * Math.sin(ly * 30), .2) * lips;
+        /* smirk corner dimple fold */
+        w += .48 * Math.exp(-Math.pow((Math.hypot(x - .38, y + .55) - .055) / .018, 2)) * smooth(.24, .32, x);
+        /* chin pebble texture */
+        const chin = smooth(-.78, -.88, y) * (1 - smooth(.26, .42, ax));
         const bumps = fbm3(x * 26, y * 26, z * 26, 3);
 
-        const pores = vnoise(x * 150, y * 150, z * 150) - .5;
+        const pores = vnoise(x * 155, y * 155, z * 155) - .5;
         const broad = fbm3(x * 7, y * 7, z * 7, 3) - .5;
 
-        h = -w * .5 + pores * .06 + broad * .12 + (bumps - .5) * .25 * chin;
-        cav = sat(w * .9);
+        h = -w * .56 + pores * .065 + broad * .12 + (bumps - .5) * .22 * chin;
+        cav = sat(w * .95);
 
-        /* roughness: oilier on the nose and lips, drier in the creases */
-        const nose = Math.exp(-Math.pow(Math.hypot(x / 1.4, (y + .1) / .6) / .17, 2));
-        rg = .52 + cav * .2 - nose * .14 - lips * .3 + pores * .06;
+        /* roughness: warm leathery sheen on nose wings, cheekbones & lips; drier in creases */
+        const noseWing = Math.exp(-Math.pow(Math.hypot(x / 1.2, (y + .10) / .7) / .18, 2));
+        const cheekHi = Math.exp(-Math.pow(Math.hypot(ax - .36, y + .06) / .22, 2));
+        rg = .48 + cav * .24 - noseWing * .14 - cheekHi * .10 - lips * .22 + pores * .06;
 
-        h = lerp(hf, h, m);
-        rg = lerp(.9, rg, m);
+        const skinBlend = smooth(.12, .52, m);
+        h = lerp(hf, h, skinBlend);
+        rg = lerp(.88, rg, skinBlend);
       } else {
         h = hf;
       }
       height[k] = h;
 
-      /* albedo: graphite skin, darker in every crease, darker nose and
-         lips; near-black fur with a little grey in the streaks */
-      const fv = 12 + (streak - .5) * 12;
-      let sr = fv, sg = fv, sb = fv + 2;
+      /* albedo: warm weathered bronze-brown chimpanzee skin (like Panel 1 reference),
+         deep umber in every wrinkle crease, dark interior inside the nostrils,
+         feathered seamlessly into charcoal-brown fur at the hairline */
+      const fv = 13 + (streak - .5) * 11;
+      let sr = fv + 1, sg = fv, sb = fv;
       if (m > .001) {
-        const mottle = fbm3(x * 4, y * 4, z * 4, 2);
-        let kr = 66 + (mottle - .5) * 20, kg = 65 + (mottle - .5) * 20, kb = 70 + (mottle - .5) * 18;
-        const dark = 1 - .6 * cav;
-        kr *= dark; kg *= dark; kb *= dark;
-        const nosePad = Math.exp(-Math.pow(Math.hypot(x / 1.5, (y + .1) / .6) / .16, 2));
-        kr = lerp(kr, 32, nosePad * .7); kg = lerp(kg, 31, nosePad * .7); kb = lerp(kb, 36, nosePad * .7);
+        const mottle = fbm3(x * 4.5, y * 4.5, z * 4.5, 3);
+        let kr = 116 + (mottle - .5) * 24;
+        let kg = 84 + (mottle - .5) * 18;
+        let kb = 66 + (mottle - .5) * 14;
+        /* highlight warmth on muzzle bridge and upper lip */
+        const muzzleWarm = Math.exp(-Math.pow(Math.hypot(x / .42, (y + .30) / .34), 2)) * smooth(.9, 1.08, z);
+        kr += muzzleWarm * 14; kg += muzzleWarm * 9; kb += muzzleWarm * 5;
+
+        /* deep umber creases */
+        const dark = 1 - .64 * cav;
+        kr *= dark; kg *= dark * .95; kb *= dark * .90;
+
+        /* deep shadow inside the oblique nostril openings */
+        const nx = (ax - .090) * .90 + (y + .122) * .42;
+        const ny = -(ax - .090) * .42 + (y + .122) * .90;
+        const nostrilCav = Math.exp(-(nx * nx / (.044 * .044) + ny * ny / (.060 * .060))) * smooth(1.04, 1.11, z);
+        kr = lerp(kr, 12, nostrilCav * .94);
+        kg = lerp(kg, 9, nostrilCav * .94);
+        kb = lerp(kb, 8, nostrilCav * .94);
+
         const ly2 = y - smirk(x);
-        const lipTone = (1 - smooth(.28, .38, ax)) * smooth(-.84, -.78, ly2) * (1 - smooth(-.58, -.54, ly2));
-        kr = lerp(kr, 40, lipTone * .6); kg = lerp(kg, 38, lipTone * .6); kb = lerp(kb, 44, lipTone * .6);
-        /* the line where the lips meet, dark, following the smirk */
-        const mline = Math.exp(-Math.pow((ly2 + .63) / .014, 2)) * (1 - smooth(.3, .37, ax)) * smooth(.95, 1.05, z);
-        kr *= 1 - .65 * mline; kg *= 1 - .65 * mline; kb *= 1 - .65 * mline;
-        const sock = Math.exp(-Math.pow(Math.hypot(ax - .29, (y - .12) / .7) / .2, 2));
-        kr *= 1 - .35 * sock; kg *= 1 - .35 * sock; kb *= 1 - .35 * sock;
-        sr = lerp(fv, kr, m); sg = lerp(fv, kg, m); sb = lerp(fv + 2, kb, m);
+        const lipTone = (1 - smooth(.30, .40, ax)) * smooth(-.82, -.75, ly2) * (1 - smooth(-.54, -.50, ly2));
+        kr = lerp(kr, 96, lipTone * .45); kg = lerp(kg, 66, lipTone * .45); kb = lerp(kb, 56, lipTone * .45);
+
+        /* the dark mouth cleft following the smirk */
+        const mline = Math.exp(-Math.pow((ly2 + .60) / .015, 2)) * (1 - smooth(.32, .39, ax)) * smooth(.94, 1.04, z);
+        kr *= 1 - .78 * mline; kg *= 1 - .78 * mline; kb *= 1 - .78 * mline;
+
+        const sock = Math.exp(-Math.pow(Math.hypot(ax - .28, (y - .11) / .7) / .2, 2));
+        kr *= 1 - .38 * sock; kg *= 1 - .38 * sock; kb *= 1 - .38 * sock;
+
+        /* feather skin color only AFTER fur shell density has dropped to zero so no black dots appear on tan skin */
+        const skinColorBlend = smooth(.32, .68, m);
+        sr = lerp(fv + 1, kr, skinColorBlend);
+        sg = lerp(fv, kg, skinColorBlend);
+        sb = lerp(fv, kb, skinColorBlend);
       }
       albedo[p]     = clamp(sr, 0, 255);
       albedo[p + 1] = clamp(sg, 0, 255);
@@ -292,15 +340,13 @@ function paintSkin(proj, W, H, o, TW, TH) {
       const rv = clamp(rg, .05, 1) * 255;
       rough[p] = rough[p + 1] = rough[p + 2] = rv; rough[p + 3] = 255;
 
-      /* fur: R density, G length — longer on the crown and the beard */
-      const len = .45 + .55 * smooth(.35, .85, y) + .45 * smooth(-.35, -.8, y) * (1 - smooth(.6, .9, z));
-      /* the hairline: hairs thin out and shorten across a wide band,
-         the last few spilling onto the bare skin */
-      const dens = 1 - smooth(.1, .78, m);
-      const edge = .3 + .7 * (1 - smooth(0, .55, m));
+      /* fur: R density drops to 0 before skin turns tan (m > .38) and below y = -1.00 inside shirt collar */
+      const len = .48 + .48 * smooth(.32, .82, y) + .42 * smooth(-.32, -.78, y) * (1 - smooth(.65, .95, z));
+      const dens = (1 - smooth(.06, .38, m)) * (1 - smooth(-1.00, -1.24, y));
+      const edge = .20 + .80 * (1 - smooth(.02, .36, m));
       fur[p] = sat(dens) * 255;
       fur[p + 1] = sat(len * edge) * 255;
-      fur[p + 2] = sat(smooth(.32, .52, y) * smooth(.15, .45, z)) * 255; fur[p + 3] = 255;
+      fur[p + 2] = sat(smooth(.28, .50, y) * smooth(.10, .45, z)) * 255; fur[p + 3] = 255;
     }
   }
 
@@ -457,18 +503,18 @@ function buildHead(envMap) {
 function buildEars(envMap) {
   const geo = earGeometry();
   const mat = new THREE.MeshPhysicalMaterial({
-    color: hdr(.045, .043, .05), roughness: .68, metalness: 0, clearcoat: .04, clearcoatRoughness: .5,
+    color: hdr(.085, .052, .036), roughness: .62, metalness: 0, clearcoat: .08, clearcoatRoughness: .45,
     normalMap: poreMap(256), normalScale: new THREE.Vector2(1.1, 1.1),
-    envMap: envMap, envMapIntensity: .2,
+    envMap: envMap, envMapIntensity: .22,
     side: THREE.DoubleSide
   });
   const g = new THREE.Group();
   [-1, 1].forEach(s => {
     const e = new THREE.Mesh(geo, mat);
-    /* at eye level, standing out from the skull, the bowl turned forward */
-    e.position.set(s * .98, .1, -.04);
-    e.rotation.set(0, s * .55, s * -.12);
-    e.scale.set(s * 1.05, 1.05, 1.05);
+    /* angled forward and outward like true chimpanzee pinnae so the bowl is visible from front & 3/4 views */
+    e.position.set(s * .95, .07, -.03);
+    e.rotation.set(-.05, s * 1.08, s * -.12);
+    e.scale.set(s * 1.04, 1.06, 1.02);
     e.castShadow = e.receiveShadow = true;
     g.add(e);
   });
@@ -485,7 +531,7 @@ const FUR_VS = [
   '  vec4 f = texture2D(tFur, uv);',
   '  float len = uLen * (0.25 + f.g);',
   '  vec3 p = muzzleDeform(position) + normal * len * uLevel;',
-  '  vec3 lie = normalize(mix(vec3(0.0, -1.0, -0.45), vec3(0.0, 0.25, -1.0), f.b));',  /* down, or back over the brow */
+  '  vec3 lie = normalize(mix(vec3(0.0, -0.95, -0.55), vec3(0.0, 0.15, -1.0), f.b));',
   '  p += lie * len * uLevel * uLevel * uDroop;',
   '  vec4 w = modelMatrix * vec4(p, 1.0);',
   '  vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vDens = f.r;',
@@ -498,27 +544,27 @@ const FUR_FS = [
   'varying vec2 vUv; varying vec3 vN; varying vec3 vW; varying float vDens;',
   'float hash(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }',
   'void main(){',
-  '  if (vDens < 0.02) discard;',
+  '  if (vDens < 0.03) discard;',
   '  vec2 g = vUv * uRep;',
   '  vec2 cell = floor(g); vec2 fr = fract(g) - 0.5;',
-  '  fr += (vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5) * 0.5;',   /* break the lattice */
-  '  if (hash(cell + 11.3) > vDens) discard;',                         /* sparse at the hairline */
+  '  fr += (vec2(hash(cell + 3.1), hash(cell + 7.7)) - 0.5) * 0.52;',
+  '  if (hash(cell + 11.3) > smoothstep(0.0, 0.85, vDens)) discard;',
   '  float h = hash(cell);',
   '  if (uGuard > 0.5) {',
-  '    if (hash(cell + 23.1) < 0.86) discard;',                         /* one in seven is a guard hair */
+  '    if (hash(cell + 23.1) < 0.84) discard;',
   '    h = 0.45 + 0.55 * h;',
   '  } else {',
-  '    h *= 0.6 + 0.4 * hash(floor(cell / 6.0) + 5.0);',                /* clumps */
+  '    h *= 0.65 + 0.35 * hash(floor(cell / 5.0) + 5.0);',
   '  }',
-  '  if (h < uLevel) discard;',                                        /* taller hairs survive */
-  '  float rad = uRad * (1.0 - uLevel * 0.85) * mix(0.3, 1.0, smoothstep(0.0, 0.7, vDens));',  /* fine at the hairline */
-  '  if (dot(fr, fr) > rad * rad) discard;',                           /* and taper */
+  '  if (h < uLevel) discard;',
+  '  float rad = uRad * (1.0 - uLevel * 0.82) * mix(0.22, 1.0, smoothstep(0.05, 0.75, vDens));',
+  '  if (dot(fr, fr) > rad * rad) discard;',
   '  vec3 N = normalize(vN); vec3 V = normalize(cameraPosition - vW);',
-  '  float diff = pow(clamp(dot(N, uKeyDir) * 0.5 + 0.5, 0.0, 1.0), 2.0);',
-  '  float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.4);',
-  '  vec3 base = mix(uRoot, uTip, pow(uLevel, 1.3));',
-  '  vec3 c = base * (uAmb + uKey * diff) + uRim * rim * pow(uLevel, 1.4);',
-  '  c *= mix(0.4, 1.0, uLevel);',                                     /* self-shadow in the coat */
+  '  float diff = pow(clamp(dot(N, uKeyDir) * 0.5 + 0.5, 0.0, 1.0), 1.8);',
+  '  float rim = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.2);',
+  '  vec3 base = mix(uRoot, uTip, pow(uLevel, 1.25));',
+  '  vec3 c = base * (uAmb + uKey * diff) + uRim * rim * pow(uLevel, 1.35);',
+  '  c *= mix(0.42, 1.0, uLevel);',
   '  gl_FragColor = vec4(c, 1.0);',
   '}'
 ].join('\n');
@@ -528,7 +574,7 @@ function shellGroup(NS, own, order) {
   const shared = Object.assign({
     tFur: { value: HEAD.furTex },
     uKeyDir: { value: new THREE.Vector3(-.55, .7, .45).normalize() },
-    uKey: { value: hdr(1.25, 1.25, 1.3) }, uAmb: { value: hdr(.07, .07, .08) },
+    uKey: { value: hdr(1.3, 1.3, 1.38) }, uAmb: { value: hdr(.08, .08, .09) },
     uDraw: HEAD.deform.uDraw, uPuff: HEAD.deform.uPuff
   }, own);
   for (let i = 0; i < NS; i++) {
@@ -545,68 +591,71 @@ function shellGroup(NS, own, order) {
 function buildFur() {
   const g = new THREE.Group();
   g.add(shellGroup(28, {
-    uLen: { value: .07 }, uDroop: { value: .45 }, uRep: { value: new THREE.Vector2(600, 300) },
-    uGuard: { value: 0 }, uRad: { value: .62 },
-    uRim: { value: hdr(.45, .45, .5) }, uRoot: { value: hdr(.006, .006, .007) }, uTip: { value: hdr(.045, .045, .05) }
+    uLen: { value: .065 }, uDroop: { value: .55 }, uRep: { value: new THREE.Vector2(920, 460) },
+    uGuard: { value: 0 }, uRad: { value: .48 },
+    uRim: { value: hdr(.52, .54, .60) }, uRoot: { value: hdr(.007, .007, .008) }, uTip: { value: hdr(.055, .055, .062) }
   }, 1));
   g.add(shellGroup(26, {
-    uLen: { value: .17 }, uDroop: { value: 1.15 }, uRep: { value: new THREE.Vector2(340, 170) },
-    uGuard: { value: 1 }, uRad: { value: .2 },
-    uRim: { value: hdr(1.3, 1.3, 1.4) }, uRoot: { value: hdr(.012, .012, .014) }, uTip: { value: hdr(.42, .42, .46) }
+    uLen: { value: .14 }, uDroop: { value: 1.25 }, uRep: { value: new THREE.Vector2(480, 240) },
+    uGuard: { value: 1 }, uRad: { value: .19 },
+    uRim: { value: hdr(1.45, 1.48, 1.6) }, uRoot: { value: hdr(.015, .015, .018) }, uTip: { value: hdr(.46, .47, .52) }
   }, 40));
   return g;
 }
 
-/* ------------------------------------------- wisps: the backlit strays */
-/* The reference's tell: fine silver hairs standing proud of the coat, thick
-   along the jaw and the edge of the face, lifting off the crown. Drawn as
-   one-pixel lines, dark at the root and silver at the tip. */
+/* ------------------------------------------- wisps: swept-back silver strands */
 function buildWisps() {
   const pos = HEAD.geo.attributes.position, nrm = HEAD.geo.attributes.normal;
   const rnd = mulberry32(41), pts = [], col = [];
   const p = new THREE.Vector3(), n = new THREE.Vector3(), d = new THREE.Vector3(), flow = new THREE.Vector3();
-  const counts = { beard: 0, cheek: 0, crown: 0 }, want = { beard: 360, cheek: 220, crown: 200 };
-  for (let tries = 0; tries < 200000; tries++) {
+  const counts = { beard: 0, cheek: 0, crown: 0 }, want = { beard: 420, cheek: 280, crown: 260 };
+  for (let tries = 0; tries < 240000; tries++) {
     if (counts.beard >= want.beard && counts.cheek >= want.cheek && counts.crown >= want.crown) break;
     const i = (rnd() * pos.count) | 0;
     p.fromBufferAttribute(pos, i); n.fromBufferAttribute(nrm, i);
     const m = skinMask(p.x, p.y, p.z);
     let kind = null;
-    if (p.y < -.45 && p.y > -1.2 && p.z > -.2 && m < .3) kind = 'beard';
-    else if (p.y > -.45 && p.y < .55 && p.z > .05 && m > .02 && m < .5) kind = 'cheek';
-    else if (p.y > .55 && m < .2) kind = 'crown';
+    if (p.y < -.42 && p.y > -1.08 && p.z > -.15 && m < .35) kind = 'beard';
+    else if (p.y > -.42 && p.y < .48 && p.z > .02 && m > .02 && m < .55) kind = 'cheek';
+    else if (p.y > .42 && m < .28) kind = 'crown';
     if (!kind || counts[kind] >= want[kind]) continue;
     counts[kind]++;
 
-    /* combed: along the surface, down and back, lifted off it a little */
-    flow.set(0, -1, -.4); flow.addScaledVector(n, -flow.dot(n)).normalize();
-    const lift = kind === 'crown' ? 1.1 : kind === 'cheek' ? .75 : .5;
-    d.copy(flow).multiplyScalar(kind === 'crown' ? .3 : 1).addScaledVector(n, lift);
-    d.x += (rnd() - .5) * .5; d.y += (rnd() - .5) * .3 + (kind === 'crown' ? .4 : 0); d.z += (rnd() - .5) * .4;
+    /* combed naturally along the surface contour: swept back over the crown,
+       down and back along the cheeks and jawline beard — no vertical spikes */
+    if (kind === 'crown') {
+      flow.set(Math.sign(p.x) * .25, -.15, -.95).normalize();
+    } else if (kind === 'cheek') {
+      flow.set(Math.sign(p.x) * .20, -.85, -.48).normalize();
+    } else {
+      flow.set(-Math.sign(p.x) * .12, -.82, -.55).normalize();
+    }
+    flow.addScaledVector(n, -flow.dot(n)).normalize();
+    const lift = kind === 'crown' ? .22 : kind === 'cheek' ? .26 : .20;
+    d.copy(flow).addScaledVector(n, lift);
+    d.x += (rnd() - .5) * .22; d.y += (rnd() - .5) * .18; d.z += (rnd() - .5) * .22;
     d.normalize();
-    const len = kind === 'beard' ? .14 + rnd() * .2 : kind === 'cheek' ? .08 + rnd() * .14 : .1 + rnd() * .18;
-    const segs = 8, curl = (rnd() - .5) * .3;
-    const q = p.clone().addScaledVector(n, .015);
-    const silver = .45 + rnd() * .55;
+    const len = kind === 'beard' ? .085 + rnd() * .095 : kind === 'cheek' ? .065 + rnd() * .085 : .08 + rnd() * .10;
+    const segs = 7, curl = (rnd() - .5) * .18;
+    const q = p.clone().addScaledVector(n, .008);
+    const silver = .38 + rnd() * .48;
     for (let s = 0; s < segs; s++) {
       const a = q.clone(), t0 = s / segs, t1 = (s + 1) / segs;
-      d.y -= kind === 'crown' ? .045 : .07; d.x += curl * .12; d.normalize();
+      /* curve back toward the surface tangent so strands hug the silhouette */
+      d.lerp(flow, .28); d.y -= .03; d.x += curl * .08; d.normalize();
       q.addScaledVector(d, len / segs);
       pts.push(a.x, a.y, a.z, q.x, q.y, q.z);
-      const c0 = lerp(.04, silver, t0 * t0), c1 = lerp(.04, silver, t1 * t1);
-      col.push(c0, c0, c0 * 1.05, c1, c1, c1 * 1.05);
+      const c0 = lerp(.03, silver, t0 * t0), c1 = lerp(.03, silver, t1 * t1);
+      col.push(c0, c0, c0 * 1.06, c1, c1, c1 * 1.06);
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: .55, depthWrite: false }));
+  return new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: .48, depthWrite: false }));
 }
 
 /* ------------------------------------------------------------ the visor */
-/* A rigid band, not a skin: its radius at each angle is the furthest the
-   face reaches anywhere across the band's height, then smoothed, so it
-   bridges the nose instead of following it. */
 function rayHit(sdf, ox, oy, oz, dx, dz, tMax) {
   let t = tMax;
   for (let k = 0; k < 200; k++) {
@@ -618,7 +667,7 @@ function rayHit(sdf, ox, oy, oz, dx, dz, tMax) {
   return t;
 }
 function buildVisor(envMap) {
-  const A = 1.42, NA = 112, yC = .11, HT = .24, DEP = .07, CZ = .1;
+  const A = 1.38, NA = 120, yC = .115, HT = .23, DEP = .075, CZ = .10;
   const R = [];
   for (let i = 0; i <= NA; i++) {
     const a = -A + 2 * A * i / NA, sx = Math.sin(a), cz = Math.cos(a);
@@ -626,19 +675,20 @@ function buildVisor(envMap) {
     for (const yy of [yC - HT * .3, yC, yC + HT * .3]) m = Math.max(m, rayHit(headSDF, 0, yy, CZ, sx, cz, 2.5));
     R.push(m);
   }
-  /* close over the nose bridge, then smooth */
   const Rs = R.map((_, i) => { let m = 0; for (let k = -2; k <= 2; k++) m = Math.max(m, R[clamp(i + k, 0, NA)]); return m; });
-  /* two box passes ≈ a gaussian: no kinks left for the clearcoat to find */
   const box = (arr, w) => arr.map((_, i) => { let s = 0, n = 0; for (let k = -w; k <= w; k++) { s += arr[clamp(i + k, 0, NA)]; n++; } return s / n; });
   const Rb = box(box(Rs, 6), 6);
-  const Rf = Rb.map((r, i) => { const a = -A + 2 * A * i / NA; return r + .014 + .05 * smooth(.55, 1.15, Math.abs(a)); });
+  const Rf = Rb.map((r, i) => { const a = -A + 2 * A * i / NA; return r + .018 + .045 * smooth(.55, 1.15, Math.abs(a)); });
 
   const P = [], idx = [];
-  /* the ends round over: the band thins in height and sinks toward the head */
-  const endT = i => smooth(0, 9, i) * smooth(NA, NA - 9, i);
-  const ring = (rOff, y) => Rf.map((r, i) => {
+  const endT = i => smooth(0, 10, i) * smooth(NA, NA - 10, i);
+  /* subtle dip over the nasal bridge on the lower rim, like contoured cyber-shades */
+  const bridgeDip = a => -.026 * Math.exp(-Math.pow(a / .22, 2)) + .018 * Math.exp(-Math.pow((Math.abs(a) - .38) / .24, 2));
+  const ring = (rOff, y, isBot) => Rf.map((r, i) => {
     const a = -A + 2 * A * i / NA, e = endT(i);
-    const yy = yC + (y - yC) * (.35 + .65 * Math.sqrt(e)), rr = r + rOff - (1 - e) * .02;
+    const dip = isBot ? bridgeDip(a) * e : -.008 * Math.exp(-Math.pow(a / .35, 2)) * e;
+    const yy = yC + (y - yC) * (.38 + .62 * Math.sqrt(e)) + dip;
+    const rr = r + rOff - (1 - e) * .022;
     return [Math.sin(a) * rr, yy, CZ + Math.cos(a) * rr];
   });
   const quadStrip = (a, b) => {
@@ -646,38 +696,73 @@ function buildVisor(envMap) {
     for (let i = 0; i <= NA; i++) { P.push(...a[i]); P.push(...b[i]); }
     for (let i = 0; i < NA; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   };
-  const oT = ring(0, yC + HT / 2), oB = ring(0, yC - HT / 2), iT = ring(-DEP, yC + HT / 2), iB = ring(-DEP, yC - HT / 2);
-  /* a slight chamfer reads as a moulded edge in the clearcoat */
-  const cT = ring(-.012, yC + HT / 2 + .012), cB = ring(-.012, yC - HT / 2 - .012);
+  const oT = ring(0, yC + HT / 2, false), oB = ring(0, yC - HT / 2, true);
+  const iT = ring(-DEP, yC + HT / 2, false), iB = ring(-DEP, yC - HT / 2, true);
+  const cT = ring(-.014, yC + HT / 2 + .014, false), cB = ring(-.014, yC - HT / 2 - .014, true);
   quadStrip(cT, oT); quadStrip(oT, oB); quadStrip(oB, cB);
   quadStrip(iT, cT); quadStrip(cB, iB); quadStrip(iB, iT);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
   g.setIndex(idx);
   g.computeVertexNormals();
+
+  /* dark ruby-obsidian glossy lens + housing */
   const shell = new THREE.Mesh(g, new THREE.MeshPhysicalMaterial({
-    color: 0x07070a, roughness: .42, metalness: .5, clearcoat: 1, clearcoatRoughness: .34,
-    envMap: envMap, envMapIntensity: .8, side: THREE.DoubleSide
+    color: hdr(.014, .005, .007), roughness: .14, metalness: .35, clearcoat: 1, clearcoatRoughness: .08,
+    envMap: envMap, envMapIntensity: 1.15, side: THREE.DoubleSide
   }));
   shell.castShadow = shell.receiveShadow = true;
 
-  /* the bar: an HDR emitter inset in the face of the band */
+  /* molded matte-gunmetal frame rails along top and bottom of visor */
+  const frameMat = new THREE.MeshPhysicalMaterial({
+    color: hdr(.018, .018, .022), roughness: .38, metalness: .75, clearcoat: .4, envMap: envMap, envMapIntensity: .9
+  });
+  const fP = [], fIdx = [];
+  const fQuad = (a, b) => {
+    const base = fP.length / 3;
+    for (let i = 0; i <= NA; i++) { fP.push(...a[i]); fP.push(...b[i]); }
+    for (let i = 0; i < NA; i++) { const k = base + i * 2; fIdx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  };
+  fQuad(ring(.004, yC + HT / 2 + .022, false), ring(.004, yC + HT / 2 - .006, false));
+  fQuad(ring(.004, yC - HT / 2 + .006, true), ring(.004, yC - HT / 2 - .020, true));
+  const fg = new THREE.BufferGeometry();
+  fg.setAttribute('position', new THREE.Float32BufferAttribute(fP, 3));
+  fg.setIndex(fIdx);
+  fg.computeVertexNormals();
+  const frameMesh = new THREE.Mesh(fg, frameMat);
+
+  /* circular temple hinge pods on both sides (like Panel 1 reference) */
+  const v = new THREE.Group();
+  v.add(shell, frameMesh);
+  [-1, 1].forEach(s => {
+    const idxSide = s < 0 ? 11 : NA - 11;
+    const a = -A + 2 * A * idxSide / NA, r = Rf[idxSide];
+    const px = Math.sin(a) * r, pz = CZ + Math.cos(a) * r;
+    const pod = new THREE.Mesh(new THREE.CylinderGeometry(.048, .052, .028, 24), frameMat);
+    pod.position.set(px, yC, pz);
+    pod.quaternion.setFromUnitVectors(v3(0, 1, 0), v3(Math.sin(a), 0, Math.cos(a)).normalize());
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(.026, .026, .034, 20), frameMat);
+    cap.position.copy(pod.position);
+    cap.quaternion.copy(pod.quaternion);
+    v.add(pod, cap);
+  });
+
+  /* razor-sharp HDR laser eye beam inset in the glossy dark visor lens */
   const GA = .82, G = [], gi = [];
   const gb = Math.round(NA * (A - GA) / (2 * A)), ge = NA - gb;
   for (let i = gb; i <= ge; i++) {
     const a = -A + 2 * A * i / NA, r = Rf[i] + .004;
-    const e = clamp(Math.min(i - gb, ge - i) / 5, 0, 1), k = 1 - e;
-    const h = .042 * Math.sqrt(Math.max(.02, 1 - k * k));
-    G.push(Math.sin(a) * r, yC + h, CZ + Math.cos(a) * r, Math.sin(a) * r, yC - h, CZ + Math.cos(a) * r);
+    const e = clamp(Math.min(i - gb, ge - i) / 8, 0, 1), k = 1 - e;
+    const hBeam = .0135 * Math.sqrt(Math.max(.01, 1 - k * k));
+    G.push(Math.sin(a) * r, yC + hBeam, CZ + Math.cos(a) * r, Math.sin(a) * r, yC - hBeam, CZ + Math.cos(a) * r);
   }
   for (let i = 0; i < ge - gb; i++) { const k = i * 2; gi.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   const gg = new THREE.BufferGeometry();
   gg.setAttribute('position', new THREE.Float32BufferAttribute(G, 3));
   gg.setIndex(gi);
-  const bar = new THREE.Mesh(gg, new THREE.MeshBasicMaterial({ color: hdr(4.0, .03, .022), side: THREE.DoubleSide }));
+  const bar = new THREE.Mesh(gg, new THREE.MeshBasicMaterial({ color: hdr(8.5, .14, .06), side: THREE.DoubleSide }));
 
-  const v = new THREE.Group();
-  v.add(shell, bar);
+  v.add(bar);
   v.userData.frontZ = CZ + Rf[NA >> 1];
   return v;
 }
@@ -851,7 +936,7 @@ function smokePx() {
    thumb hooked in his belt. Everything below the collar is built from the
    same three tools as the head — SDF projections for the big soft volumes,
    tubes for limbs and trims, and fabric painted into tiling normal maps. */
-const FLOOR_Y = -8.62;
+const FLOOR_Y = -7.85;
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
 /* --- fabrics: one tile of height, turned into a normal map that repeats */
@@ -875,54 +960,113 @@ function tiledNormal(size, heightAt, strength) {
 const withRepeat = (tex, u, v) => { const t = tex.clone(); t.repeat.set(u, v); t.needsUpdate = true; return t; };
 
 function fabrics() {
-  /* puffer channels: each tile is one stitched row, plump in the middle */
-  const quilt = tiledNormal(256, (u, v, x, y) => Math.pow(Math.sin(Math.PI * v), .45) * .9 + (vnoise(x * .2, y * .2, 1.1) - .5) * .06, 6);
-  /* twill: the diagonal of workwear cotton */
-  const twill = tiledNormal(256, (u, v, x, y) => .5 + .35 * Math.sin((u * 18 + v * 18) * Math.PI * 2) + (vnoise(x * .5, y * .5, 2.3) - .5) * .3, 2.2);
-  /* knit, for the tee */
-  const knit = tiledNormal(256, (u, v, x, y) => .5 + .25 * Math.sin(u * Math.PI * 2 * 48) * Math.sin(v * Math.PI * 2 * 64) + (vnoise(x * .7, y * .7, 3.7) - .5) * .3, 1.4);
-  /* leather grain */
-  const grain = tiledNormal(256, (u, v, x, y) => vnoise(x * .35, y * .35, 4.4) * .6 + vnoise(x * .08, y * .08, 5.1) * .4, 2.4);
-  return { quilt, twill, knit, grain };
+  /* fine suiting wool weave for the tailored overcoat */
+  const wool = tiledNormal(256, (u, v, x, y) => .5 + .24 * Math.sin(u * Math.PI * 2 * 42) * Math.cos(v * Math.PI * 2 * 42) + (vnoise(x * .6, y * .6, 1.4) - .5) * .35, 1.7);
+  /* diagonal wool-twill with subtle vertical suiting pinstripe for the 70s waistcoat & pleated trousers */
+  const twill = tiledNormal(256, (u, v, x, y) => {
+    const diag = .28 * Math.sin((u * 28 + v * 28) * Math.PI * 2);
+    const stripe = .18 * Math.pow(Math.max(0, Math.cos(u * Math.PI * 2 * 16)), 12);
+    return .5 + diag + stripe + (vnoise(x * .5, y * .5, 2.3) - .5) * .22;
+  }, 1.9);
+  /* crisp cotton poplin for the dress shirt */
+  const poplin = tiledNormal(256, (u, v, x, y) => .5 + .15 * Math.sin(u * Math.PI * 2 * 64) * Math.sin(v * Math.PI * 2 * 64) + (vnoise(x * .8, y * .8, 3.7) - .5) * .18, 1.1);
+  /* fine calfskin leather grain for dress shoes and belt */
+  const grain = tiledNormal(256, (u, v, x, y) => vnoise(x * .35, y * .35, 4.4) * .6 + vnoise(x * .08, y * .08, 5.1) * .4, 2.0);
+  return { wool, twill, poplin, grain };
 }
 
 function bodyMaterials(env) {
   const F = fabrics();
   return {
     F,
-    jacket: new THREE.MeshPhysicalMaterial({
-      color: hdr(.016, .016, .019), roughness: .4, metalness: .05, clearcoat: .45, clearcoatRoughness: .32,
-      normalMap: withRepeat(F.quilt, 1, 30), normalScale: new THREE.Vector2(.32, .32),
-      envMap: env, envMapIntensity: .7, side: THREE.DoubleSide
+    coat: new THREE.MeshPhysicalMaterial({
+      color: hdr(.011, .011, .014), roughness: .75, metalness: .02,
+      sheen: .10, sheenRoughness: .58, sheenColor: hdr(.022, .024, .032),
+      normalMap: withRepeat(F.wool, 8, 16), normalScale: new THREE.Vector2(.75, .75),
+      envMap: env, envMapIntensity: .36, side: THREE.DoubleSide
     }),
-    sleeve: new THREE.MeshPhysicalMaterial({
-      color: hdr(.016, .016, .019), roughness: .4, metalness: .05, clearcoat: .45, clearcoatRoughness: .32,
-      normalMap: withRepeat(F.quilt, 1, 12), normalScale: new THREE.Vector2(.32, .32), envMap: env, envMapIntensity: .7
+    lapel: new THREE.MeshPhysicalMaterial({
+      color: hdr(.013, .013, .017), roughness: .68, metalness: .03,
+      sheen: .14, sheenRoughness: .52, sheenColor: hdr(.028, .032, .042),
+      normalMap: withRepeat(F.wool, 5, 10), normalScale: new THREE.Vector2(.62, .62),
+      envMap: env, envMapIntensity: .40, side: THREE.DoubleSide
     }),
-    rib: new THREE.MeshStandardMaterial({ color: hdr(.022, .022, .026), roughness: .75, normalMap: withRepeat(F.knit, 8, 2) }),
-    lining: new THREE.MeshStandardMaterial({ color: hdr(.32, .02, .03), emissive: hdr(.08, 0, .004), roughness: .6, side: THREE.BackSide }),
-    shirt: new THREE.MeshStandardMaterial({ color: hdr(.007, .007, .008), roughness: .92, normalMap: withRepeat(F.knit, 6, 8), normalScale: new THREE.Vector2(.6, .6) }),
-    neon: new THREE.MeshBasicMaterial({ color: hdr(3.4, .1, .07) }),
-    neonSoft: new THREE.MeshBasicMaterial({ color: hdr(1.6, .05, .035) }),
-    chrome: new THREE.MeshPhysicalMaterial({ color: hdr(.78, .79, .83), metalness: 1, roughness: .2, clearcoat: .6, clearcoatRoughness: .15, envMap: env, envMapIntensity: 1.3 }),
-    chromeDark: new THREE.MeshPhysicalMaterial({ color: hdr(.18, .18, .2), metalness: 1, roughness: .34, envMap: env, envMapIntensity: 1 }),
-    pants: new THREE.MeshStandardMaterial({ color: hdr(.024, .024, .027), roughness: .85, normalMap: withRepeat(F.twill, 4, 8), normalScale: new THREE.Vector2(.8, .8) }),
-    strap: new THREE.MeshStandardMaterial({ color: hdr(.012, .012, .014), roughness: .55 }),
+    seamWelt: new THREE.MeshPhysicalMaterial({
+      color: hdr(.017, .018, .023), roughness: .58, metalness: .04,
+      sheen: .18, sheenRoughness: .45, sheenColor: hdr(.035, .038, .050),
+      envMap: env, envMapIntensity: .44, side: THREE.DoubleSide
+    }),
+    vest: new THREE.MeshPhysicalMaterial({
+      color: hdr(.014, .014, .018), roughness: .72, metalness: .03,
+      sheen: .10, sheenRoughness: .55, sheenColor: hdr(.024, .026, .034),
+      normalMap: withRepeat(F.twill, 6, 10), normalScale: new THREE.Vector2(.68, .68),
+      envMap: env, envMapIntensity: .38, side: THREE.DoubleSide
+    }),
+    lining: new THREE.MeshStandardMaterial({
+      color: hdr(.055, .006, .009), emissive: hdr(.010, .001, .001), roughness: .62, side: THREE.DoubleSide
+    }),
+    dressShirt: new THREE.MeshPhysicalMaterial({
+      color: hdr(.27, .28, .31), roughness: .62, metalness: .01, clearcoat: .03,
+      normalMap: withRepeat(F.poplin, 8, 8), normalScale: new THREE.Vector2(.32, .32),
+      envMap: env, envMapIntensity: .32, side: THREE.DoubleSide
+    }),
+    tie: new THREE.MeshPhysicalMaterial({
+      color: hdr(.13, .009, .018), roughness: .38, metalness: .05, clearcoat: .22, clearcoatRoughness: .28,
+      normalMap: withRepeat(F.twill, 8, 12), normalScale: new THREE.Vector2(.28, .28),
+      envMap: env, envMapIntensity: .65, side: THREE.DoubleSide
+    }),
+    button: new THREE.MeshPhysicalMaterial({
+      color: hdr(.018, .018, .022), roughness: .26, metalness: .45, clearcoat: .75, envMap: env, envMapIntensity: .85
+    }),
+    neon: new THREE.MeshBasicMaterial({ color: hdr(4.2, .11, .06) }),
+    neonSoft: new THREE.MeshBasicMaterial({ color: hdr(1.6, .04, .03) }),
+    chrome: new THREE.MeshPhysicalMaterial({ color: hdr(.78, .81, .86), metalness: 1, roughness: .17, clearcoat: .6, clearcoatRoughness: .14, envMap: env, envMapIntensity: 1.4 }),
+    chromeDark: new THREE.MeshPhysicalMaterial({ color: hdr(.065, .070, .082), metalness: .92, roughness: .32, clearcoat: .28, envMap: env, envMapIntensity: 1.0 }),
+    pants: new THREE.MeshPhysicalMaterial({
+      color: hdr(.015, .015, .019), roughness: .78, metalness: .02, clearcoat: 0,
+      normalMap: withRepeat(F.twill, 7, 14), normalScale: new THREE.Vector2(.62, .62),
+      envMap: env, envMapIntensity: .35
+    }),
+    strap: new THREE.MeshPhysicalMaterial({
+      color: hdr(.012, .011, .012), roughness: .42, clearcoat: .35,
+      normalMap: withRepeat(F.grain, 4, 8), normalScale: new THREE.Vector2(.4, .4), envMap: env, envMapIntensity: .55
+    }),
     boot: new THREE.MeshPhysicalMaterial({
-      color: hdr(.012, .012, .014), roughness: .34, clearcoat: .7, clearcoatRoughness: .25,
-      normalMap: withRepeat(F.grain, 4, 4), normalScale: new THREE.Vector2(.5, .5), envMap: env, envMapIntensity: .8
+      color: hdr(.008, .008, .010), roughness: .38, metalness: .04, clearcoat: .35, clearcoatRoughness: .28,
+      normalMap: withRepeat(F.grain, 5, 5), normalScale: new THREE.Vector2(.38, .38), envMap: env, envMapIntensity: .35
     }),
-    sole: new THREE.MeshStandardMaterial({ color: hdr(.03, .03, .032), roughness: .9 })
+    sole: new THREE.MeshStandardMaterial({ color: hdr(.016, .015, .017), roughness: .88 }),
+    furHand: new THREE.MeshStandardMaterial({ color: hdr(.016, .015, .014), roughness: .84, normalMap: withRepeat(F.wool, 6, 6) }),
+    skinHand: new THREE.MeshPhysicalMaterial({ color: hdr(.075, .046, .034), roughness: .54, clearcoat: .08, envMap: env, envMapIntensity: .28 }),
+    guitarWood: new THREE.MeshPhysicalMaterial({ color: hdr(.026, .013, .009), roughness: .24, clearcoat: .85, clearcoatRoughness: .14, envMap: env, envMapIntensity: .9 })
   };
 }
 
-/* --- a tube along a path; radius may vary along it (t) and around it (θ) */
+/* --- a tube along a path; safe against collinear, 2-point, or duplicate paths */
 function tubeGeometry(pts, radius, radial, seg) {
-  const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal');
+  const raw = [pts[0].clone()];
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i].distanceToSquared(raw[raw.length - 1]) > 1e-6) raw.push(pts[i].clone());
+  }
+  if (raw.length === 2) {
+    raw.splice(1, 0, raw[0].clone().lerp(raw[1], .5).add(v3(1e-4, 1e-4, -1e-4)));
+  }
+  const clean = raw.map((p, i) => {
+    const c = p.clone();
+    c.x += Math.sin(i * 1.7 + .3) * 1e-4;
+    c.z += Math.cos(i * 2.3 + .7) * 1e-4;
+    return c;
+  });
+  const curve = new THREE.CatmullRomCurve3(clean, false, 'centripetal');
   const fr = curve.computeFrenetFrames(seg, false);
   const P = [], UV = [], I = [];
   for (let i = 0; i <= seg; i++) {
-    const t = i / seg, c = curve.getPointAt(t), n = fr.normals[i], b = fr.binormals[i];
+    const t = i / seg, c = curve.getPointAt(t);
+    let n = fr.normals[i], b = fr.binormals[i];
+    if (!Number.isFinite(n.x) || !Number.isFinite(n.y) || !Number.isFinite(n.z) ||
+        !Number.isFinite(b.x) || !Number.isFinite(b.y) || !Number.isFinite(b.z)) {
+      n = v3(1, 0, 0); b = v3(0, 0, 1);
+    }
     for (let j = 0; j <= radial; j++) {
       const th = j / radial * Math.PI * 2, r = radius(t, th), cx = Math.cos(th), sx = Math.sin(th);
       P.push(c.x + (cx * n.x + sx * b.x) * r, c.y + (cx * n.y + sx * b.y) * r, c.z + (cx * n.z + sx * b.z) * r);
@@ -950,14 +1094,12 @@ function ball(p, r, mat, s) {
   m.position.copy(p); m.scale.set(r * (s ? s[0] : 1), r * (s ? s[1] : 1), r * (s ? s[2] : 1));
   return m;
 }
-/* a ring hugging a limb at point p, its axis along d */
 function ringAt(p, d, r, tube, mat) {
   const m = mesh(new THREE.TorusGeometry(r, tube, 10, 48), mat, false);
   m.position.copy(p);
   m.quaternion.setFromUnitVectors(v3(0, 0, 1), d.clone().normalize());
   return m;
 }
-/* march along an axis from outside to the first surface of an SDF */
 function surfaceAlong(sdf, o, d, tMax) {
   let t = tMax;
   for (let k = 0; k < 240; k++) {
@@ -968,182 +1110,681 @@ function surfaceAlong(sdf, o, d, tMax) {
   return o.clone().addScaledVector(d, t);
 }
 
-/* --- the jacket: a cropped puffer, padded at the shoulders, worn open */
-function jacketSDF(x, y, z) {
-  const ax = Math.abs(x);
-  let d = sdRB(x, y, z, 0, -2.62, 0, 1.3, .92, .7, .32);                    /* a boxy chest   */
-  d = smin(d, sdRB(ax, y, z, 1.36, -1.98, 0, .46, .24, .6, .16), .14);      /* squared shoulders */
-  d = smin(d, sdRB(x, y, z, 0, -3.6, 0, 1.06, .5, .64, .3), .3);            /* the waist, tapering */
-  d = smin(d, sdCap(x, y, z, 0, -1.7, -.05, 0, -2.2, -.05, .74), .25);      /* up to the collar */
-  d = Math.max(d, -(y + 4.05));                                             /* cropped        */
-  return Math.max(d, y + 1.42);
-}
-/* the opening widens as it falls, like a jacket nobody bothered to zip */
-const slotW = y => .2 + .3 * smooth(-1.55, -4.0, y);
-
-function buildJacket(M) {
-  const g = new THREE.Group();
-  /* the tee underneath, tucked in */
-  const tee = projectSphere((x, y, z) => Math.max(sdRB(x, y, z, 0, -3.0, 0, 1.08, 1.42, .6, .34), y + 1.45), 120, 90, v3(0, -3, 0), 4);
-  g.add(mesh(tee.geo, M.shirt));
-
-  const jp = projectSphere(jacketSDF, 180, 140, v3(0, -2.8, 0), 4);
-  /* open it down the front: drop every triangle inside the slot */
-  const pos = jp.geo.attributes.position, idx = jp.geo.index.array, keep = [];
-  for (let i = 0; i < idx.length; i += 3) {
-    let cx = 0, cy = 0, cz = 0;
-    for (let k = 0; k < 3; k++) { cx += pos.getX(idx[i + k]); cy += pos.getY(idx[i + k]); cz += pos.getZ(idx[i + k]); }
-    cx /= 3; cy /= 3; cz /= 3;
-    if (cz > .25 && Math.abs(cx) < slotW(cy)) continue;
-    keep.push(idx[i], idx[i + 1], idx[i + 2]);
-  }
-  jp.geo.setIndex(keep);
-  jp.geo.computeVertexNormals();
-  g.add(mesh(jp.geo, M.jacket));
-
-  /* neon piping down both edges of the opening */
-  [-1, 1].forEach(s => {
-    const pts = [];
-    for (let y = -1.45; y >= -4.05; y -= .1) {
-      pts.push(surfaceAlong(jacketSDF, v3(s * slotW(y), y, 0), v3(0, 0, 1), 3).add(v3(0, 0, .01)));
+/* --- Solid 3D cloth shell builder: creates a watertight garment panel with outward-facing normals & stitched edges */
+function solidClothShell(NR, NC, pointAt, thickness, radialCenter) {
+  const stride = NC + 1, count = (NR + 1) * stride;
+  const outP = new Array(count), N = new Array(count);
+  for (let r = 0; r <= NR; r++) {
+    const v = r / NR;
+    for (let c = 0; c <= NC; c++) {
+      outP[r * stride + c] = pointAt(c / NC, v, c, r);
     }
-    g.add(mesh(tubeGeometry(pts, () => .028, 10, 60), M.neon, false));
-  });
-
-  /* ribbed hem, broken at the front where the jacket hangs open */
-  const hem = [], A0 = .45, A1 = Math.PI * 2 - .45;
-  for (let i = 0; i <= 40; i++) {
-    const a = lerp(A0, A1, i / 40);
-    const dir = v3(Math.sin(a), 0, Math.cos(a));
-    hem.push(surfaceAlong(jacketSDF, v3(0, -3.97, 0), dir, 3));
   }
-  g.add(mesh(tubeGeometry(hem, t => .11 + .012 * Math.sin(t * 360), 14, 160), M.rib));
+  /* Determine consistent winding sign across the whole panel so outer faces always point outward */
+  const dU = new THREE.Vector3(), dV = new THREE.Vector3();
+  let orientVotes = 0;
+  for (let r = 0; r <= NR; r++) {
+    const r0 = Math.max(0, r - 1), r1 = Math.min(NR, r + 1);
+    for (let c = 0; c <= NC; c++) {
+      const c0 = Math.max(0, c - 1), c1 = Math.min(NC, c + 1);
+      const p = outP[r * stride + c];
+      dU.subVectors(outP[r * stride + c1], outP[r * stride + c0]);
+      dV.subVectors(outP[r1 * stride + c], outP[r0 * stride + c]);
+      /* Standard grid quad (a, a+stride, a+stride+1, a+1) has geometric normal dV x dU */
+      const n = new THREE.Vector3().crossVectors(dV, dU);
+      if (n.lengthSq() < 1e-10) n.set(0, 0, 1); else n.normalize();
+      const refX = radialCenter ? p.x - radialCenter.x : p.x;
+      const refZ = radialCenter ? p.z - radialCenter.z : p.z + .05;
+      if (n.x * refX + n.z * refZ >= 0) orientVotes++; else orientVotes--;
+      N[r * stride + c] = n;
+    }
+  }
+  const flip = orientVotes < 0;
+  if (flip) {
+    for (let i = 0; i < count; i++) N[i].negate();
+  }
 
-  /* the popped collar: flared, open at the throat, lined in red */
-  const ARC = 4.1, collar = new THREE.CylinderGeometry(.96, .8, .56, 56, 1, true, Math.PI - ARC / 2, ARC);
-  const cOut = mesh(collar, M.jacket); cOut.position.set(0, -1.3, -.06);
-  const cIn = mesh(collar, M.lining, false); cIn.position.copy(cOut.position);
-  const rim = mesh(new THREE.TorusGeometry(.96, .02, 8, 80, ARC), M.neon, false);
-  /* the cylinder's θ runs from +z toward +x; the torus arc from +x toward +z —
-     so the arc starts a quarter-turn and a half-arc back to sit on the collar */
-  rim.rotation.set(Math.PI / 2, 0, -Math.PI / 2 - ARC / 2);
-  rim.position.set(0, -1.02, -.06);
-  g.add(cOut, cIn, rim);
+  const P = [], UV = [], I = [];
+  for (let pass = 0; pass < 2; pass++) {
+    const off = pass === 0 ? 0 : -thickness;
+    for (let r = 0; r <= NR; r++) {
+      for (let c = 0; c <= NC; c++) {
+        const idx = r * stride + c, p = outP[idx], n = N[idx];
+        P.push(p.x + n.x * off, p.y + n.y * off, p.z + n.z * off);
+        UV.push(c / NC, r / NR);
+      }
+    }
+  }
+  const quad = (a, b, c, d, rev) => {
+    if (rev) I.push(a, c, b, a, d, c);
+    else I.push(a, b, c, a, c, d);
+  };
+  for (let r = 0; r < NR; r++) {
+    for (let c = 0; c < NC; c++) {
+      const a = r * stride + c, b = a + 1, d = a + stride, e = d + 1;
+      quad(a, d, e, b, flip);
+      quad(count + a, count + b, count + e, count + d, flip);
+    }
+  }
+  /* Stitch all 4 perimeter edges for real tailored cloth thickness */
+  for (let c = 0; c < NC; c++) {
+    const t0 = c, t1 = c + 1;
+    quad(t0, t1, count + t1, count + t0, flip);
+    const b0 = NR * stride + c, b1 = b0 + 1;
+    quad(b1, b0, count + b0, count + b1, flip);
+  }
+  for (let r = 0; r < NR; r++) {
+    const l0 = r * stride, l1 = (r + 1) * stride;
+    quad(l1, l0, count + l0, count + l1, flip);
+    const r0 = r * stride + NC, r1 = (r + 1) * stride + NC;
+    quad(r0, r1, count + r1, count + r0, flip);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2));
+  g.setIndex(I);
+  g.computeVertexNormals();
   return g;
 }
 
-/* --- arms */
-const R_SH = v3(-1.45, -2.1, 0), R_EL = v3(-1.9, -3.35, -.3), R_WR = v3(-1.32, -4.3, .34);
-const L_SH = v3(1.45, -1.98, 0), L_EL = v3(1.9, -3.3, -.12), L_WR = v3(1.6, -4.32, .3);
+/* Anatomical menswear torso cross-section helper (tapered neck, broad barrel chest, stocky primate waist) */
+function torsoCrossSection(y, a, extraRx, extraRz) {
+  const sx = Math.sin(a), cz = Math.cos(a);
+  const neckTaper = smooth(-1.62, -1.00, y);
+  const chestFullness = smooth(-3.9, -1.5, y) * (1 - .68 * neckTaper);
+  const waistTaper = Math.exp(-Math.pow((y + 3.60) / .70, 2));
+  const hipFlare = smooth(-3.60, -4.35, y);
+  const rx = (.92 + .16 * chestFullness - .44 * neckTaper - .04 * waistTaper + .05 * hipFlare) + (extraRx || 0);
+  const rzFront = (.53 + .09 * chestFullness - .18 * neckTaper - .03 * waistTaper + .03 * hipFlare) + (extraRz || 0);
+  const rzBack = (.48 + .06 * chestFullness - .14 * neckTaper - .03 * waistTaper + .04 * hipFlare) + (extraRz || 0);
+  const rz = cz >= 0 ? rzFront : rzBack;
+  const sq = 1 + .06 * chestFullness * Math.sin(a * 2) * Math.sin(a * 2);
+  return v3(sx * rx * sq, y, -.04 + cz * rz * sq);
+}
+
+/* --- 1970s Formal Suit: Crisp Dress Shirt, Sculpted Burgundy Tie, 5-Button Waistcoat & Billowing Overcoat */
+function buildJacket(M) {
+  const g = new THREE.Group();
+
+  /* =========================================================================
+     SEGMENT 1: Crisp Dress Shirt Placket, Neckband Stand & Sharp Triangular Collar Wings
+     Tucked cleanly inside the waistcoat V-neck & under the bearded chin (Panels 1, 2 & 3)
+     ========================================================================= */
+  const shirtBib = solidClothShell(24, 24, (u, v) => {
+    const y = lerp(-1.08, -2.42, v);
+    const maxA = lerp(.40, .46, smooth(0, .4, v));
+    const a = lerp(-maxA, maxA, u);
+    const p = torsoCrossSection(y, a, -.038, -.024);
+    const placket = Math.abs(p.x) < .038 ? .005 : 0;
+    p.z += placket;
+    return p;
+  }, .012);
+  g.add(mesh(shirtBib, M.dressShirt));
+
+  /* Smooth continuous collar stand hugging the neck inside the coat collar */
+  const shirtStand = solidClothShell(10, 32, (u, v) => {
+    const a = lerp(-.80, .80, u);
+    const y = lerp(-.98, -1.28, v);
+    return torsoCrossSection(y, a, -.035, -.020);
+  }, .012);
+  g.add(mesh(shirtStand, M.dressShirt));
+
+  /* Left & Right Crisp Triangular Pointed Dress-Shirt Collar Wings framing the tie knot */
+  [-1, 1].forEach(s => {
+    const wingGeo = solidClothShell(16, 26, (u, v) => {
+      const a = s * lerp(.025, .64, u);
+      const yTop = -1.00 - .04 * Math.cos(u * Math.PI * .5);
+      const uPeak = .45;
+      const tri = u <= uPeak
+        ? smooth(0, 1, u / uPeak)
+        : 1 - smooth(0, 1, (u - uPeak) / (1 - uPeak));
+      const yBot = lerp(-1.12, -1.62, tri);
+      const y = lerp(yTop, yBot, v);
+      const base = torsoCrossSection(y, a, -.028, -.016);
+      const lift = .012 + .020 * v * (.35 + .65 * tri);
+      base.z += lift * Math.cos(a * .55);
+      base.x += s * lift * .45 * Math.sin(Math.abs(a) * .55);
+      return base;
+    }, .014);
+    g.add(mesh(wingGeo, M.dressShirt));
+  });
+
+  /* =========================================================================
+     SEGMENT 2: Sculpted 3D Burgundy Silk Necktie (Knot + Dimpled 70s Blade)
+     Tucks cleanly BEHIND the waistcoat V-neck at y = -2.24 so it never bleeds through
+     ========================================================================= */
+  {
+    const knotGeo = solidClothShell(14, 18, (u, v) => {
+      const uu = (u - .5) * 2;
+      const y = lerp(-1.06, -1.34, v);
+      const w = lerp(.092, .052, Math.pow(v, .85));
+      const x = uu * w;
+      const baseZ = torsoCrossSection(y, 0, -.038, -.024).z;
+      const dome = Math.sqrt(Math.max(0, 1 - uu * uu * .88)) * lerp(.048, .034, v);
+      const wrapFold = .004 * Math.sin(uu * 2.5 + v * 3.0);
+      return v3(x, y, baseZ + .018 + dome + wrapFold);
+    }, .020);
+    g.add(mesh(knotGeo, M.tie));
+
+    const bladeGeo = solidClothShell(28, 20, (u, v) => {
+      const uu = (u - .5) * 2;
+      const y = lerp(-1.31, -2.38, v);
+      const belly = smooth(0, .58, v);
+      const w = lerp(.050, .148, belly);
+      const x = uu * w;
+      const baseZ = torsoCrossSection(y, x * .70, -.038, -.024).z;
+      const arch = Math.sqrt(Math.max(0, 1 - uu * uu * .85)) * .024;
+      const dimple = -.012 * Math.exp(-Math.pow(uu / .30, 2)) * (1 - smooth(0, .52, v));
+      const tuckIn = -.045 * smooth(-1.92, -2.32, y);
+      return v3(x, y, baseZ + .018 + arch + dimple + tuckIn);
+    }, .012);
+    g.add(mesh(bladeGeo, M.tie));
+  }
+
+  /* =========================================================================
+     SEGMENT 3: Tailored 5-Button 1970s Waistcoat (Vest) with Crisp V-Collar Welt,
+     Stylized Horizontal Button-Pull Drape & 4 Recessed Welt Pockets
+     ========================================================================= */
+  const vestSurfaceAt = (s, u, v) => {
+    const vNeckT = clamp(u / .22, 0, 1);
+    const armholeScoop = Math.exp(-Math.pow((u - .46) / .14, 2));
+    const yTop = u <= .22
+      ? lerp(-2.26, -1.18, Math.pow(vNeckT, .88))
+      : -1.18 - .50 * armholeScoop - .04 * smooth(.22, 1.0, u);
+
+    let yBot;
+    if (u < .16) {
+      yBot = lerp(-3.98, -4.42, smooth(0, .16, u));
+    } else {
+      yBot = lerp(-4.42, -4.12, smooth(.16, .48, u));
+    }
+    const y = lerp(yTop, yBot, v);
+
+    const aMin = u < .04 && y < -2.22 && y > -3.96 ? (s < 0 ? .012 : -.015) : s * .010;
+    const a = aMin + s * u * Math.PI;
+    const p = torsoCrossSection(y, a, .018, .018);
+
+    const shSlope = (1 - v) * .16 * Math.exp(-Math.pow((u - .24) / .12, 2));
+    p.y -= shSlope;
+
+    const frontFactor = Math.exp(-Math.pow(u / .26, 2)) * smooth(-2.22, -2.45, y) * smooth(-4.02, -3.72, y);
+    const buttonPull = .010 * Math.cos((y + 2.40) * Math.PI * 2 / .34) * frontFactor;
+    const overlap = (s < 0 ? .012 : .002) * Math.exp(-Math.pow(u / .07, 2));
+    p.z += buttonPull + overlap;
+    return p;
+  };
+
+  [-1, 1].forEach(s => {
+    const vestPanel = solidClothShell(44, 38, (u, v) => vestSurfaceAt(s, u, v), .024);
+    g.add(mesh(vestPanel, M.vest));
+
+    const vCollar = solidClothShell(8, 24, (u, v) => {
+      const uu = u * .22;
+      const p = vestSurfaceAt(s, uu, v * .058);
+      p.z += .014 * Math.sin(v * Math.PI);
+      return p;
+    }, .014);
+    g.add(mesh(vCollar, M.seamWelt));
+
+    [
+      { u0: .065, u1: .215, v0: .73, tilt: -.022 },
+      { u0: .075, u1: .195, v0: .36, tilt: -.028 }
+    ].forEach(pk => {
+      const welt = solidClothShell(5, 14, (u, v) => {
+        const uu = lerp(pk.u0, pk.u1, u);
+        const vv = pk.v0 + u * pk.tilt + (v - .5) * .028;
+        const p = vestSurfaceAt(s, uu, vv);
+        p.z += .016 * Math.sin(v * Math.PI);
+        return p;
+      }, .012);
+      g.add(mesh(welt, M.seamWelt));
+    });
+  });
+
+  for (const by of [-2.40, -2.74, -3.08, -3.42, -3.76]) {
+    const bp = torsoCrossSection(by, 0, .018, .018);
+    bp.z += .038;
+    const btn = mesh(new THREE.CylinderGeometry(.034, .034, .018, 20), M.button);
+    btn.rotation.x = Math.PI / 2;
+    btn.position.copy(bp);
+    g.add(btn);
+  }
+
+  /* =========================================================================
+     SEGMENT 4: Tailored 1970s Long Overcoat with Broad Primate Shoulders,
+     Stocky Barrel Chest, Deep Stylized Pleats & Wind-Billowed Skirt (Panels 1, 2 & 3)
+     ========================================================================= */
+  const coatPointAt = (u, v) => {
+    const yokeT = smooth(0, .085, v);
+    const bodyV = clamp((v - .085) / .915, 0, 1);
+    const y = v <= .085
+      ? lerp(-1.18, -1.52, yokeT)
+      : lerp(-1.52, -6.28, bodyV);
+
+    const chestT = smooth(-3.8, -1.4, y);
+    const waistT = Math.exp(-Math.pow((y + 3.65) / .70, 2));
+    const skirtT = smooth(-3.65, -6.28, y);
+    const billow = Math.pow(skirtT, .92);
+
+    /* Above the waist the coat frames the vest; below the waist the front edges part diagonally (/ \).
+       On the right side (u -> 1), the front edge sweeps wider and back behind the pocketed right wrist (like Panel 2). */
+    const ALeft = .38 + .02 * smooth(-1.18, -3.65, y) + .24 * Math.pow(skirtT, .95);
+    const pocketPart = .34 * smooth(-2.15, -3.85, y) * (1 - .22 * smooth(-4.8, -6.28, y));
+    const ARight = ALeft + pocketPart;
+    const a = lerp(ALeft, Math.PI * 2 - ARight, u);
+    const sx = Math.sin(a), cz = Math.cos(a), ax = Math.abs(sx);
+
+    /* Broad, stocky primate shoulders: right side extends over thick wool sleeve cap; left side has sleeveless armhole */
+    const sideReach = sx < 0 ? .38 : .22;
+    const shHead = Math.exp(-Math.pow((y + 1.68) / .55, 2)) * Math.pow(ax, 1.15);
+    const rxYoke = lerp(.62, 1.02 + sideReach * ax, yokeT);
+    const rxBody = 1.02
+      + (sx < 0 ? .26 : .14) * ax * smooth(-3.5, -1.5, y)
+      + .16 * shHead
+      + .08 * chestT
+      - .02 * waistT
+      + .88 * billow * (.36 + .64 * ax);
+    const rx = v <= .085 ? rxYoke : rxBody;
+
+    const rzYoke = lerp(.48, .58, yokeT);
+    const rzBody = .58
+      + .06 * chestT
+      - .02 * waistT
+      + .30 * billow;
+    const rz = v <= .085 ? rzYoke : rzBody;
+
+    const shDrop = v <= .085 ? yokeT * ax * .04 : (.04 * ax * Math.exp(-Math.pow((y + 1.52) / .35, 2)));
+    const frontEdgeDist = Math.min(u, 1 - u);
+    const torsoDrape = .012 * Math.sin(u * Math.PI * 8) * smooth(-1.6, -3.6, y) * (1 - skirtT);
+    const pleatWave = Math.sin(u * Math.PI * 7) * smooth(0, .06, frontEdgeDist);
+    const flute = billow * (.11 * pleatWave + .05 * Math.cos(a * 4));
+    const hemWave = Math.pow(skirtT, 2.2) * .08 * pleatWave;
+    const sweepBack = billow * .14 * (1 - cz) * .5;
+    const wingLift = billow * .12 * Math.pow(ax, 1.4) + hemWave;
+
+    /* Right wrist/hand in trouser pocket pushes the right coat flap backward & outward behind the hip */
+    const rightPocketZone = smooth(.65, .98, u) * smooth(-2.15, -3.75, y) * (1 - .28 * smooth(-4.85, -6.28, y));
+    const pocketPushZ = -.32 * rightPocketZone;
+    const pocketPushX = -.15 * rightPocketZone;
+
+    const x = sx * (rx + flute + torsoDrape) + pocketPushX;
+    const py = y - shDrop + wingLift;
+    const z = -.05 + cz * (rz + flute * .6 + torsoDrape) - sweepBack + pocketPushZ;
+    return v3(x, py, z);
+  };
+
+  const coatShell = solidClothShell(72, 84, coatPointAt, .040);
+  g.add(mesh(coatShell, M.coat));
+
+  const liningShell = solidClothShell(44, 56, (u, v) => {
+    const p = coatPointAt(.02 + u * .96, .35 + v * .63);
+    const n = v3(p.x, 0, p.z + .05).normalize();
+    return p.addScaledVector(n, -.043);
+  }, .006);
+  g.add(mesh(liningShell, M.lining, false));
+
+  /* =========================================================================
+     SEGMENT 5: Proportional 3D Step-Notch Suit Lapels with Top-Stitched Edge Bevels,
+     Coat Buttons & Sculpted Hip Pocket Flaps (Panels 1, 2 & 3)
+     ========================================================================= */
+  [-1, 1].forEach(s => {
+    const lapelPointAt = (u, v) => {
+      const y = lerp(-1.36, -3.72, v);
+      const tCoat = clamp(.085 + (y - (-1.52)) / (-6.28 - (-1.52)) * .915, .04, .98);
+      const uIn = s > 0 ? 0 : 1;
+      const stepOut = smooth(0, .055, v);
+      const taperDown = 1 - smooth(.07, 1.0, v);
+      const widthU = (.018 + .054 * stepOut) * Math.pow(taperDown, .82);
+      const uCoat = clamp(uIn + s * u * widthU, 0, 1);
+      const base = coatPointAt(uCoat, tCoat);
+      const roll = Math.sin(u * Math.PI * .72);
+      const lift = .018 + .028 * roll * taperDown + .016 * u * stepOut * taperDown;
+      base.z += lift;
+      base.x += s * u * .038 * stepOut * taperDown;
+      return base;
+    };
+    const lapelGeo = solidClothShell(36, 16, lapelPointAt, .024);
+    g.add(mesh(lapelGeo, M.lapel));
+
+    const lapelEdgePts = [];
+    for (let r = 0; r <= 36; r++) {
+      lapelEdgePts.push(lapelPointAt(1, r / 36).add(v3(0, 0, .005)));
+    }
+    g.add(mesh(tubeGeometry(lapelEdgePts, () => .008, 8, 48), M.seamWelt, false));
+
+    const flapGeo = solidClothShell(8, 16, (u, v) => {
+      const uCoat = s > 0 ? lerp(.035, .135, u) : lerp(.965, .865, u);
+      const vCoat = lerp(.50, .532, v) + u * .008;
+      const p = coatPointAt(uCoat, vCoat);
+      p.z += .018 + .006 * Math.sin(v * Math.PI);
+      return p;
+    }, .016);
+    g.add(mesh(flapGeo, M.lapel));
+  });
+
+  for (const vBtn of [.44, .54]) {
+    const bp = coatPointAt(.975, vBtn);
+    bp.z += .024;
+    const btn = mesh(new THREE.CylinderGeometry(.044, .044, .018, 20), M.button);
+    btn.rotation.x = Math.PI / 2;
+    btn.position.copy(bp);
+    g.add(btn);
+  }
+
+  /* =========================================================================
+     SEGMENT 6: True < and > Flared Winged Popped Overcoat Collar (Panels 1, 2 & 3)
+     ========================================================================= */
+  {
+    const colNR = 18, colNC = 64;
+    const collarPointAt = (u, v) => {
+      const s = u < .5 ? 1 : -1;
+      const distFromFront = Math.min(u, 1 - u);
+      const wingZone = smooth(.24, 0, distFromFront);
+
+      const uClamped = clamp(.005 + u * .99, .005, .995);
+      const a = lerp(.38, Math.PI * 2 - .38, uClamped);
+      const sx = Math.sin(a), cz = Math.cos(a);
+
+      const baseX = lerp(sx * .62, s * .46, wingZone);
+      const baseY = lerp(-1.20, -1.42, wingZone);
+      const baseZ = lerp(-.05 + cz * .48, .52, wingZone);
+
+      const topX = lerp(sx * .70, s * 1.02, Math.pow(wingZone, .85));
+      const topY = lerp(-.74, -1.08, Math.pow(wingZone, .90));
+      const topZ = lerp(-.05 + cz * .54, .48, wingZone);
+
+      const roll = Math.sin(v * Math.PI) * .025 * wingZone;
+      return v3(
+        lerp(baseX, topX, v) + s * roll,
+        lerp(baseY, topY, v) + roll * .5,
+        lerp(baseZ, topZ, v) + roll
+      );
+    };
+    const collarGeo = solidClothShell(colNR, colNC, collarPointAt, .024);
+    g.add(mesh(collarGeo, M.lapel));
+
+    const leftEdge = [], topEdge = [], rightEdge = [];
+    for (let r = 0; r <= colNR; r++) {
+      const v = r / colNR;
+      leftEdge.push(collarPointAt(0, v).add(v3(.004, 0, .006)));
+      rightEdge.push(collarPointAt(1, v).add(v3(-.004, 0, .006)));
+    }
+    for (let c = 1; c < colNC; c++) {
+      topEdge.push(collarPointAt(c / colNC, 1).add(v3(0, .004, .004)));
+    }
+    const rimPath = leftEdge.concat(topEdge, rightEdge.reverse());
+    g.add(mesh(tubeGeometry(rimPath, () => .010, 12, 136), M.neon, false));
+  }
+
+  return g;
+}
+
+/* ===========================================================================
+   SEGMENT 7: Cool Swagger Arm Pose — Right Arm Bent Outward with Hand Casually Tucked
+   into the Trouser Pocket (Panel 2); Left Cyber-Arm Cocked in Hydraulic Readiness
+   =========================================================================== */
+const R_SH_CAP = v3(-.92, -1.68, -.02), R_SH = v3(-1.22, -1.84, -.04), R_EL = v3(-1.62, -2.90, -.16), R_WR = v3(-.94, -3.96, .22);
+const L_SH = v3(1.22, -1.66, .03),       L_EL = v3(1.60, -2.86, -.10),  L_WR = v3(1.48, -4.14, .30);
 
 function buildArms(M) {
   const g = new THREE.Group();
-  /* right: a fat quilted sleeve, the hand jammed in his pocket */
-  /* one sleeve, bending through the elbow: fabric has no ball joints */
-  g.add(mesh(tubeGeometry([R_SH, R_SH.clone().lerp(R_EL, .55).add(v3(-.05, 0, 0)), R_EL, R_EL.clone().lerp(R_WR, .5), R_WR],
-    (t, th) => lerp(.38, .27, t) * (1 + .012 * Math.pow(Math.abs(Math.sin(t * Math.PI * 12)), .5)), 28, 96), M.sleeve));
-  g.add(ball(R_SH, .4, M.sleeve));
-  const rFore = R_WR.clone().sub(R_EL);
-  g.add(mesh(tubeGeometry([R_WR.clone().addScaledVector(rFore, -.08), R_WR.clone().addScaledVector(rFore, .06)],
-    t => .29 + .01 * Math.sin(t * 80), 24, 16), M.rib));
 
-  /* left: sleeveless — the whole chrome arm, red at every joint */
-  g.add(ball(L_SH, .42, M.chromeDark));
-  g.add(ringAt(L_SH.clone().add(v3(.08, -.18, 0)), v3(.25, -1, -.05), .38, .035, M.neon));
-  g.add(mesh(tubeGeometry([L_SH, L_SH.clone().lerp(L_EL, .5).add(v3(.05, 0, 0)), L_EL], t => lerp(.31, .26, t), 28, 40), M.chrome));
-  g.add(ball(L_EL, .3, M.chromeDark));
-  g.add(ringAt(L_EL, L_WR.clone().sub(L_SH), .3, .03, M.neon));
-  g.add(mesh(tubeGeometry([L_EL, L_EL.clone().lerp(L_WR, .5), L_WR], t => lerp(.27, .21, t), 28, 40), M.chrome));
-  /* pistons along the forearm */
-  const fore = L_WR.clone().sub(L_EL).normalize(), side = v3(0, 0, 1).cross(fore).normalize();
-  [-1, 1].forEach(s => {
-    const a = L_EL.clone().addScaledVector(side, s * .24).addScaledVector(fore, .25);
-    const b = L_WR.clone().addScaledVector(side, s * .19).addScaledVector(fore, -.12);
-    g.add(mesh(tubeGeometry([a, b], () => .035, 8, 6), M.chromeDark));
-  });
-  /* panel seams, lit */
-  for (const t of [.3, .65]) g.add(ringAt(L_SH.clone().lerp(L_EL, t), L_EL.clone().sub(L_SH), lerp(.31, .26, t) + .004, .008, M.neonSoft));
-  for (const t of [.35, .7]) g.add(ringAt(L_EL.clone().lerp(L_WR, t), fore, lerp(.27, .21, t) + .004, .008, M.neonSoft));
-  g.add(ringAt(L_WR, fore, .22, .03, M.neon));
+  /* --- RIGHT ARM: Bent at Elbow with Forearm Angling Inward to Trouser Pocket (Like Panel 2) --- */
+  const rMidFore = v3(-1.32, -3.48, .05);
+  const rPath = [
+    R_SH_CAP,
+    R_SH,
+    R_SH.clone().lerp(R_EL, .50).add(v3(-.04, 0, -.02)),
+    R_EL,
+    rMidFore,
+    R_WR
+  ];
+  const sleeveProfile = (t, th) => {
+    const capGrow = smooth(0, .15, t);
+    const baseR = lerp(.16, .355, capGrow) * lerp(1.0, .68, Math.pow(clamp((t - .15) / .85, 0, 1), .82));
+    const bicepDrape = .020 * Math.sin(t * 22 + th * 2) * smooth(.15, .42, t) * (1 - smooth(.50, .82, t));
+    /* Deep accordion compression folds inside the bent right elbow crook (t ~ 0.56) */
+    const elbowZone = Math.exp(-Math.pow((t - .56) / .17, 2));
+    const elbowCrease = .044 * elbowZone * (
+      .68 * Math.sin(t * 52 + Math.cos(th) * 2.4) +
+      .32 * Math.cos(t * 32 - Math.sin(th) * 3.0)
+    ) * (.58 + .42 * Math.cos(th));
+    const cuffLip = .014 * smooth(.92, .98, t);
+    return baseR + bicepDrape + elbowCrease + cuffLip;
+  };
+  g.add(mesh(tubeGeometry(rPath, sleeveProfile, 36, 116), M.coat));
 
-  /* the hand: palm, and four fingers curled over the belt */
-  const palm = L_WR.clone().addScaledVector(fore, .22).add(v3(-.04, 0, .06));
-  g.add(ball(palm, .2, M.chromeDark, [1, 1.25, .7]));
-  for (let i = 0; i < 4; i++) {
-    const k = v3(-.11 + i * .075, 0, 0);
-    const base = palm.clone().add(v3(k.x, -.18, .1));
-    const tip = base.clone().add(v3(-.06, -.12, -.16));
-    g.add(mesh(tubeGeometry([base, base.clone().add(v3(-.02, -.1, .02)), tip], t => .042 - .01 * t, 10, 10), M.chrome));
-    g.add(ball(base, .046, M.chromeDark));
+  const rFore = R_WR.clone().sub(rMidFore).normalize();
+  for (let k = 0; k < 3; k++) {
+    const btnPos = R_WR.clone().addScaledVector(rFore, -.26 + k * .080).add(v3(-.21, -.04, .06));
+    const b = mesh(new THREE.CylinderGeometry(.020, .020, .012, 14), M.button);
+    b.rotation.set(.4, .2, 1.1);
+    b.position.copy(btnPos);
+    g.add(b);
   }
-  const th0 = palm.clone().add(v3(-.18, -.02, .06));
-  g.add(mesh(tubeGeometry([th0, th0.clone().add(v3(-.08, -.08, .08)), th0.clone().add(v3(-.1, -.2, .06))], t => .05 - .012 * t, 10, 10), M.chrome));
+
+  /* Crisp white dress-shirt barrel cuff angled into the trouser pocket */
+  g.add(mesh(tubeGeometry([R_WR.clone().addScaledVector(rFore, -.02), R_WR.clone().addScaledVector(rFore, .12)],
+    () => .210, 28, 14), M.dressShirt));
+
+  /* Right Chimpanzee Hand Casually Tucked Inside the Slanted Trouser Pocket (Like Panel 2):
+     Dark furred dorsal back of hand sliding behind the slanted trouser pocket welt */
+  const rPalm = R_WR.clone().addScaledVector(rFore, .22).add(v3(.04, -.02, -.02));
+  g.add(ball(rPalm, .185, M.furHand, [.88, 1.15, .56]));
+  /* Subtle furred thumb base hooking at the top corner of the pocket opening */
+  const rTh0 = rPalm.clone().add(v3(.11, .04, .06));
+  const rTh1 = rTh0.clone().add(v3(.05, -.09, .02));
+  g.add(ball(rTh0, .044, M.furHand));
+  g.add(mesh(tubeGeometry([rTh0, rTh1], t => .040 - .008 * t, 10, 8), M.skinHand));
+
+  /* Slanted Trouser Pocket Welt sitting directly across the lower edge of the furred hand
+     so the fingers disappear cleanly inside the trouser pocket */
+  const pocketWelt = solidClothShell(8, 20, (u, v) => {
+    const pTop = rPalm.clone().add(v3(.13, -.02, .07));
+    const pBot = rPalm.clone().add(v3(-.14, -.22, .03));
+    const base = pTop.lerp(pBot, u);
+    base.x += (v - .5) * .045;
+    base.y -= (v - .5) * .045;
+    base.z += .022 + .012 * Math.sin(v * Math.PI);
+    return base;
+  }, .020);
+  g.add(mesh(pocketWelt, M.pants));
+
+  /* --- LEFT ARM: Sleeveless Coat Armhole + Broad, Muscular Segmented Chrome & Gunmetal Cyber-Arm --- */
+  g.add(ball(L_SH, .28, M.chromeDark, [.95, .98, .92]));
+  for (let p = 0; p < 3; p++) {
+    const py = L_SH.y + .06 - p * .14;
+    const pauldron = solidClothShell(10, 18, (u, v) => {
+      const a = lerp(-.20, 1.85, u);
+      const yy = lerp(py + .09, py - .09, v);
+      const r = (.325 - p * .012) * (1 - .12 * Math.pow(v - .5, 2));
+      return v3(L_SH.x - .02 + Math.sin(a) * r, yy, L_SH.z + Math.cos(a) * r * .92);
+    }, .020, L_SH);
+    g.add(mesh(pauldron, p === 1 ? M.chromeDark : M.chrome));
+  }
+  const leftArmholeCuff = solidClothShell(8, 24, (u, v) => {
+    const th = lerp(-.30, Math.PI + .30, u);
+    const r = .335;
+    return v3(
+      L_SH.x - .10 + v * .08 + Math.sin(th) * .04,
+      L_SH.y + .05 + Math.sin(th) * r,
+      L_SH.z + Math.cos(th) * r * .92
+    );
+  }, .022, L_SH);
+  g.add(mesh(leftArmholeCuff, M.lapel));
+  g.add(ringAt(L_SH.clone().add(v3(.02, -.06, 0)), v3(.86, -.48, .04), .315, .008, M.neonSoft));
+
+  /* Upper arm: Muscular dark gunmetal hydraulic chassis + chiseled chrome bicep & triceps shell plates */
+  const uArmDir = L_EL.clone().sub(L_SH).normalize();
+  g.add(mesh(tubeGeometry([L_SH, L_SH.clone().lerp(L_EL, .5), L_EL],
+    t => lerp(.28, .225, t), 24, 32), M.chromeDark));
+  [-1, 1].forEach(sideSign => {
+    const midArm = L_SH.clone().lerp(L_EL, .5);
+    const plate = solidClothShell(16, 14, (u, v) => {
+      const c = L_SH.clone().lerp(L_EL, lerp(.14, .88, v));
+      const a = (sideSign > 0 ? .35 : Math.PI - .35) + (u - .5) * 1.35;
+      const swell = Math.sin(v * Math.PI) * .044;
+      const r = lerp(.295, .245, v) + swell;
+      return v3(c.x + Math.sin(a) * r, c.y, c.z + Math.cos(a) * r);
+    }, .018, midArm);
+    g.add(mesh(plate, M.chrome));
+  });
+
+  /* Mechanical Elbow Joint: Heavy-duty gunmetal rotary drum, chrome clevis hinges & recessed red LED ring */
+  const elbowDrum = mesh(new THREE.CylinderGeometry(.24, .24, .28, 28), M.chromeDark);
+  elbowDrum.rotation.x = Math.PI / 2;
+  elbowDrum.position.copy(L_EL);
+  g.add(elbowDrum);
+  g.add(ball(L_EL, .255, M.chrome, [1.05, .75, .85]));
+  g.add(ringAt(L_EL, uArmDir, .252, .009, M.neon));
+
+  /* Forearm: Muscular tapered gunmetal chassis, segmented chrome forearm plates & dual hydraulic pistons */
+  const foreDir = L_WR.clone().sub(L_EL).normalize();
+  const foreSide = v3(0, 0, 1).cross(foreDir).normalize();
+  const midFore = L_EL.clone().lerp(L_WR, .5);
+  g.add(mesh(tubeGeometry([L_EL, midFore, L_WR],
+    t => lerp(.24, .178, t), 24, 32), M.chromeDark));
+  for (let seg = 0; seg < 2; seg++) {
+    const v0 = seg === 0 ? .10 : .52, v1 = seg === 0 ? .48 : .90;
+    const fPlate = solidClothShell(12, 20, (u, v) => {
+      const t = lerp(v0, v1, v);
+      const c = L_EL.clone().lerp(L_WR, t);
+      const a = lerp(-.65, Math.PI + .65, u);
+      const r = lerp(.272, .205, t) * (1 + .06 * Math.cos(a * 2));
+      return v3(c.x + Math.sin(a) * r, c.y, c.z + Math.cos(a) * r);
+    }, .018, midFore);
+    g.add(mesh(fPlate, M.chrome));
+  }
+  [-1, 1].forEach(s => {
+    const pA = L_EL.clone().addScaledVector(foreSide, s * .19).addScaledVector(foreDir, .18);
+    const pB = L_WR.clone().addScaledVector(foreSide, s * .15).addScaledVector(foreDir, -.10);
+    g.add(mesh(tubeGeometry([pA, pA.clone().lerp(pB, .55)], () => .028, 12, 8), M.chromeDark));
+    g.add(mesh(tubeGeometry([pA.clone().lerp(pB, .45), pB], () => .018, 10, 8), M.chrome));
+  });
+
+  /* Mechanical Wrist Gimbal */
+  g.add(ball(L_WR, .195, M.chromeDark, [1.0, .82, .88]));
+  g.add(ringAt(L_WR, foreDir, .200, .014, M.chrome));
+  g.add(ringAt(L_WR.clone().addScaledVector(foreDir, .03), foreDir, .192, .008, M.neonSoft));
+
+  /* Heavy-Duty Articulated 5-Finger Mechanical Cyber-Hand */
+  const lPalm = L_WR.clone().addScaledVector(foreDir, .25).add(v3(-.02, 0, .03));
+  g.add(ball(lPalm, .195, M.chromeDark, [.90, 1.20, .65]));
+  const dorsalPlate = solidClothShell(8, 10, (u, v) => {
+    const x = lPalm.x + .042 + .024 * Math.sin(u * Math.PI);
+    const y = lPalm.y + lerp(.17, -.18, v);
+    const z = lPalm.z + lerp(-.12, .12, u);
+    return v3(x, y, z);
+  }, .022, lPalm);
+  g.add(mesh(dorsalPlate, M.chrome));
+
+  for (let i = 0; i < 4; i++) {
+    const zOff = .125 - i * .078;
+    const spreadZ = (.030 - i * .019);
+    const len = i === 1 ? 1.08 : i === 2 ? 1.02 : i === 0 ? .94 : .82;
+    const k0 = lPalm.clone().add(v3(-.01, -.20, zOff));
+    const k1 = k0.clone().add(v3(-.04, -.17 * len, spreadZ + .02));
+    const k2 = k1.clone().add(v3(-.07, -.14 * len, spreadZ));
+    const k3 = k2.clone().add(v3(-.08, -.11 * len, -.02));
+    g.add(ball(k0, .042, M.chromeDark));
+    g.add(mesh(tubeGeometry([k0, k1], () => .037, 12, 6), M.chrome));
+    g.add(ball(k1, .036, M.chromeDark));
+    g.add(mesh(tubeGeometry([k1, k2], () => .032, 12, 6), M.chrome));
+    g.add(ball(k2, .030, M.chromeDark));
+    g.add(mesh(tubeGeometry([k2, k3], t => lerp(.029, .020, t), 10, 6), M.chrome));
+  }
+  const th0 = lPalm.clone().add(v3(-.11, -.04, .15));
+  const th1 = th0.clone().add(v3(-.08, -.16, .07));
+  const th2 = th1.clone().add(v3(-.05, -.13, -.01));
+  g.add(ball(th0, .048, M.chromeDark));
+  g.add(mesh(tubeGeometry([th0, th1], () => .042, 12, 6), M.chrome));
+  g.add(ball(th1, .040, M.chromeDark));
+  g.add(mesh(tubeGeometry([th1, th2], t => lerp(.037, .025, t), 12, 6), M.chrome));
+
   return g;
 }
 
-/* --- hips, belt, legs, boots */
-const R_HIP = v3(-.6, -4.5, -.02), R_KN = v3(-.62, -6.3, -.02), R_AN = v3(-.5, -7.98, -.08);   /* the weight leg slants in under him */
-const L_HIP = v3(.6, -4.7, 0), L_KN = v3(1.02, -6.15, .82), L_AN = v3(1.62, -7.98, .95);     /* the loose one kicked out, knee bent */
+/* ===========================================================================
+   SEGMENT 8: Stocky, Powerful Primate Legs in Wide-Cut 1970s Pleated Trousers
+   & Classic Polished Black Calfskin Oxford Dress Shoes (Matching Panel 3)
+   =========================================================================== */
+const R_HIP = v3(-.32, -4.14, -.06), R_KN = v3(-.54, -5.78, .01), R_AN = v3(-.64, -7.48, -.03);
+const L_HIP = v3(.32, -4.14, -.04),  L_KN = v3(.64, -5.76, .16),  L_AN = v3(.80, -7.48, .16);
 
 function bootSDF(x, y, z) {
-  let d = sdCap(x, y, z, 0, -.3, 0, 0, .5, -.04, .34);                     /* shaft          */
-  d = smin(d, sdRB(x, y, z, 0, -.38, .36, .37, .16, .72, .14), .14);        /* a squared foot */
-  d = smin(d, sdRB(x, y, z, 0, -.33, .92, .33, .13, .22, .12), .08);        /* toe box        */
+  let d = sdCap(x, y, z, 0, -.42, -.04, 0, -.28, -.04, .14);
+  d = smin(d, sdRB(x, y, z, 0, -.42, .28, .22, .10, .56, .08), .07);
+  d = smin(d, sdRB(x, y, z, 0, -.43, .76, .17, .075, .22, .06), .05);
   return Math.max(d, -(y + .52));
 }
 function soleSDF(x, y, z) {
-  const qx = Math.abs(x) - .37, qy = Math.abs(y + .58) - .045, qz = Math.abs(z - .44) - .72;
+  const qx = Math.abs(x) - .23 * (1 - .28 * smooth(.38, .95, z)), qy = Math.abs(y + .55) - .028, qz = Math.abs(z - .35) - .59;
   const o = Math.hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0);
-  return o - .05;
+  const heel = sdRB(x, y, z, 0, -.58, -.08, .19, .045, .16, .02);
+  return Math.min(o - .030, heel);
 }
 
 function buildLegs(M) {
   const g = new THREE.Group();
-  /* hips, tucked under the jacket's hem */
-  const hips = projectSphere((x, y, z) => Math.max(sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), y + 3.9), 120, 90, v3(0, -4.5, 0), 3);
-  g.add(mesh(hips.geo, M.pants));
 
-  const leg = (H, K, A, s) => {
-    /* baggy, with folds that drift around the leg and bunch over the boot */
-    const fold = (t, th) => .035 * Math.sin(th * 3 + t * 9 + s) + .02 * Math.sin(th * 5 - t * 13);
-    /* hip to boot in one length of cloth, bending at the knee */
-    const top = A.clone().add(v3(0, .44, -.02));
-    g.add(mesh(tubeGeometry([H, H.clone().lerp(K, .5).add(v3(s * .05, 0, 0)), K, K.clone().lerp(top, .5), top],
-      (t, th) => lerp(.46, .27, t) + fold(t, th) * lerp(.5, .3, t) + .04 * smooth(.88, 1, t) * Math.abs(Math.sin(t * 80)), 32, 110), M.pants));
-    /* knee pad */
-    const kd = K.clone().sub(H).normalize(), front = v3(0, 0, 1).sub(kd.clone().multiplyScalar(kd.z)).normalize();
-    const pad = ball(K.clone().addScaledVector(front, .3), .22, M.strap, [1, 1.2, .4]);
-    pad.lookAt(K.clone().addScaledVector(front, 2));
-    g.add(pad);
-    /* cargo pocket on the outside of the thigh, and a strap with a red buckle */
-    const mid = H.clone().lerp(K, .5), out = v3(s, 0, 0);
-    const pk = ball(mid.clone().addScaledVector(out, .38), .26, M.pants, [.3, 1, .8]);
-    g.add(pk);
-    const strapAt = H.clone().lerp(K, .3);
-    g.add(ringAt(strapAt, K.clone().sub(H), .46, .035, M.strap));
-    const rb = mesh(new THREE.BoxGeometry(.1, .1, .04), M.neon, false);
-    rb.position.copy(strapAt).addScaledVector(out, .47);
-    g.add(rb);
-  };
-  leg(R_HIP, R_KN, R_AN, -1);
-  leg(L_HIP, L_KN, L_AN, 1);
+  /* 1. Stocky Upper Trouser Hip Saddle tucked cleanly inside the waistcoat & upper thighs */
+  const upperTrousers = solidClothShell(14, 48, (u, v) => {
+    const a = lerp(-Math.PI, Math.PI, u);
+    const sx = Math.sin(a), cz = Math.cos(a);
+    const y = lerp(-3.82, -4.28, v);
+    const rx = lerp(.78, .72, v);
+    const rz = lerp(.36, .34, v);
+    return v3(sx * rx, y, -.06 + cz * rz);
+  }, .016);
+  g.add(mesh(upperTrousers, M.pants));
 
-  /* chunky boots: right planted straight, left turned out */
-  const boot = projectSphere(bootSDF, 96, 72, v3(0, -.1, .25), 2.2);
-  const sole = projectSphere(soleSDF, 72, 54, v3(0, -.58, .44), 2);
-  const soleLine = [];
-  for (let i = 0; i <= 64; i++) {
-    const a = i / 64 * Math.PI * 2;
-    soleLine.push(surfaceAlong(soleSDF, v3(0, -.53, .44), v3(Math.sin(a), 0, Math.cos(a)), 2).add(v3(0, .002, 0)));
-  }
-  const lineGeo = tubeGeometry(soleLine, () => .016, 6, 128);
-  [[R_AN, -.2], [L_AN, .75]].forEach(([A, yaw]) => {
+  /* 2. Heavy-Cut Tailored Pleated Straight-Leg Dress Trousers in Contrapposto Swagger Stance */
+  [-1, 1].forEach(s => {
+    const legGeo = solidClothShell(56, 44, (u, v) => {
+      const a = lerp(-Math.PI, Math.PI, u);
+      const sx = Math.sin(a), cz = Math.cos(a);
+      const y = lerp(-3.96, -7.54, v);
+      /* Right leg planted back/anchor; Left leg stepped wide and forward with a relaxed knee bend */
+      const cx = s < 0
+        ? -lerp(.27, .64, Math.pow(v, .82))
+        : lerp(.27, .80, Math.pow(v, .78)) + .03 * Math.sin(v * Math.PI);
+      const cz0 = s < 0
+        ? -.06 + .05 * Math.sin(v * Math.PI * .75) - .03 * v
+        : -.05 + .14 * Math.sin(v * Math.PI * .72) + .16 * v;
+
+      /* Inner-thigh fullness above the crotch so both legs meet in a clean V-seam at y = -4.42 */
+      const isInner = s * sx < 0;
+      const crotchClamp = isInner ? .08 * (1 - smooth(.06, .22, v)) * Math.abs(sx) : 0;
+      /* Slight outward pocket flare on the right hip where the hand is tucked in */
+      const rPocketBulge = (s < 0 && sx < -.3 && cz > .1)
+        ? .055 * Math.exp(-Math.pow((v - .08) / .09, 2)) * (-sx) * cz
+        : 0;
+      const rx = lerp(.46, .38, Math.pow(v, .82)) + crotchClamp + rPocketBulge;
+      const rz = lerp(.41, .37, Math.pow(v, .76)) + rPocketBulge * .8;
+
+      /* Sharp front center knife-edge trouser crease (+z) & 1970s front pleats */
+      const frontCrease = .038 * Math.pow(Math.max(0, cz), 10) * smooth(.08, .24, v);
+      const backCrease = .020 * Math.pow(Math.max(0, -cz), 10);
+      const upperPleats = .022 * smooth(.05, .15, v) * (1 - smooth(.18, .58, v)) * Math.max(0, cz) * Math.cos(sx * 10);
+      const kneeFold = .015 * Math.exp(-Math.pow((v - .48) / .13, 2)) * Math.sin(v * 34 + cz * 2);
+      const shoeBreak = .048 * smooth(.82, 1.0, v) * Math.max(0, cz) + .016 * smooth(.80, 1.0, v) * Math.sin(v * 26 + cz * 2);
+
+      const rX = rx + upperPleats * .4 + kneeFold * .5;
+      const rZ = rz + frontCrease + backCrease + upperPleats + kneeFold + shoeBreak;
+      return v3(cx + sx * rX, y, cz0 + cz * rZ);
+    }, .018, v3(s * .52, -5.8, 0));
+    g.add(mesh(legGeo, M.pants));
+  });
+
+  /* 3. Classic Polished Black Calfskin Oxford Dress Shoes (Asymmetrical Contrapposto Foot Turn) */
+  const boot = projectSphere(bootSDF, 88, 64, v3(0, -.25, .25), 1.8);
+  const sole = projectSphere(soleSDF, 64, 48, v3(0, -.56, .36), 1.6);
+  [[R_AN, -.18], [L_AN, .34]].forEach(([A, yaw]) => {
     const b = new THREE.Group();
-    b.position.set(A.x, FLOOR_Y + .635, A.z);
+    b.position.set(A.x, FLOOR_Y + .62 * .98, A.z);
     b.rotation.y = yaw;
-    b.scale.setScalar(.86);
-    b.position.y = FLOOR_Y + .635 * .86;
-    b.add(mesh(boot.geo, M.boot), mesh(sole.geo, M.sole), mesh(lineGeo, M.neon, false));
+    b.scale.setScalar(.98);
+    b.add(mesh(boot.geo, M.boot), mesh(sole.geo, M.sole));
     g.add(b);
   });
   return g;
@@ -1151,19 +1792,98 @@ function buildLegs(M) {
 
 function buildBelt(M) {
   const g = new THREE.Group();
-  /* belt: a strap round the waist, chrome buckle, a strip of red */
   const belt = [];
-  for (let i = 0; i <= 48; i++) {
-    const a = i / 48 * Math.PI * 2;
-    belt.push(surfaceAlong((x, y, z) => sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), v3(0, -4.2, 0), v3(Math.sin(a), 0, Math.cos(a)), 3).add(v3(0, 0, 0)));
+  for (let i = 0; i < 56; i++) {
+    const a = i / 56 * Math.PI * 2;
+    const sx = Math.sin(a), cz = Math.cos(a);
+    belt.push(v3(sx * .84, -4.02, -.03 + cz * .44));
   }
-  belt.pop();
-  g.add(mesh(tubeGeometry(belt.concat([belt[0]]), () => .075, 10, 120), M.strap));
-  const buckle = mesh(new THREE.BoxGeometry(.42, .24, .06), M.chrome);
-  buckle.position.copy(surfaceAlong((x, y, z) => sdE(x, y, z, 0, -4.6, 0, 1.1, .6, .74), v3(0, -4.2, 0), v3(0, 0, 1), 3)).add(v3(0, 0, .07));
-  const strip = mesh(new THREE.BoxGeometry(.26, .04, .02), M.neon, false);
-  strip.position.copy(buckle.position).add(v3(0, 0, .04));
-  g.add(buckle, strip);
+  belt.push(belt[0].clone().add(v3(.001, 0, 0)));
+  g.add(mesh(tubeGeometry(belt, () => .032, 10, 96), M.strap));
+  return g;
+}
+
+/* ===========================================================================
+   SEGMENT 9: Slung Electric Guitar Behind Left Shoulder (Like Panels 2 & 3)
+   Cleanly mounted behind the back with NO strap slicing across the front vest!
+   =========================================================================== */
+function buildGuitar(M) {
+  const g = new THREE.Group();
+  const gtr = new THREE.Group();
+
+  const bodySDF = (x, y, z) => {
+    const lower = sdE(x, y, z, 0, -.52, 0, .86, .72, .16);
+    const upper = sdE(x, y, z, 0, .28, 0, .64, .54, .15);
+    const waist = sdE(Math.abs(x), y, z, .72, -.06, 0, .26, .28, .30);
+    let d = smin(lower, upper, .22);
+    d = smax(d, -waist, .12);
+    return Math.max(d, Math.abs(z) - .13);
+  };
+  const bodyGeo = projectSphere(bodySDF, 96, 72, v3(0, -.15, 0), 2.2).geo;
+  gtr.add(mesh(bodyGeo, M.guitarWood));
+
+  const rimPts = [];
+  for (let i = 0; i < 64; i++) {
+    const a = i / 64 * Math.PI * 2;
+    const p = surfaceAlong(bodySDF, v3(0, -.15, 0), v3(Math.sin(a), Math.cos(a), 0), 2);
+    rimPts.push(v3(p.x, p.y, .125));
+  }
+  rimPts.push(rimPts[0].clone().add(v3(.001, 0, 0)));
+  gtr.add(mesh(tubeGeometry(rimPts, () => .012, 8, 96), M.dressShirt, false));
+
+  /* Neck & Ebony Fretboard */
+  const neck = mesh(new THREE.BoxGeometry(.17, 2.35, .07), M.guitarWood);
+  neck.position.set(0, 1.55, .03);
+  const board = mesh(new THREE.BoxGeometry(.18, 2.38, .025), M.coat);
+  board.position.set(0, 1.55, .075);
+  gtr.add(neck, board);
+
+  /* Silver frets & 6 metallic strings */
+  for (let f = 0; f < 18; f++) {
+    const fy = .55 + f * .115 * (1 - f * .012);
+    const fret = mesh(new THREE.BoxGeometry(.182, .008, .012), M.chrome, false);
+    fret.position.set(0, fy, .090);
+    gtr.add(fret);
+  }
+
+  /* Gibson-style angled headstock with 3+3 chrome tuning pegs */
+  const head = new THREE.Group();
+  head.position.set(0, 2.72, .065);
+  head.rotation.x = -.18;
+  const hPlate = mesh(new THREE.BoxGeometry(.24, .54, .045), M.coat);
+  hPlate.position.set(0, .26, 0);
+  head.add(hPlate);
+  [-1, 1].forEach(s => {
+    for (let k = 0; k < 3; k++) {
+      const py = .12 + k * .14;
+      const post = mesh(new THREE.CylinderGeometry(.012, .012, .06, 12), M.chrome, false);
+      post.rotation.x = Math.PI / 2;
+      post.position.set(s * .085, py, .03);
+      const peg = mesh(new THREE.CylinderGeometry(.008, .008, .09, 10), M.chrome, false);
+      peg.rotation.z = Math.PI / 2;
+      peg.position.set(s * .145, py, .01);
+      const button = ball(v3(s * .19, py, .01), .024, M.chrome, [.6, 1.3, .4]);
+      head.add(post, peg, button);
+    }
+  });
+  gtr.add(head);
+
+  /* Bridge & 6 strings */
+  const bridge = mesh(new THREE.BoxGeometry(.32, .06, .04), M.chrome);
+  bridge.position.set(0, -.32, .13);
+  gtr.add(bridge);
+  for (let s = 0; s < 6; s++) {
+    const sx = -.065 + s * .026;
+    const str = mesh(new THREE.CylinderGeometry(.0035, .0035, 3.15, 6), M.chrome, false);
+    str.position.set(sx, 1.25, .105);
+    gtr.add(str);
+  }
+
+  /* Slung diagonally behind the back so the neck & headstock rise cleanly behind
+     the left shoulder (+x) and the upper bout peeks behind the left ribcage */
+  gtr.position.set(.38, -2.50, -.76);
+  gtr.rotation.set(.12, Math.PI + .14, .54);
+  g.add(gtr);
 
   return g;
 }
@@ -1175,7 +1895,6 @@ function buildFloor() {
   gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(.35, 'rgba(255,255,255,.6)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   x.fillStyle = gr; x.fillRect(0, 0, 256, 256);
   const fade = new THREE.CanvasTexture(c);
-  /* matte: a low camera skims the floor, and any specular at that angle turns it to a pale disc */
   const m = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), new THREE.MeshLambertMaterial({
     color: hdr(.012, .012, .014), alphaMap: fade, transparent: true, depthWrite: false
   }));
@@ -1187,17 +1906,22 @@ function buildFloor() {
 function buildBody(env) {
   const M = bodyMaterials(env);
   const upper = new THREE.Group(), lower = new THREE.Group();
-  upper.add(buildJacket(M), buildArms(M), buildBelt(M));
+  upper.add(buildJacket(M), buildArms(M), buildBelt(M), buildGuitar(M));
   lower.add(buildLegs(M), buildFloor());
+  /* Stocky, broad-shouldered primate posture: high trapezius/shoulders tucked right under
+     the chin beard and 12% wider shoulder/chest/limb mass relative to the cranium */
+  upper.position.set(0, .20, .04);
+  upper.scale.set(1.12, 1.0, 1.08);
+  lower.position.set(0, .20, .04);
+  lower.scale.set(1.12, 1.0, 1.08);
   return { upper: upper, lower: lower };
 }
 
-/* The pose. Everything above the waist hangs off a pivot there — leaned back,
-   turned toward the camera, his left shoulder up against his dropped right
-   hip — and the head hangs off the neck: chin up, cocked. */
+/* Contrapposto swagger stance: torso angled slightly with right shoulder dropped toward the
+   pocketed hand, left cyber-shoulder rolled forward, and head counter-turned toward the lens */
 const POSE = {
-  waist: v3(0, -4.3, 0), upper: { x: -.1, y: .13, z: .075 },
-  neck: v3(0, -1.25, 0), head: { x: -.12, y: .08, z: -.15 }
+  waist: v3(0, -4.1, 0), upper: { x: -.022, y: .11, z: .028 },
+  neck: v3(0, -1.05, 0), head: { x: .018, y: -.07, z: -.032 }
 };
 function pivotGroup(pivot, rot) {
   const outer = new THREE.Group();
@@ -1344,9 +2068,9 @@ function resizePost() {
    cigarette, and the wide that leaves room on the left for the word. A drag
    turns the head on top of either, and springs back when let go. */
 const SHOTS = {
-  close: { yaw: 1.32, pitch: .02, dist: 3.3, base: new THREE.Vector3(0, -.42, .7), shift: 0 },
-  wide:  { yaw: .95, pitch: .07, dist: 7.4, base: new THREE.Vector3(0, -.2, .4), shift: 1.35 },
-  full:  { yaw: .5, pitch: -.04, dist: 25, base: new THREE.Vector3(0, -3.7, .2), shift: 2.6 }
+  close: { yaw: 1.08, pitch: .02, dist: 3.9, base: new THREE.Vector3(0, -.58, .56), shift: .08 },
+  wide:  { yaw: .86, pitch: .05, dist: 8.6, base: new THREE.Vector3(0, -.58, .36), shift: 1.35 },
+  full:  { yaw: .10, pitch: -.03, dist: 22.8, base: new THREE.Vector3(0, -3.95, .2), shift: .35 }
 };
 /* the scroll, in two acts: the exhale, then the reveal */
 const ACT1 = () => sat(SCROLL.sp / .5);

@@ -1,8 +1,8 @@
 "use client"
 
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Heart, Play, Sparkles, Music2, Radio, Tv } from "lucide-react"
+import { Play, Sparkles, Tv } from "lucide-react"
 
 interface MuseLoadingScreenProps {
   /** Whether data is still loading from the server */

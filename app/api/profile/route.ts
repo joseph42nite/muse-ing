@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { get, run } from "@/lib/server/db"
 import { getSessionUser, unauthorized } from "@/lib/server/auth"
+import { normalizePromoterCode } from "@/lib/server/format"
 
 export async function GET() {
   const user = await getSessionUser()
@@ -15,7 +16,7 @@ export async function PATCH(req: Request) {
   const phone = String(b.phone ?? "").trim() || null
   let code = user.promoter_code
   if (user.role === "promoter" && b.promoter_code !== undefined) {
-    code = String(b.promoter_code).trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || null
+    code = normalizePromoterCode(b.promoter_code)
     if (code && get("SELECT 1 FROM users WHERE promoter_code = ? AND id != ?", code, user.id)) {
       return NextResponse.json({ error: "That promoter code is taken." }, { status: 409 })
     }

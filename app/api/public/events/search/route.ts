@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { all, get } from "@/lib/server/db"
+import { escapeLike } from "@/lib/server/format"
 
 const PAGE_SIZE_MAX = 48
 
@@ -23,9 +24,9 @@ function dateRange(when: string): { from?: string; to?: string } {
       return { from: start, to: plus(7) }
     case "weekend": {
       const dow = today.getUTCDay() // 0 Sun .. 6 Sat
-      const toSat = (6 - dow + 7) % 7
-      const sat = dow === 0 ? -1 : toSat
-      return { from: plus(Math.max(sat, 0)), to: plus(Math.max(sat, 0) + 1) }
+      if (dow === 0) return { from: start, to: start } // Sunday: just what's left of this weekend
+      const toSat = 6 - dow
+      return { from: plus(toSat), to: plus(toSat + 1) }
     }
     case "all":
       return {}
@@ -52,15 +53,15 @@ export async function GET(req: Request) {
 
   if (q) {
     where.push(
-      "(LOWER(e.title) LIKE ? OR LOWER(COALESCE(e.location_name,'')) LIKE ? OR LOWER(COALESCE(u.name,'')) LIKE ?)"
+      "(LOWER(e.title) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(e.location_name,'')) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(u.name,'')) LIKE ? ESCAPE '\\')"
     )
-    const like = `%${q}%`
+    const like = `%${escapeLike(q)}%`
     params.push(like, like, like)
   }
   if (city) {
     // location_name is stored as "Venue • City"
-    where.push("LOWER(COALESCE(e.location_name,'')) LIKE ?")
-    params.push(`%• ${city}`)
+    where.push("LOWER(COALESCE(e.location_name,'')) LIKE ? ESCAPE '\\'")
+    params.push(`%• ${escapeLike(city)}`)
   }
   const { from, to } = dateRange(when)
   if (from) {
@@ -77,7 +78,7 @@ export async function GET(req: Request) {
   }
 
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : ""
-  const from_ = "FROM events e LEFT JOIN users u ON u.id = e.artist_id"
+  const from_ = "FROM (SELECT * FROM events WHERE is_listed = 1) e LEFT JOIN users u ON u.id = e.artist_id"
 
   const total = get<{ n: number }>(`SELECT COUNT(*) AS n ${from_} ${whereSql}`, ...params)?.n ?? 0
   const events = all(
@@ -93,7 +94,7 @@ export async function GET(req: Request) {
 
   // City facets, independent of the active city filter so the chips stay stable.
   const cities = all<{ location_name: string }>(
-    "SELECT DISTINCT location_name FROM events WHERE location_name LIKE '%•%'"
+    "SELECT DISTINCT location_name FROM events WHERE is_listed = 1 AND location_name LIKE '%•%'"
   )
     .map((r) => r.location_name.split("•")[1]?.trim())
     .filter((c): c is string => Boolean(c))

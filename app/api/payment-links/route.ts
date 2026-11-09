@@ -2,6 +2,7 @@ import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { get, run } from "@/lib/server/db"
 import { createPaymentLink, CashfreeConfigError } from "@/lib/server/cashfree"
+import { last10Digits } from "@/lib/server/format"
 
 const MAX_PEOPLE = 20
 
@@ -13,7 +14,7 @@ export async function POST(req: Request) {
 
   const eventId = String(body.event_id ?? "").trim()
   const name = String(body.name ?? "").trim()
-  const phone = String(body.phone ?? "").replace(/\D/g, "").slice(-10)
+  const phone = last10Digits(body.phone)
   const email = String(body.email ?? "").trim() || null
   const ref = String(body.ref ?? "").trim() // promoter code or id
   const numPeople = Number.parseInt(body.num_people, 10)
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     if (p) promoterId = p.id
   }
 
-  const total = event.ticket_price * numPeople
+  const total = Math.round(event.ticket_price * numPeople * 100) / 100
   const bookingId = crypto.randomUUID()
   run(
     `INSERT INTO audience_bookings (id, event_id, promoter_id, name, phone, email, num_people, total_amount)

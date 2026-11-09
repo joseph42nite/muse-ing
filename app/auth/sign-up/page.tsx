@@ -52,7 +52,7 @@ export default function SignUpPage() {
       if (!res.ok) throw new Error(body.error || "Sign up failed.")
 
       if (body.role === "artist") router.push("/artist")
-      else if (body.role === "venue") router.push("/venue-checkin")
+      else if (body.role === "venue") router.push("/venue")
       else router.push("/promoter")
     } catch (err: any) {
       setError(err.message || "An error occurred during sign up")
@@ -178,7 +178,7 @@ export default function SignUpPage() {
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/15 text-white placeholder-white/35 text-sm focus:outline-none focus:border-purple-400"
                 {...register("password", {
                   required: "Password is required",
-                  minLength: { value: 6, message: "Min 6 chars" },
+                  minLength: { value: 8, message: "Min 8 chars" },
                 })}
               />
             </div>

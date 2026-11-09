@@ -2,15 +2,14 @@ import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { all, get, run } from "@/lib/server/db"
 import { requireRole, forbidden } from "@/lib/server/auth"
-
-const last10 = (p: string) => p.replace(/\D/g, "").slice(-10)
+import { last10Digits as last10 } from "@/lib/server/format"
 
 export async function POST(req: Request) {
   const user = await requireRole("venue", "admin")
   if (!user) return forbidden()
   const b = await req.json().catch(() => ({}))
   const eventId = String(b.event_id ?? "")
-  const key = last10(String(b.phone ?? ""))
+  const key = last10(b.phone)
   if (key.length < 10) return NextResponse.json({ error: "Enter a valid phone number." }, { status: 400 })
 
   if (!get("SELECT 1 FROM events WHERE id = ? AND (? = 'admin' OR venue_id = ?)", eventId, user.role, user.id)) {

@@ -1,17 +1,12 @@
 /**
- * UPIPay Integration Module (compatible with https://github.com/iamrobinsharaya/upipay)
- * Zero-commission UPI Payment Gateway SDK for Node.js / TypeScript.
+ * Direct UPI payment links (no gateway), modelled on https://github.com/iamrobinsharaya/upipay.
  *
- * Supports:
- * 1. `generateUPIQR`: Generates NPCI-compliant `upi://pay` URIs with `mode=04` (fixed amount lock)
- *    and deterministic QR matrix data so users cannot tamper with the payment amount.
- * 2. `buildIntentLinks`: Generates deep-link UPI intent URLs for PhonePe, Google Pay (Tez),
- *    Paytm, BHIM, and generic UPI apps on mobile.
- * 3. `UPIPay` Client: Supports direct VPA transfers as well as PhonePe Business & Paytm Business
- *    merchant configurations for zero-commission status verification.
+ * - `generateUPIQR` builds an NPCI `upi://pay` URI; `mode=04` asks the app to lock the amount.
+ * - `buildIntentLinks` turns it into deep links for Google Pay, PhonePe, Paytm and BHIM.
+ *
+ * A direct UPI transfer sends no confirmation back to us, so payments made this way can't be
+ * verified server-side.
  */
-
-export type UPIPayProvider = "upi_direct" | "phonepe" | "paytm"
 
 export interface GenerateUPIQROptions {
   /** Artist's Virtual Payment Address (e.g. "arjunmehta@ybl") */
@@ -98,32 +93,5 @@ export function generateUPIQR(options: GenerateUPIQROptions): UPIQRResponse {
     vpa: cleanVpa,
     payeeName: cleanName,
     intentLinks,
-  }
-}
-
-export interface UPIPayClientConfig {
-  provider: UPIPayProvider
-  vpa: string
-  merchantName: string
-  merchantId?: string
-  merchantKey?: string
-}
-
-export class UPIPay {
-  private config: UPIPayClientConfig
-
-  constructor(config: UPIPayClientConfig) {
-    this.config = config
-  }
-
-  createOrder(params: { amount: number; orderId: string; note?: string }): UPIQRResponse {
-    return generateUPIQR({
-      vpa: this.config.vpa,
-      name: this.config.merchantName,
-      amount: params.amount,
-      orderId: params.orderId,
-      note: params.note,
-      mode: "fixed",
-    })
   }
 }

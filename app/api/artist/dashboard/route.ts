@@ -1,7 +1,9 @@
 import crypto from "node:crypto"
 import { NextResponse } from "next/server"
-import { all, get, run } from "@/lib/server/db"
-import { getSessionUser } from "@/lib/server/auth"
+import { all, get, run, transaction } from "@/lib/server/db"
+import { requireRole } from "@/lib/server/auth"
+import { normalizeInstagramHandle } from "@/lib/server/format"
+import { ownedSong, ownsEvent, toggleUpvote } from "@/lib/server/songs"
 import { extractYouTubeId } from "@/lib/youtube"
 
 function slugifyLocation(loc: string): string {
@@ -25,17 +27,16 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const requestedEventId = url.searchParams.get("eventId")?.trim()
 
-  const sessionUser = await getSessionUser()
-  const artist =
-    sessionUser && (sessionUser.role === "artist" || sessionUser.role === "admin")
-      ? get<any>(
+  const sessionUser = await requireRole("artist", "admin")
+  const artist = sessionUser
+    ? get<any>(
           `SELECT id, name, email, phone, role, instagram_handle, avatar_url, bio,
                   upi_id, payee_name, bank_name, account_number, ifsc_code,
                   upipay_provider, upipay_merchant_id
              FROM users WHERE id = ?`,
           sessionUser.id
         )
-      : null
+    : null
 
   if (!artist) {
     return NextResponse.json({ error: "Please sign in with your Artist account.", needsAuth: true }, { status: 401 })
@@ -56,11 +57,14 @@ export async function GET(req: Request) {
     .filter((t) => t.status === "paid" && t.type === "tip")
     .reduce((sum, t) => sum + Number(t.amount || 0), 0)
 
+  const pending = transactions.filter((t) => t.status === "pending")
   const earningsSummary = {
     totalRevenue,
     dedicationRevenue,
     tipRevenue,
     totalTransactions: transactions.length,
+    pendingCount: pending.length,
+    pendingAmount: pending.reduce((sum, t) => sum + Number(t.amount || 0), 0),
   }
 
   const gigsRaw = all<any>(
@@ -191,10 +195,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser || !["artist", "admin"].includes(sessionUser.role)) {
-    return NextResponse.json({ error: "Not authorized." }, { status: 401 })
-  }
+  const sessionUser = await requireRole("artist", "admin")
+  if (!sessionUser) return NextResponse.json({ error: "Not authorized." }, { status: 401 })
 
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid request body." }, { status: 400 })
@@ -210,6 +212,9 @@ export async function POST(req: Request) {
 
     if (!eventId || !songTitle) {
       return NextResponse.json({ error: "Song title and event are required." }, { status: 400 })
+    }
+    if (!ownsEvent(sessionUser, eventId)) {
+      return NextResponse.json({ error: "Gig not found." }, { status: 404 })
     }
 
     const explicitVideoId = extractYouTubeId(explicitYoutubeUrl)
@@ -249,10 +254,16 @@ export async function POST(req: Request) {
     if (!title || !locationName || !dateInput) {
       return NextResponse.json({ error: "Gig title, location, and date are required." }, { status: 400 })
     }
-
     const parsedDate = new Date(dateInput)
-    const isoDate = isNaN(parsedDate.getTime()) ? new Date().toISOString() : parsedDate.toISOString()
-    const dateOnly = dateInput.slice(0, 10)
+    if (isNaN(parsedDate.getTime())) {
+      return NextResponse.json({ error: "Enter a valid gig date." }, { status: 400 })
+    }
+    if (ticketPrice < 0) {
+      return NextResponse.json({ error: "Ticket price can't be negative." }, { status: 400 })
+    }
+
+    const isoDate = parsedDate.toISOString()
+    const dateOnly = /^\d{4}-\d{2}-\d{2}/.test(dateInput) ? dateInput.slice(0, 10) : isoDate.slice(0, 10)
     const locationSlug = slugifyLocation(locationName.split(",")[0] || locationName)
     const id = crypto.randomUUID()
 
@@ -286,10 +297,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Artist name cannot be empty." }, { status: 400 })
     }
 
-    const formattedInsta =
-      instagramHandle && !instagramHandle.startsWith("@") && !instagramHandle.startsWith("http")
-        ? `@${instagramHandle}`
-        : instagramHandle || null
+    const formattedInsta = normalizeInstagramHandle(instagramHandle)
 
     run(
       `UPDATE users SET name = ?, instagram_handle = ?, avatar_url = ?, bio = ? WHERE id = ?`,
@@ -303,7 +311,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  // 4. Update Artist Bank & UPIPay Payout Details
+  // 4. Confirm or reject a direct-UPI payment the audience reported. Only the artist can see
+  //    whether the money arrived, so a dedication counts as paid only once they confirm it here.
+  if (action === "confirm_payment" || action === "reject_payment") {
+    const txId = String(body.transaction_id ?? "").trim()
+    const tx = get<{ id: string; request_id: string | null; type: string }>(
+      `SELECT id, request_id, type FROM artist_transactions
+        WHERE id = ? AND status = 'pending' AND (? = 'admin' OR artist_id = ?)`,
+      txId,
+      sessionUser.role,
+      sessionUser.id
+    )
+    if (!tx) return NextResponse.json({ error: "Pending payment not found." }, { status: 404 })
+
+    transaction(() => {
+      if (action === "confirm_payment") {
+        run("UPDATE artist_transactions SET status = 'paid' WHERE id = ?", tx.id)
+        if (tx.type === "dedication" && tx.request_id) {
+          run(
+            "UPDATE song_requests SET wants_dedication = 1, dedication_payment_status = 'paid' WHERE id = ?",
+            tx.request_id
+          )
+        }
+      } else {
+        // Not received: drop the claim; the song stays confirmed and can be paid again
+        run("DELETE FROM artist_transactions WHERE id = ?", tx.id)
+      }
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  // 5. Update Artist Bank & UPIPay Payout Details
   if (action === "update_bank_details") {
     const upiId = String(body.upi_id ?? "").trim()
     const payeeName = String(body.payee_name ?? "").trim()
@@ -346,11 +384,10 @@ export async function POST(req: Request) {
   return NextResponse.json({ error: "Unknown action." }, { status: 400 })
 }
 
+
 export async function PATCH(req: Request) {
-  const sessionUser = await getSessionUser()
-  if (!sessionUser || !["artist", "admin"].includes(sessionUser.role)) {
-    return NextResponse.json({ error: "Not authorized." }, { status: 401 })
-  }
+  const sessionUser = await requireRole("artist", "admin")
+  if (!sessionUser) return NextResponse.json({ error: "Not authorized." }, { status: 401 })
 
   const body = await req.json().catch(() => null)
   if (!body) return NextResponse.json({ error: "Invalid request body." }, { status: 400 })
@@ -358,11 +395,41 @@ export async function PATCH(req: Request) {
   const action = String(body.action ?? "")
   const requestId = String(body.request_id ?? "").trim()
 
-  // 1. Artist Confirms a Song
-  if (action === "confirm_song") {
-    const song = get<any>("SELECT * FROM song_requests WHERE id = ?", requestId)
-    if (!song) return NextResponse.json({ error: "Song request not found." }, { status: 404 })
+  if (action === "decline_batch") {
+    const batchId = String(body.batch_id ?? "").trim()
+    run(
+      `UPDATE song_requests SET status = 'declined'
+        WHERE batch_id = ? AND status = 'pending_artist'
+          AND event_id IN (SELECT id FROM events WHERE ? = 'admin' OR artist_id = ?)`,
+      batchId,
+      sessionUser.role,
+      sessionUser.id
+    )
+    return NextResponse.json({ ok: true })
+  }
 
+  if (action === "reorder_entire_playlist") {
+    const orderedIds: string[] = Array.isArray(body.ordered_ids) ? body.ordered_ids.map(String) : []
+    transaction(() => {
+      orderedIds.forEach((id, i) => {
+        run(
+          `UPDATE song_requests SET choice_index = ?
+            WHERE id = ? AND event_id IN (SELECT id FROM events WHERE ? = 'admin' OR artist_id = ?)`,
+          i + 1,
+          id,
+          sessionUser.role,
+          sessionUser.id
+        )
+      })
+    })
+    return NextResponse.json({ ok: true })
+  }
+
+  // Every remaining action works on one song, which must belong to one of this artist's gigs.
+  const song = ownedSong<any>(sessionUser, requestId)
+  if (!song) return NextResponse.json({ error: "Song not found." }, { status: 404 })
+
+  if (action === "confirm_song") {
     const explicitYt = body.youtube_url ? String(body.youtube_url).trim() : song.youtube_url
     const explicitVideoId = extractYouTubeId(explicitYt) || song.youtube_video_id || null
     const normalizedYoutubeUrl = explicitVideoId
@@ -374,62 +441,59 @@ export async function PATCH(req: Request) {
         ? "awaiting_payment"
         : song.dedication_payment_status
 
-    run(
-      `UPDATE song_requests
-          SET status = 'confirmed',
-              youtube_url = ?,
-              youtube_video_id = ?,
-              youtube_title = ?,
-              karaoke_candidates_json = NULL,
-              dedication_payment_status = ?
-        WHERE id = ?`,
-      normalizedYoutubeUrl,
-      explicitVideoId,
-      explicitVideoId ? song.song_title : null,
-      nextPaymentStatus,
-      requestId
-    )
-
-    if (body.decline_others !== false && song.batch_id) {
+    const existingPlaylistSong = transaction(() => {
       run(
         `UPDATE song_requests
-            SET status = 'declined'
-          WHERE batch_id = ? AND id != ? AND status = 'pending_artist'`,
-        song.batch_id,
+            SET status = 'confirmed',
+                youtube_url = ?,
+                youtube_video_id = ?,
+                youtube_title = ?,
+                karaoke_candidates_json = NULL,
+                dedication_payment_status = ?
+          WHERE id = ?`,
+        normalizedYoutubeUrl,
+        explicitVideoId,
+        explicitVideoId ? song.song_title : null,
+        nextPaymentStatus,
         requestId
       )
-    }
 
-    // Check if this song already exists in the artist's playlist for this event
-    const existingPlaylistSong = get<any>(
-      `SELECT * FROM song_requests
-        WHERE event_id = ?
-          AND source_type = 'artist_playlist'
-          AND status != 'declined'
-          AND LOWER(TRIM(song_title)) = LOWER(TRIM(?))
-        LIMIT 1`,
-      song.event_id,
-      song.song_title
-    )
+      if (body.decline_others !== false && song.batch_id) {
+        run(
+          `UPDATE song_requests SET status = 'declined' WHERE batch_id = ? AND id != ? AND status = 'pending_artist'`,
+          song.batch_id,
+          requestId
+        )
+      }
 
-    if (existingPlaylistSong) {
-      // Re-link individual user upvotes so each user has only 1 vote per song
+      // Already in the artist's playlist? Merge this request into it instead of listing it twice.
+      const existing = get<any>(
+        `SELECT * FROM song_requests
+          WHERE event_id = ?
+            AND source_type = 'artist_playlist'
+            AND status != 'declined'
+            AND id != ?
+            AND LOWER(TRIM(song_title)) = LOWER(TRIM(?))
+          LIMIT 1`,
+        song.event_id,
+        requestId,
+        song.song_title
+      )
+      if (!existing) return undefined
+
+      // Move votes across (one per voter) and recount from the vote rows
       run(
         `INSERT OR IGNORE INTO song_upvotes (request_id, voter_token, created_at)
          SELECT ?, voter_token, created_at FROM song_upvotes WHERE request_id = ?`,
-        existingPlaylistSong.id,
+        existing.id,
         requestId
       )
       run("DELETE FROM song_upvotes WHERE request_id = ?", requestId)
-      // Accurately synchronize total unique upvotes from the song_upvotes table
       run(
-        `UPDATE song_requests
-            SET upvotes = (SELECT COUNT(*) FROM song_upvotes WHERE request_id = ?)
-          WHERE id = ?`,
-        existingPlaylistSong.id,
-        existingPlaylistSong.id
+        "UPDATE song_requests SET upvotes = (SELECT COUNT(*) FROM song_upvotes WHERE request_id = ?) WHERE id = ?",
+        existing.id,
+        existing.id
       )
-      // If this audience request had a paid dedication, transfer it as well
       if (song.dedication_payment_status === "paid") {
         run(
           `UPDATE song_requests
@@ -440,15 +504,15 @@ export async function PATCH(req: Request) {
             WHERE id = ?`,
           song.dedicated_to,
           song.dedication_message,
-          existingPlaylistSong.id
+          existing.id
         )
       }
-      // Mark the duplicate audience request as merged/played so it doesn't duplicate in Audience Requests
-      run(
-        "UPDATE song_requests SET status = 'played' WHERE id = ?",
-        requestId
-      )
+      // Retire the duplicate request so it doesn't show twice in the queue
+      run("UPDATE song_requests SET status = 'played' WHERE id = ?", requestId)
+      return existing
+    })
 
+    if (existingPlaylistSong) {
       return NextResponse.json({
         ok: true,
         merged_with_playlist_id: existingPlaylistSong.id,
@@ -468,102 +532,53 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  if (action === "decline_batch") {
-    const batchId = String(body.batch_id ?? "").trim()
-    run("UPDATE song_requests SET status = 'declined' WHERE batch_id = ? AND status = 'pending_artist'", batchId)
+  // Artist's YouTube player reports where it is, so audience lyrics can follow along
+  if (action === "report_playback") {
+    const position = Math.max(0, Number(body.position) || 0)
+    run(
+      "UPDATE events SET active_song_request_id = ?, playback_position = ?, playback_playing = ?, playback_updated_at = ? WHERE id = ?",
+      requestId,
+      position,
+      body.playing ? 1 : 0,
+      Date.now(),
+      song.event_id
+    )
     return NextResponse.json({ ok: true })
   }
 
   if (action === "set_now_playing") {
-    const song = get<any>("SELECT * FROM song_requests WHERE id = ?", requestId)
-    if (!song) return NextResponse.json({ error: "Song not found." }, { status: 404 })
-
-    run(
-      "UPDATE song_requests SET status = 'confirmed' WHERE event_id = ? AND status = 'playing' AND id != ?",
-      song.event_id,
-      requestId
-    )
-    run("UPDATE song_requests SET status = 'playing' WHERE id = ?", requestId)
-    run(
-      "UPDATE events SET active_song_request_id = ?, active_karaoke_Floor_video_id = COALESCE(?, active_karaoke_Floor_video_id) WHERE id = ?",
-      requestId,
-      song.youtube_video_id,
-      song.event_id
-    )
-    return NextResponse.json({ ok: true })
-  }
-
-  if (action === "reorder_entire_playlist" || action === "reorder_setlist_queue") {
-    const orderedIds: string[] = Array.isArray(body.ordered_ids) ? body.ordered_ids : []
-    for (let i = 0; i < orderedIds.length; i++) {
-      run("UPDATE song_requests SET choice_index = ? WHERE id = ?", i + 1, orderedIds[i])
-    }
-    return NextResponse.json({ ok: true })
-  }
-
-  if (action === "reorder_songs") {
-    const songId = String(body.song_id ?? "").trim()
-    const targetSongId = String(body.target_song_id ?? "").trim()
-    const songA = get<any>("SELECT id, choice_index, upvotes, created_at FROM song_requests WHERE id = ?", songId)
-    const songB = get<any>("SELECT id, choice_index, upvotes, created_at FROM song_requests WHERE id = ?", targetSongId)
-    if (songA && songB) {
-      const idxA = songA.choice_index || 1
-      const idxB = songB.choice_index || 1
-      const newIdxA = idxA === idxB ? idxB + 1 : idxB
-      const newIdxB = idxA === idxB ? idxA : idxA
-      run("UPDATE song_requests SET choice_index = ? WHERE id = ?", newIdxA, songA.id)
-      run("UPDATE song_requests SET choice_index = ? WHERE id = ?", newIdxB, songB.id)
+    transaction(() => {
       run(
-        "UPDATE song_requests SET upvotes = ?, created_at = ? WHERE id = ?",
-        songB.upvotes,
-        songB.created_at,
-        songA.id
+        "UPDATE song_requests SET status = 'confirmed' WHERE event_id = ? AND status = 'playing' AND id != ?",
+        song.event_id,
+        requestId
       )
+      run("UPDATE song_requests SET status = 'playing' WHERE id = ?", requestId)
       run(
-        "UPDATE song_requests SET upvotes = ?, created_at = ? WHERE id = ?",
-        songA.upvotes,
-        songA.created_at,
-        songB.id
+        "UPDATE events SET active_song_request_id = ?, active_karaoke_Floor_video_id = COALESCE(?, active_karaoke_Floor_video_id), playback_position = 0, playback_playing = 0, playback_updated_at = NULL WHERE id = ?",
+        requestId,
+        song.youtube_video_id,
+        song.event_id
       )
-    }
+    })
     return NextResponse.json({ ok: true })
   }
 
   if (action === "mark_played") {
-    const song = get<any>("SELECT * FROM song_requests WHERE id = ?", requestId)
-    if (!song) return NextResponse.json({ error: "Song not found." }, { status: 404 })
-
-    run("UPDATE song_requests SET status = 'played' WHERE id = ?", requestId)
-    run(
-      "UPDATE events SET active_song_request_id = CASE WHEN active_song_request_id = ? THEN NULL ELSE active_song_request_id END WHERE id = ?",
-      requestId,
-      song.event_id
-    )
+    transaction(() => {
+      run("UPDATE song_requests SET status = 'played' WHERE id = ?", requestId)
+      run(
+        "UPDATE events SET active_song_request_id = NULL WHERE id = ? AND active_song_request_id = ?",
+        song.event_id,
+        requestId
+      )
+    })
     return NextResponse.json({ ok: true })
   }
 
   if (action === "toggle_upvote") {
     const voterToken = String(body.voter_token ?? "").trim() || "artist_stage"
-    if (!requestId) {
-      return NextResponse.json({ error: "Missing song request ID." }, { status: 400 })
-    }
-    const song = get<any>("SELECT id, upvotes FROM song_requests WHERE id = ?", requestId)
-    if (!song) return NextResponse.json({ error: "Song not found." }, { status: 404 })
-
-    const existing = get(
-      "SELECT 1 FROM song_upvotes WHERE request_id = ? AND voter_token = ?",
-      requestId,
-      voterToken
-    )
-    if (existing) {
-      run("DELETE FROM song_upvotes WHERE request_id = ? AND voter_token = ?", requestId, voterToken)
-      run("UPDATE song_requests SET upvotes = MAX(0, upvotes - 1) WHERE id = ?", requestId)
-      return NextResponse.json({ ok: true, upvoted: false })
-    } else {
-      run("INSERT INTO song_upvotes (request_id, voter_token) VALUES (?, ?)", requestId, voterToken)
-      run("UPDATE song_requests SET upvotes = upvotes + 1 WHERE id = ?", requestId)
-      return NextResponse.json({ ok: true, upvoted: true })
-    }
+    return NextResponse.json({ ok: true, upvoted: toggleUpvote(requestId, voterToken) })
   }
 
   if (action === "attach_youtube") {
@@ -580,14 +595,6 @@ export async function PATCH(req: Request) {
 
   if (action === "delete_song") {
     run("DELETE FROM song_requests WHERE id = ?", requestId)
-    return NextResponse.json({ ok: true })
-  }
-
-  if (action === "mark_dedication_paid") {
-    run(
-      "UPDATE song_requests SET wants_dedication = 1, dedication_payment_status = 'paid' WHERE id = ?",
-      requestId
-    )
     return NextResponse.json({ ok: true })
   }
 

@@ -264,7 +264,7 @@ export default function EventsExplorer() {
               <li key={ev.id}>
                 <article className="group flex h-full flex-col overflow-hidden rounded-2xl bg-[#F4EFE6] shadow-[0_18px_44px_-10px_rgba(24,22,21,0.28),0_2px_8px_rgba(24,22,21,0.1)] transition-shadow duration-300 hover:shadow-[0_28px_64px_-12px_rgba(24,22,21,0.38)]">
                   <Link href={`/events/${ev.id}`} className="relative block h-52 overflow-hidden bg-[#121110]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    { }
                     <img
                       src={coverFor(ev)}
                       alt={ev.title}

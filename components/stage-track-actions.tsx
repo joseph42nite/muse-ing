@@ -1,6 +1,5 @@
 "use client"
 
-import React from "react"
 import { Check, SkipForward } from "lucide-react"
 
 interface StageTrackActionsProps {

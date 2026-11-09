@@ -2,7 +2,6 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import localFont from "next/font/local"
 import { Archivo } from "next/font/google"
-import { GeistMono } from "geist/font/mono"
 import "./globals.css"
 
 import { ThemeProvider } from "@/components/theme-provider"

@@ -28,12 +28,13 @@ export async function POST(req: Request) {
 
   const data = evt.data ?? {}
   const linkId: string | undefined = data.link_id ?? data.order?.order_tags?.link_id
-  const booking = linkId ? get<{ id: string }>("SELECT id FROM audience_bookings WHERE payment_link_id = ?", linkId) : undefined
+  if (!linkId) return NextResponse.json({ ok: true })
+  const next = bookingStatusFor(String(data.link_status ?? ""))
 
+  const booking = get<{ id: string }>("SELECT id FROM audience_bookings WHERE payment_link_id = ?", linkId)
   if (booking) {
     run("INSERT INTO payment_events (id, booking_id, event_type, payload) VALUES (?,?,?,?)",
       crypto.randomUUID(), booking.id, String(evt.type ?? "unknown"), raw)
-    const next = bookingStatusFor(String(data.link_status ?? ""))
     if (next === "paid") {
       run("UPDATE audience_bookings SET payment_status = 'paid' WHERE id = ?", booking.id)
     } else if (next) {
@@ -41,15 +42,12 @@ export async function POST(req: Request) {
     }
   }
 
-  // Also check if this payment link is for a ₹50 Song Dedication
-  const songDedication = linkId
-    ? get<{ id: string }>("SELECT id FROM song_requests WHERE payment_link_id = ?", linkId)
-    : undefined
-  if (songDedication) {
-    const next = bookingStatusFor(String(data.link_status ?? ""))
-    if (next === "paid") {
-      run("UPDATE song_requests SET dedication_payment_status = 'paid', wants_dedication = 1 WHERE id = ?", songDedication.id)
-    }
+  // Song dedication paid online
+  if (next === "paid") {
+    run(
+      "UPDATE song_requests SET dedication_payment_status = 'paid', wants_dedication = 1 WHERE payment_link_id = ?",
+      linkId
+    )
   }
   return NextResponse.json({ ok: true })
 }

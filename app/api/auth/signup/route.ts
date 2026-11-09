@@ -2,10 +2,11 @@ import crypto from "node:crypto"
 import { NextResponse } from "next/server"
 import { get, run } from "@/lib/server/db"
 import { createSession, hashPassword } from "@/lib/server/auth"
+import { normalizeInstagramHandle, normalizePromoterCode } from "@/lib/server/format"
 
 export async function POST(req: Request) {
   const b = await req.json().catch(() => ({}))
-  const name = String(b.name ?? "").trim()
+  const name = String(b.name ?? "").trim().slice(0, 120)
   const email = String(b.email ?? "").trim().toLowerCase()
   const phone = String(b.phone ?? "").trim() || null
   const password = String(b.password ?? "")
@@ -15,18 +16,14 @@ export async function POST(req: Request) {
       : b.role === "venue"
         ? "venue"
         : "promoter"
-  const instagramRaw = String(b.instagram_handle ?? "").trim()
-  const instagramHandle =
-    instagramRaw && !instagramRaw.startsWith("@") && !instagramRaw.startsWith("http")
-      ? `@${instagramRaw}`
-      : instagramRaw || null
+  const instagramHandle = normalizeInstagramHandle(b.instagram_handle)
   const avatarUrl = String(b.avatar_url ?? "").trim() || null
 
   if (!name || !/^\S+@\S+\.\S+$/.test(email)) {
     return NextResponse.json({ error: "A name and valid email are required." }, { status: 400 })
   }
-  if (password.length < 6) {
-    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 })
+  if (password.length < 8) {
+    return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 })
   }
   if (get("SELECT 1 FROM users WHERE email = ?", email)) {
     return NextResponse.json({ error: "An account with this email already exists." }, { status: 409 })
@@ -34,8 +31,9 @@ export async function POST(req: Request) {
 
   let promoterCode: string | null = null
   if (role === "promoter") {
-    const wanted = String(b.promoter_code ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "")
-    promoterCode = wanted || name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() + Math.floor(100 + Math.random() * 900)
+    promoterCode =
+      normalizePromoterCode(b.promoter_code) ||
+      (name.replace(/[^A-Za-z]/g, "").slice(0, 3).toUpperCase() || "MUS") + Math.floor(100 + Math.random() * 900)
     if (get("SELECT 1 FROM users WHERE promoter_code = ?", promoterCode)) {
       return NextResponse.json({ error: "That promoter code is taken. Try another." }, { status: 409 })
     }

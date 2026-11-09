@@ -4,6 +4,7 @@ import type React from "react"
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { DEMO_ARTIST, DEMO_LOGIN_ENABLED } from "@/lib/demo"
 import { Mic2, Sparkles, ArrowLeft } from "lucide-react"
 
 export default function LoginPage() {
@@ -29,7 +30,7 @@ export default function LoginPage() {
       if (body.role === "artist") router.push("/artist")
       else if (body.role === "admin") router.push("/admin")
       else if (body.role === "promoter") router.push("/promoter")
-      else if (body.role === "venue") router.push("/venue-checkin")
+      else if (body.role === "venue") router.push("/venue")
       else router.push("/artist")
     } catch (err: any) {
       setError(err.message)
@@ -75,6 +76,7 @@ export default function LoginPage() {
         </p>
 
         {/* One-click demo artist */}
+        {DEMO_LOGIN_ENABLED && (
         <div className="mt-7 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] p-3.5">
           <div className="min-w-0">
             <p className="micro flex items-center gap-1.5 text-[#F4EFE6]">
@@ -86,9 +88,9 @@ export default function LoginPage() {
           <button
             type="button"
             onClick={() => {
-              setEmail("artist@museing.com")
-              setPassword("artist123")
-              doLogin("artist@museing.com", "artist123")
+              setEmail(DEMO_ARTIST.email)
+              setPassword(DEMO_ARTIST.password)
+              doLogin(DEMO_ARTIST.email, DEMO_ARTIST.password)
             }}
             disabled={isLoading}
             className="btn-ghost h-9! shrink-0 px-4! text-[10px]! disabled:opacity-60"
@@ -96,6 +98,7 @@ export default function LoginPage() {
             1-click login
           </button>
         </div>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-5">
           <div>
@@ -107,7 +110,7 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="artist@museing.com"
+              placeholder="you@example.com"
               className="field-noir"
               autoComplete="email"
               required

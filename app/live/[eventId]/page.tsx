@@ -9,23 +9,17 @@ import React, {
   use,
 } from "react"
 import Link from "next/link"
-import { AnimatePresence, motion, useMotionValue, useSpring } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import MuseLoadingScreen from "@/components/muse-loading-screen"
 import { extractYouTubeId } from "@/lib/youtube"
 import { generateUPIQR } from "@/lib/upipay"
 import {
-  BookOpen,
-  LayoutGrid,
   Search,
   Heart,
   Sparkles,
   Plus,
-  MapPin,
-  Calendar,
   X,
   CheckCircle2,
-  Feather,
-  Instagram,
   IndianRupee,
   Check,
   ChevronUp,
@@ -46,23 +40,6 @@ function getOrCreateVoterToken(): string {
     window.localStorage.setItem(key, tok)
   }
   return tok
-}
-
-function mod(n: number, m: number): number {
-  if (m <= 0) return 0
-  return ((n % m) + m) % m
-}
-
-// Resolve YouTube thumbnail for each song (strictly preview image, no play button)
-function getYouTubeThumbnail(song: any): string {
-  if (song?.youtube_video_id) {
-    return `https://img.youtube.com/vi/${song.youtube_video_id}/hqdefault.jpg`
-  }
-  const extracted = extractYouTubeId(song?.youtube_url)
-  if (extracted) {
-    return `https://img.youtube.com/vi/${extracted}/hqdefault.jpg`
-  }
-  return ""
 }
 
 // Full-resolution, letterbox-free frame for the lyrics view (falls back to hqdefault on error)
@@ -87,45 +64,11 @@ export default function AudienceLiveGigPage({
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  // View mode: "book" (pin_video.mp4 3D Fanned Open-Spread Carousel) vs "grid"
-  const [viewMode, setViewMode] = useState<"book" | "grid">("book")
   const [activeTab, setActiveTab] = useState<
     "all" | "top" | "artist" | "dedications"
   >("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearchModal, setShowSearchModal] = useState(false)
-  const [showInfoModal, setShowInfoModal] = useState(false)
-  const [showAllSongs, setShowAllSongs] = useState(false)
-
-  // Continuous 3D page-flip progress
-  const targetProgress = useMotionValue(0)
-  const smoothProgress = useSpring(targetProgress, {
-    stiffness: 72,
-    damping: 20,
-    mass: 0.6,
-  })
-  const [progress, setProgress] = useState(0)
-
-  useEffect(() => {
-    const unsub = smoothProgress.on("change", (v) => setProgress(v))
-    return () => unsub()
-  }, [smoothProgress])
-
-  const snapTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const scheduleSnap = useCallback(() => {
-    if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current)
-    snapTimeoutRef.current = setTimeout(() => {
-      targetProgress.set(Math.round(targetProgress.get()))
-    }, 150)
-  }, [targetProgress])
-
-  const flipBy = useCallback(
-    (delta: number) => {
-      if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current)
-      targetProgress.set(Math.round(targetProgress.get()) + delta)
-    },
-    [targetProgress]
-  )
 
   // Optimistic upvoting map: { [songId]: { count: number, hasVoted: boolean } }
   const [optimisticVotes, setOptimisticVotes] = useState<
@@ -140,7 +83,6 @@ export default function AudienceLiveGigPage({
   // 3-Song Request Modal State
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [requesterName, setRequesterName] = useState("")
-  const [requesterPhone, setRequesterPhone] = useState("")
   const [song1Title, setSong1Title] = useState("")
   const [song1Artist, setSong1Artist] = useState("")
   const [song2Title, setSong2Title] = useState("")
@@ -159,10 +101,8 @@ export default function AudienceLiveGigPage({
   const [payDedicatedTo, setPayDedicatedTo] = useState("")
   const [payDedicationMsg, setPayDedicationMsg] = useState("")
   const [payRequesterName, setPayRequesterName] = useState("")
-  const [payRequesterPhone, setPayRequesterPhone] = useState("")
   const [submittingDedicationBatch, setSubmittingDedicationBatch] = useState(false)
   const [payingSongId, setPayingSongId] = useState<string | null>(null)
-  const [selectingSongId, setSelectingSongId] = useState<string | null>(null)
   const [payError, setPayError] = useState<string | null>(null)
 
   // Tip Artist Directly Modal State
@@ -173,13 +113,6 @@ export default function AudienceLiveGigPage({
   const [tipMessage, setTipMessage] = useState<string>("")
   const [tipping, setTipping] = useState(false)
   const [tipError, setTipError] = useState<string | null>(null)
-
-  const dragStateRef = useRef<{
-    active: boolean
-    startX: number
-    startProgress: number
-    moved: boolean
-  }>({ active: false, startX: 0, startProgress: 0, moved: false })
 
   const fetchGigData = useCallback(
     async (token: string) => {
@@ -308,36 +241,6 @@ export default function AudienceLiveGigPage({
   const trackLength =
     lyrics?.duration || (lyrics?.lines.length ? lyrics.lines[lyrics.lines.length - 1].t + 10 : 0)
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        showRequestModal ||
-        showDedicationModal ||
-        showTipModal ||
-        showSearchModal ||
-        showInfoModal
-      )
-        return
-      if (e.key === "ArrowRight" || e.key === "ArrowDown") {
-        e.preventDefault()
-        flipBy(1)
-      } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
-        e.preventDefault()
-        flipBy(-1)
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [
-    flipBy,
-    showRequestModal,
-    showDedicationModal,
-    showTipModal,
-    showSearchModal,
-    showInfoModal,
-  ])
-
   const getVoteState = useCallback(
     (song: any) => {
       if (!song) return { count: 0, hasVoted: false }
@@ -419,7 +322,6 @@ export default function AudienceLiveGigPage({
         body: JSON.stringify({
           action: "submit_3_songs",
           requester_name: requesterName,
-          requester_phone: requesterPhone,
           voter_token: voterToken,
           wants_dedication: false,
           dedicated_to: null,
@@ -469,7 +371,6 @@ export default function AudienceLiveGigPage({
         body: JSON.stringify({
           action: "submit_3_songs",
           requester_name: fromName,
-          requester_phone: payRequesterPhone,
           voter_token: voterToken,
           wants_dedication: true,
           dedicated_to: payDedicatedTo.trim(),
@@ -492,29 +393,6 @@ export default function AudienceLiveGigPage({
       setPayError(err.message)
     } finally {
       setSubmittingDedicationBatch(false)
-    }
-  }
-
-  // Artist selects 1 of the 3 songs in the batch
-  const handleArtistSelectSong = async (songId: string) => {
-    setPayError(null)
-    setSelectingSongId(songId)
-    try {
-      const res = await fetch(`/api/gigs/${encodeURIComponent(eventId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "artist_select_song",
-          request_id: songId,
-        }),
-      })
-      const body = await res.json()
-      if (!res.ok) throw new Error(body.error || "Could not select song.")
-      await fetchGigData(voterToken)
-    } catch (err: any) {
-      setPayError(err.message)
-    } finally {
-      setSelectingSongId(null)
     }
   }
 
@@ -550,7 +428,6 @@ export default function AudienceLiveGigPage({
           dedicated_to: finalDedicatedTo,
           dedication_message: finalMsg,
           requester_name: finalFrom,
-          requester_phone: payRequesterPhone || "9876543210",
           payment_mode: "instant",
         }),
       })
@@ -564,7 +441,7 @@ export default function AudienceLiveGigPage({
 
       setShowDedicationModal(false)
       setSubmitSuccess(
-        `Paid ₹50 directly to artist for "${song.song_title}"!`
+        `Sent! Your dedication for "${song.song_title}" goes live once ${data?.event?.artist_name || "the artist"} confirms the ₹50 arrived.`
       )
       setTimeout(() => setSubmitSuccess(null), 5000)
       fetchGigData(voterToken)
@@ -603,7 +480,7 @@ export default function AudienceLiveGigPage({
       setTipCustomAmount("")
       setTipMessage("")
       setSubmitSuccess(
-        `₹${finalAmount} Tip sent directly to ${data?.event?.artist_name || "the artist"}!`
+        `Thanks! ${data?.event?.artist_name || "The artist"} will confirm your ₹${finalAmount} tip once it arrives.`
       )
       setTimeout(() => setSubmitSuccess(null), 5000)
     } catch (err: any) {
@@ -611,191 +488,6 @@ export default function AudienceLiveGigPage({
     } finally {
       setTipping(false)
     }
-  }
-
-  const handleWheel = (e: React.WheelEvent) => {
-    if (
-      viewMode !== "book" ||
-      showRequestModal ||
-      showDedicationModal ||
-      showTipModal ||
-      showSearchModal ||
-      showInfoModal ||
-      songs.length === 0
-    )
-      return
-    const delta =
-      Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY
-    if (Math.abs(delta) < 2) return
-    const step = Math.max(-0.35, Math.min(0.35, delta * 0.0028))
-    targetProgress.set(targetProgress.get() + step)
-    scheduleSnap()
-  }
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return
-    if (snapTimeoutRef.current) clearTimeout(snapTimeoutRef.current)
-    dragStateRef.current = {
-      active: true,
-      startX: e.clientX,
-      startProgress: targetProgress.get(),
-      moved: false,
-    }
-  }
-
-  const handlePointerMove = (e: React.PointerEvent) => {
-    if (!dragStateRef.current.active) return
-    const dx = e.clientX - dragStateRef.current.startX
-    if (Math.abs(dx) > 6) {
-      dragStateRef.current.moved = true
-    }
-    const pageDelta = -dx / 220
-    targetProgress.set(dragStateRef.current.startProgress + pageDelta)
-  }
-
-  const handlePointerUp = (e: React.PointerEvent) => {
-    if (!dragStateRef.current.active) return
-    const dx = e.clientX - dragStateRef.current.startX
-    dragStateRef.current.active = false
-    if (Math.abs(dx) > 36) {
-      const dir = dx < 0 ? 1 : -1
-      targetProgress.set(Math.round(dragStateRef.current.startProgress) + dir)
-    } else {
-      targetProgress.set(Math.round(targetProgress.get()))
-    }
-  }
-
-  // Left Half: LEFT 50% of the full YouTube Thumbnail spread across the open book
-  // With a high-contrast dark frosted backdrop so the song title is 100% legible
-  const renderLeftHalf = (song: any, songIdx: number) => {
-    if (!song) return null
-    const thumbUrl = getYouTubeThumbnail(song)
-
-    return (
-      <div className="relative w-full h-full select-none overflow-hidden bg-[#181615]">
-        {/* Left half of the full-spread YouTube thumbnail */}
-        <img
-          src={thumbUrl}
-          alt={song.song_title}
-          draggable={false}
-          className="absolute top-0 left-0 w-[200%] h-full max-w-none object-cover pointer-events-none select-none"
-        />
-        {/* Strong bottom & left editorial scrim so white typography pops cleanly */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(15,14,13,0.45) 0%, rgba(15,14,13,0.25) 40%, rgba(15,14,13,0.88) 100%)",
-          }}
-        />
-
-        {/* Overlaid content */}
-        <div className="relative z-10 w-full h-full flex flex-col justify-between p-3 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-mono text-[#181615] font-semibold tracking-widest px-2.5 py-0.5 rounded-full bg-white/95 backdrop-blur-md border border-[#181615]/15 shadow-md">
-              #{String(songIdx + 1).padStart(2, "0")}
-            </span>
-          </div>
-
-          {/* High-Contrast Editorial Polaroid Card for Maximum Text Readability */}
-          <div className="mt-auto mr-1 rounded-2xl bg-white border-2 border-white p-4 sm:p-5 shadow-[0_20px_50px_-10px_rgba(24,22,21,0.28),0_8px_20px_-6px_rgba(24,22,21,0.18)]">
-            <h2
-              className="text-2xl sm:text-3xl md:text-4xl text-[#181615] font-normal leading-tight tracking-normal break-words"
-              style={{
-                fontFamily: "var(--font-instrument-serif), serif",
-              }}
-            >
-              {song.song_title}
-            </h2>
-            {song.original_artist && (
-              <p className="text-xs sm:text-sm font-medium text-[#5C5650] mt-1 truncate font-sans">
-                {song.original_artist}
-              </p>
-            )}
-            {song.dedicated_to && (
-              <p className="text-xs text-[#D92323] mt-1.5 font-serif italic truncate flex items-center gap-1 font-bold">
-                <Sparkles className="w-3.5 h-3.5 text-[#D92323] shrink-0 fill-[#D92323]" />
-                <span>Dedicated to {song.dedicated_to}</span>
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* Center Spine Crease Shadow on Right Edge of Left Page */}
-        <div
-          className="absolute inset-y-0 right-0 w-6 sm:w-10 pointer-events-none z-20"
-          style={{
-            background:
-              "linear-gradient(270deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 55%, transparent 100%)",
-          }}
-        />
-      </div>
-    )
-  }
-
-  // Right Half: RIGHT 50% of the full YouTube Thumbnail spread across the open book + Clean Vote Button
-  const renderRightHalf = (song: any) => {
-    if (!song) return null
-    const thumbUrl = getYouTubeThumbnail(song)
-    const vs = getVoteState(song)
-
-    return (
-      <div className="relative w-full h-full select-none overflow-hidden bg-[#181615]">
-        {/* Right half of the full-spread YouTube thumbnail */}
-        <img
-          src={thumbUrl}
-          alt={song.song_title}
-          draggable={false}
-          className="absolute top-0 -left-full w-[200%] h-full max-w-none object-cover pointer-events-none select-none"
-        />
-        {/* Matching editorial scrim */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              "linear-gradient(180deg, rgba(15,14,13,0.45) 0%, rgba(15,14,13,0.25) 40%, rgba(15,14,13,0.88) 100%)",
-          }}
-        />
-
-        {/* Overlaid Vote Pill */}
-        <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-3.5 sm:p-6">
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              const rect = e.currentTarget.getBoundingClientRect()
-              handleUpvote(song, {
-                x: rect.left + rect.width / 2,
-                y: rect.top,
-              })
-            }}
-            className={`px-5 py-2.5 sm:px-6 sm:py-3 rounded-full flex items-center gap-2 text-xs sm:text-sm font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer shadow-md hover:scale-105 active:scale-95 ${
-              vs.hasVoted
-                ? "bg-[#D92323] text-white shadow-[0_8px_25px_rgba(217,35,35,0.45)] border border-[#D92323]"
-                : "bg-white text-[#181615] hover:bg-[#181615] hover:text-white border border-[#181615]/15"
-            }`}
-          >
-            <Heart
-              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
-                vs.hasVoted ? "fill-white text-white" : "text-current"
-              }`}
-            />
-            <span>{vs.hasVoted ? "Voted" : "Vote"}</span>
-            <span className="opacity-40">•</span>
-            <span>{vs.count}</span>
-          </button>
-        </div>
-
-        {/* Center Spine Crease Shadow on Left Edge of Right Page */}
-        <div
-          className="absolute inset-y-0 left-0 w-6 sm:w-10 pointer-events-none z-20"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.18) 55%, transparent 100%)",
-          }}
-        />
-      </div>
-    )
   }
 
   if (loading && !data) {
@@ -819,28 +511,16 @@ export default function AudienceLiveGigPage({
 
   const { event } = data
   const myBatches: any[] = data.myBatches || []
-  const instagramHandle = (event.artist_instagram || "@arjunmehtalive").replace(
-    /^@/,
-    ""
-  )
-  const instagramUrl = `https://instagram.com/${instagramHandle}`
+  const instagramRaw: string = event.artist_instagram || ""
+  const instagramHandle = instagramRaw.replace(/^@/, "")
+  const instagramUrl = instagramRaw.startsWith("http")
+    ? instagramRaw
+    : instagramHandle
+      ? `https://instagram.com/${instagramHandle}`
+      : undefined
   const artistAvatar =
     event.artist_avatar ||
     "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80"
-
-  const N = Math.max(1, songs.length)
-  const baseIdx = Math.floor(progress)
-  const frac = progress - baseIdx
-
-  const currentIdx = mod(baseIdx, N)
-  const nextIdx = mod(baseIdx + 1, N)
-  const currentSong = songs[currentIdx]
-  const nextSong = songs[nextIdx]
-
-  const leafAngle = -11 - frac * 158
-
-  const activeIdx = mod(Math.round(progress), N)
-  const activeSong = songs[activeIdx]
 
   const vote = playerSong ? getVoteState(playerSong) : { count: 0, hasVoted: false }
   const artistPhoto = artistAvatar.includes("images.unsplash.com")
@@ -932,18 +612,19 @@ export default function AudienceLiveGigPage({
   }
 
   // Follow the artist on Instagram, set beside their name at the top of the player and lyrics
-  const FollowPill = () => (
+  const FollowPill = () =>
+    instagramUrl ? (
     <a
       href={instagramUrl}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`Follow @${instagramHandle} on Instagram`}
+      aria-label={`Follow ${event.artist_name || "the artist"} on Instagram`}
       className="micro pointer-events-auto inline-flex shrink-0 items-center gap-[1.4cqw] rounded-full border border-[#F4EFE6]/40 bg-black/25 px-[2.6cqw] py-[1.2cqw] text-[2.1cqw]! text-[#F4EFE6] backdrop-blur-sm transition hover:border-[#F4EFE6]"
     >
       <InstagramGlyph className="h-[2.8cqw] w-[2.8cqw]" />
       Follow
     </a>
-  )
+    ) : null
 
   const slide = {
     initial: { opacity: 0, y: 24 },
@@ -1224,6 +905,7 @@ export default function AudienceLiveGigPage({
                     return (
                       <div
                         key={song.id}
+                        id={`setlist-${song.id}`}
                         className="relative h-full w-[46cqw] shrink-0 snap-start rounded-[7cqw] p-[2.4cqw] shadow-[0_18px_30px_-16px_rgba(0,0,0,0.45)]"
                         style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
                       >
@@ -1363,14 +1045,19 @@ export default function AudienceLiveGigPage({
                         ?.toLowerCase()
                         .includes(searchQuery.toLowerCase())
                 )
-                .map((song: any, i: number) => {
+                .map((song: any) => {
                   const vs = getVoteState(song)
                   return (
                     <div
                       key={song.id}
                       onClick={() => {
-                        targetProgress.set(i)
                         setShowSearchModal(false)
+                        setView("list")
+                        requestAnimationFrame(() =>
+                          document
+                            .getElementById(`setlist-${song.id}`)
+                            ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "start" })
+                        )
                       }}
                       className="pt-2.5 pb-1 flex items-center justify-between gap-2 cursor-pointer hover:bg-white/5 px-2 rounded-xl transition"
                     >
@@ -1490,9 +1177,10 @@ export default function AudienceLiveGigPage({
               {tipError && <p className="text-xs text-[#ff9a9a]">{tipError}</p>}
 
               {(() => {
+                if (!event?.artist_upi_id) return <p className="text-[11px] text-[#F4EFE6]/60">This artist hasn't added a UPI ID yet.</p>
                 const amt = Number(tipCustomAmount.trim() || tipAmount || 100)
                 const tipQr = generateUPIQR({
-                  vpa: event?.artist_upi_id || "arjunmehta@ybl",
+                  vpa: event.artist_upi_id,
                   name: event?.artist_payee_name || event?.artist_name || "Live Artist",
                   amount: amt,
                   orderId: `UPIPAY_TIP_${Date.now().toString().slice(-5)}`,
@@ -1652,26 +1340,24 @@ export default function AudienceLiveGigPage({
                                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 shrink-0">
                                   <Check className="w-3.5 h-3.5" /> Paid
                                 </span>
-                              ) : !isSelected ? (
-                                <button
-                                  type="button"
-                                  disabled={selectingSongId === s.id}
-                                  onClick={() => handleArtistSelectSong(s.id)}
-                                  className="px-3 py-1 rounded-full bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] text-[10px] font-semibold uppercase tracking-wider transition cursor-pointer shrink-0 shadow-xs"
-                                >
-                                  {selectingSongId === s.id
-                                    ? "Selecting..."
-                                    : "Artist Selects This"}
-                                </button>
+                              ) : s.payment_reported ? (
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-amber-200/80 shrink-0">
+                                  Confirming payment
+                                </span>
+                              ) : !isSelected && !selectedSong && s.status === "pending_artist" ? (
+                                <span className="text-[10px] font-semibold uppercase tracking-wider text-[#F4EFE6]/45 shrink-0">
+                                  Awaiting artist
+                                </span>
                               ) : null}
                             </div>
                           )
                         })}
                       </div>
 
-                      {selectedSong && !paidSong && (() => {
+                      {selectedSong && !paidSong && !selectedSong.payment_reported && (() => {
+                        if (!event?.artist_upi_id) return <p className="text-[11px] text-[#F4EFE6]/60">This artist hasn't added a UPI ID yet.</p>
                         const dedQr = generateUPIQR({
-                          vpa: event?.artist_upi_id || "arjunmehta@ybl",
+                          vpa: event.artist_upi_id,
                           name: event?.artist_payee_name || event?.artist_name || "Live Artist",
                           amount: 50,
                           orderId: `UPIPAY_DED_${selectedSong.id.slice(0, 6)}`,

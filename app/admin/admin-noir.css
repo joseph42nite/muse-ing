@@ -1,0 +1,118 @@
+/* Admin panel on the landing's dark studio (design.md §7): cream type, ink panels,
+   studio red only for live, clash and destructive states. No amber or yellow.
+   :has() also reaches portaled dialogs, which render outside the shell. */
+:root:has(.admin-noir) {
+  color-scheme: dark;
+  --background: #070709;
+  --foreground: #f4efe6;
+  --card: rgba(22, 19, 24, 0.72);
+  --card-foreground: #f4efe6;
+  --popover: #121014;
+  --popover-foreground: #f4efe6;
+  --primary: #f4efe6;
+  --primary-foreground: #14100a;
+  --secondary: rgba(244, 239, 230, 0.07);
+  --secondary-foreground: #f4efe6;
+  --muted: rgba(244, 239, 230, 0.05);
+  --muted-foreground: rgba(244, 239, 230, 0.55);
+  --accent: rgba(244, 239, 230, 0.08);
+  --accent-foreground: #f4efe6;
+  --destructive: #d92323;
+  --destructive-foreground: #ffffff;
+  --border: rgba(244, 239, 230, 0.1);
+  --input: rgba(244, 239, 230, 0.16);
+  --ring: rgba(244, 239, 230, 0.6);
+  background: #070709;
+}
+
+.admin-noir {
+  min-height: 100dvh;
+  color: #f4efe6;
+  background:
+    radial-gradient(90% 60% at 70% -10%, rgba(90, 9, 16, 0.85) 0%, rgba(26, 5, 7, 0.6) 45%, transparent 75%),
+    #070709;
+  background-attachment: fixed;
+}
+
+/* Dark glass panels, matching .card-noir without the hover shift */
+.admin-noir [data-slot="card"],
+.admin-panel {
+  border-radius: 20px;
+  border: 1px solid rgba(244, 239, 230, 0.09);
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(244, 239, 230, 0.06), transparent 55%),
+    linear-gradient(165deg, rgba(30, 26, 32, 0.78), rgba(11, 10, 15, 0.78));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 40px 80px -40px rgba(0, 0, 0, 0.9);
+  color: #f4efe6;
+}
+:root:has(.admin-noir) [data-slot="dialog-content"] {
+  border-radius: 22px;
+  border: 1px solid rgba(244, 239, 230, 0.12);
+  background: linear-gradient(165deg, #1e1a20, #0b0a0f);
+  color: #f4efe6;
+}
+:root:has(.admin-noir) [data-slot="dialog-overlay"] {
+  background: rgba(7, 7, 9, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+.admin-noir [data-slot="table-head"] {
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variation-settings: "wdth" 112;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 239, 230, 0.5);
+}
+
+/* Form fields inside admin dialogs: the landing's underline field */
+.admin-field {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(244, 239, 230, 0.2);
+  padding: 0.6rem 0;
+  font-size: 14px;
+  color: #f4efe6;
+  transition: border-color 0.25s ease;
+}
+.admin-field::placeholder {
+  color: rgba(244, 239, 230, 0.35);
+}
+.admin-field:focus {
+  outline: none;
+  border-bottom-color: #f4efe6;
+}
+select.admin-field option {
+  background: #121014;
+  color: #f4efe6;
+}
+.admin-field[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
+  opacity: 0.6;
+}
+
+.btn-sm {
+  height: 36px !important;
+  padding: 0 1rem !important;
+  font-size: 10px !important;
+}
+.btn-red {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 46px;
+  padding: 0 1.4rem;
+  border-radius: 999px;
+  background: #d92323;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  transition: background 0.25s ease;
+}
+.btn-red:hover {
+  background: #b81d1d;
+}

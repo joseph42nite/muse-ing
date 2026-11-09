@@ -1,7 +1,7 @@
-import { DatabaseSync } from "node:sqlite"
+import { DatabaseSync, type SQLInputValue } from "node:sqlite"
 import fs from "node:fs"
 import path from "node:path"
-import crypto from "node:crypto"
+import { hashPassword } from "./password"
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS song_requests (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS song_requests_event_idx ON song_requests (event_id, status);
+CREATE INDEX IF NOT EXISTS song_requests_batch_idx ON song_requests (batch_id);
+CREATE INDEX IF NOT EXISTS song_requests_link_idx ON song_requests (payment_link_id);
 
 CREATE TABLE IF NOT EXISTS song_upvotes (
   request_id TEXT NOT NULL REFERENCES song_requests(id) ON DELETE CASCADE,
@@ -165,500 +167,227 @@ CREATE TABLE IF NOT EXISTS artist_transactions (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 CREATE INDEX IF NOT EXISTS artist_tx_artist_idx ON artist_transactions (artist_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS inquiries (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  inquiry_type TEXT NOT NULL DEFAULT 'general',
+  event_id TEXT,
+  message TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 `
 
-function hashPw(password: string): string {
-  const salt = crypto.randomBytes(16)
-  const hash = crypto.scryptSync(password, salt, 64)
-  return `scrypt$${salt.toString("hex")}$${hash.toString("hex")}`
-}
+// Columns added after the first release. ALTER TABLE ADD COLUMN fails if the column exists,
+// which is how already-migrated databases skip them.
+const ADDED_COLUMNS = [
+  "ALTER TABLE song_requests ADD COLUMN karaoke_candidates_json TEXT",
+  "ALTER TABLE users ADD COLUMN upi_id TEXT",
+  "ALTER TABLE users ADD COLUMN payee_name TEXT",
+  "ALTER TABLE users ADD COLUMN bank_name TEXT",
+  "ALTER TABLE users ADD COLUMN account_number TEXT",
+  "ALTER TABLE users ADD COLUMN ifsc_code TEXT",
+  "ALTER TABLE users ADD COLUMN upipay_provider TEXT DEFAULT 'upi_direct'",
+  "ALTER TABLE users ADD COLUMN upipay_merchant_id TEXT",
+  "ALTER TABLE events ADD COLUMN playback_position REAL",
+  "ALTER TABLE events ADD COLUMN playback_playing INTEGER DEFAULT 0",
+  "ALTER TABLE events ADD COLUMN playback_updated_at INTEGER",
+  // Artist roster and venue details (imported from Hyphening, editable in the admin panel).
+  "ALTER TABLE users ADD COLUMN category TEXT",
+  "ALTER TABLE users ADD COLUMN city TEXT",
+  "ALTER TABLE users ADD COLUMN instruments TEXT",
+  "ALTER TABLE users ADD COLUMN rating INTEGER",
+  "ALTER TABLE users ADD COLUMN notes TEXT",
+  "ALTER TABLE users ADD COLUMN reliability_score REAL",
+  "ALTER TABLE users ADD COLUMN average_fee REAL",
+  "ALTER TABLE users ADD COLUMN total_performances INTEGER",
+  "ALTER TABLE users ADD COLUMN perf_with_m INTEGER",
+  "ALTER TABLE users ADD COLUMN last_perf_date TEXT",
+  "ALTER TABLE users ADD COLUMN payment_status TEXT",
+  "ALTER TABLE users ADD COLUMN amount_paid REAL",
+  "ALTER TABLE users ADD COLUMN amount_pending REAL",
+  "ALTER TABLE users ADD COLUMN bank_details TEXT",
+  "ALTER TABLE users ADD COLUMN address TEXT",
+  "ALTER TABLE users ADD COLUMN map_link TEXT",
+  "ALTER TABLE users ADD COLUMN poc_name TEXT",
+  "ALTER TABLE users ADD COLUMN poc_phone TEXT",
+  "ALTER TABLE users ADD COLUMN social_links TEXT",
+  "ALTER TABLE users ADD COLUMN external_ref TEXT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS users_external_ref_idx ON users (external_ref)",
+  // Gig bookkeeping. is_listed = 0 keeps an event off the public gig list and search.
+  "ALTER TABLE events ADD COLUMN is_listed INTEGER NOT NULL DEFAULT 1",
+  "ALTER TABLE events ADD COLUMN artist_fee REAL",
+  "ALTER TABLE events ADD COLUMN advance_paid REAL",
+  "ALTER TABLE events ADD COLUMN fee_status TEXT",
+  "ALTER TABLE events ADD COLUMN external_ref TEXT",
+  "CREATE UNIQUE INDEX IF NOT EXISTS events_external_ref_idx ON events (external_ref)",
+]
 
-function seedIfNeeded(conn: DatabaseSync) {
-  const existingArtist = conn.prepare("SELECT id FROM users WHERE email = ?").get("artist@museing.com") as { id: string } | undefined
-  if (existingArtist) return
+// Bump when SCHEMA or ADDED_COLUMNS change so a dev server's cached connection re-migrates.
+const SCHEMA_VERSION = 6
 
-  const todayDateOnly = new Date().toISOString().slice(0, 10)
-  const tonightIso = `${todayDateOnly}T20:30:00.000Z`
-  const tomorrowDateOnly = new Date(Date.now() + 86400e3).toISOString().slice(0, 10)
-  const tomorrowIso = `${tomorrowDateOnly}T21:00:00.000Z`
-
-  const artist1Id = "artist-arjun-01"
-  const artist2Id = "artist-maya-02"
-  const artist3Id = "artist-kabir-03"
-  const defaultPw = hashPw("artist123")
-
-  const insertUser = conn.prepare(
-    `INSERT OR IGNORE INTO users (id, name, email, phone, role, instagram_handle, avatar_url, bio, password_hash)
-     VALUES (?, ?, ?, ?, 'artist', ?, ?, ?, ?)`
-  )
-
-  insertUser.run(
-    artist1Id,
-    "Arjun Mehta & The Midnight Collective",
-    "artist@museing.com",
-    "9876543210",
-    "@arjunmehtalive",
-    "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
-    "Indie-pop & acoustic soul vocalist performing live crowd-curated sets across Bengaluru & Mumbai.",
-    defaultPw
-  )
-
-  insertUser.run(
-    artist2Id,
-    "Maya Sen",
-    "maya@museing.com",
-    "9876543211",
-    "@mayasenmusic",
-    "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400&auto=format&fit=crop&q=80",
-    "Neo-bollywood, retro classics & unplugged acoustic requests.",
-    defaultPw
-  )
-
-  insertUser.run(
-    artist3Id,
-    "Kabir & The Neon Strings",
-    "kabir@museing.com",
-    "9876543212",
-    "@kabirneonstrings",
-    "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&auto=format&fit=crop&q=80",
-    "High-energy rock, pop anthems & interactive sing-along nights.",
-    defaultPw
-  )
-
-  const event1Id = "gig-koramangala-tonight"
-  const event2Id = "gig-bandra-tonight"
-  const event3Id = "gig-indiranagar-tomorrow"
-
-  const insertEvent = conn.prepare(
-    `INSERT OR IGNORE INTO events
-      (id, title, description, date, event_date_only, location_name, location_slug, artist_id, ticket_price, active_karaoke_Floor_video_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-
-  insertEvent.run(
-    event1Id,
-    "Unplugged Crowd Request Night",
-    "Browse Arjun's live setlist, upvote the songs you want next, submit 3 song suggestions, or dedicate a song with a ₹50 live shoutout!",
-    tonightIso,
-    todayDateOnly,
-    "Toit Brewhouse, Indiranagar • Bengaluru",
-    "toit-indiranagar",
-    artist1Id,
-    499,
-    "sFMRqxCexDk"
-  )
-
-  insertEvent.run(
-    event2Id,
-    "Bollywood & Retro Sing-Along Live",
-    "Interactive acoustic evening where every song on the setlist is upvoted and shaped by the audience.",
-    tonightIso,
-    todayDateOnly,
-    "The Quarter, Royal Opera House • Mumbai",
-    "the-quarter-mumbai",
-    artist2Id,
-    699,
-    null
-  )
-
-  insertEvent.run(
-    event3Id,
-    "Saturday Arena Anthems & Dedications",
-    "Electric acoustic mashups, live LED karaoke lyrics, and crowd dedications all night.",
-    tomorrowIso,
-    tomorrowDateOnly,
-    "Hard Rock Cafe, Koregaon Park • Pune",
-    "hard-rock-pune",
-    artist3Id,
-    599,
-    null
-  )
-
-  const insertBatch = conn.prepare(
-    `INSERT OR IGNORE INTO song_batches
-      (id, event_id, requester_name, requester_phone, voter_token, wants_dedication, dedicated_to, dedication_message)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-
-  const insertRequest = conn.prepare(
-    `INSERT OR IGNORE INTO song_requests
-      (id, batch_id, event_id, source_type, choice_index, song_title, original_artist, youtube_url, youtube_video_id, status, upvotes, wants_dedication, dedicated_to, dedication_message, dedication_payment_status, requester_name)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  )
-
-  // --- ARTIST'S PRE-PREPARED PLAYLIST (Pre-added by Artist with YouTube Karaoke Links) ---
-  insertRequest.run(
-    "playlist-arjun-1",
-    null,
-    event1Id,
-    "artist_playlist",
-    1,
-    "gul",
-    "Anuv Jain",
-    "https://www.youtube.com/watch?v=SmaY7RfB6b0",
-    "SmaY7RfB6b0",
-    "confirmed",
-    27,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-
-  insertRequest.run(
-    "playlist-arjun-2",
-    null,
-    event1Id,
-    "artist_playlist",
-    1,
-    "Mitwa",
-    "Shafqat Amanat Ali (Kabhi Alvida Naa Kehna)",
-    "https://www.youtube.com/watch?v=ru_5PA8cwkE",
-    "ru_5PA8cwkE",
-    "confirmed",
-    19,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-
-  insertRequest.run(
-    "playlist-arjun-3",
-    null,
-    event1Id,
-    "artist_playlist",
-    1,
-    "Counting Stars",
-    "OneRepublic",
-    "https://www.youtube.com/watch?v=hT_nvWreIhg",
-    "hT_nvWreIhg",
-    "confirmed",
-    15,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-
-  insertRequest.run(
-    "playlist-arjun-4",
-    null,
-    event1Id,
-    "artist_playlist",
-    1,
-    "Kun Faya Kun",
-    "A.R. Rahman, Javed Ali, Mohit Chauhan",
-    "https://www.youtube.com/watch?v=T94PHkuydcw",
-    "T94PHkuydcw",
-    "confirmed",
-    34,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-
-  // --- AUDIENCE BATCHES & REQUESTS ---
-  // Batch 1: Confirmed + PAID ₹50 Dedication (Priority Section)
-  insertBatch.run(
-    "batch-demo-1",
-    event1Id,
-    "Rohan Verma",
-    "9820112233",
-    "seed-voter-1",
-    1,
-    "Ananya (Happy Anniversary!)",
-    "Please call out Ananya & Rohan's 3rd anniversary before singing this!"
-  )
-  insertRequest.run(
-    "req-demo-1a",
-    "batch-demo-1",
-    event1Id,
-    "audience_request",
-    1,
-    "Kesariya",
-    "Arijit Singh",
-    "https://www.youtube.com/watch?v=sFMRqxCexDk",
-    "sFMRqxCexDk",
-    "confirmed",
-    18,
-    1,
-    "Ananya (Happy Anniversary!)",
-    "Please call out Ananya & Rohan's 3rd anniversary before singing this!",
-    "paid",
-    "Rohan Verma"
-  )
-  insertRequest.run("req-demo-1b", "batch-demo-1", event1Id, "audience_request", 2, "Tum Se Hi", "Mohit Chauhan", null, null, "declined", 0, 1, "Ananya", null, "none", "Rohan Verma")
-  insertRequest.run("req-demo-1c", "batch-demo-1", event1Id, "audience_request", 3, "Raabta", "Arijit Singh", null, null, "declined", 0, 1, "Ananya", null, "none", "Rohan Verma")
-
-  // Batch 2: Confirmed + PAID ₹50 Dedication (Priority Section)
-  insertBatch.run(
-    "batch-demo-2",
-    event1Id,
-    "Sneha & Table 7",
-    "9811223344",
-    "seed-voter-2",
-    1,
-    "Vikram (Birthday Boy!)",
-    "It's Vikram's 25th birthday at Table 7!"
-  )
-  insertRequest.run(
-    "req-demo-2a",
-    "batch-demo-2",
-    event1Id,
-    "audience_request",
-    1,
-    "Yellow",
-    "Coldplay",
-    "https://www.youtube.com/watch?v=1G4isv_Fylg",
-    "1G4isv_Fylg",
-    "confirmed",
-    14,
-    1,
-    "Vikram (Birthday Boy!)",
-    "It's Vikram's 25th birthday at Table 7!",
-    "paid",
-    "Sneha & Table 7"
-  )
-  insertRequest.run("req-demo-2b", "batch-demo-2", event1Id, "audience_request", 2, "Fix You", "Coldplay", null, null, "declined", 0, 1, "Vikram", null, "none", "Sneha & Table 7")
-  insertRequest.run("req-demo-2c", "batch-demo-2", event1Id, "audience_request", 3, "Viva La Vida", "Coldplay", null, null, "declined", 0, 1, "Vikram", null, "none", "Sneha & Table 7")
-
-  // Batch 3: Confirmed high-upvoted song in Crowd Queue
-  insertBatch.run("batch-demo-3", event1Id, "Devika Nair", "9900112233", "seed-voter-3", 0, null, null)
-  insertRequest.run(
-    "req-demo-3a",
-    "batch-demo-3",
-    event1Id,
-    "audience_request",
-    1,
-    "Channa Mereya",
-    "Arijit Singh",
-    "https://www.youtube.com/watch?v=284Ov7ysmfA",
-    "284Ov7ysmfA",
-    "confirmed",
-    31,
-    0,
-    null,
-    null,
-    "none",
-    "Devika Nair"
-  )
-  insertRequest.run("req-demo-3b", "batch-demo-3", event1Id, "audience_request", 2, "Kabira", "Tochi Raina", null, null, "declined", 0, 0, null, null, "none", "Devika Nair")
-  insertRequest.run("req-demo-3c", "batch-demo-3", event1Id, "audience_request", 3, "Ilahi", "Arijit Singh", null, null, "declined", 0, 0, null, null, "none", "Devika Nair")
-
-  // Batch 4: Confirmed song in Crowd Queue (Artist confirmed it; Audience member can now complete ₹50 payment!)
-  insertBatch.run("batch-demo-4", event1Id, "Aarav Patel", "9845012345", "seed-voter-4", 1, "Meera", "Dedicated to Meera!")
-  insertRequest.run(
-    "req-demo-4a",
-    "batch-demo-4",
-    event1Id,
-    "audience_request",
-    1,
-    "Perfect",
-    "Ed Sheeran",
-    "https://www.youtube.com/watch?v=2Vv-BfVoq4g",
-    "2Vv-BfVoq4g",
-    "confirmed",
-    22,
-    1,
-    "Meera",
-    "Dedicated to Meera!",
-    "awaiting_payment",
-    "Aarav Patel"
-  )
-  insertRequest.run("req-demo-4b", "batch-demo-4", event1Id, "audience_request", 2, "Thinking Out Loud", "Ed Sheeran", null, null, "declined", 0, 1, "Meera", null, "none", "Aarav Patel")
-  insertRequest.run("req-demo-4c", "batch-demo-4", event1Id, "audience_request", 3, "Photograph", "Ed Sheeran", null, null, "declined", 0, 1, "Meera", null, "none", "Aarav Patel")
-
-  // Batch 5: Incoming Pending 3-Song Submission (Waiting for Artist to confirm 1 of the 3!)
-  insertBatch.run(
-    "batch-demo-5",
-    event1Id,
-    "Priya Sharma (Table 4)",
-    "9731098765",
-    "seed-voter-5",
-    1,
-    "Karthik & Priya",
-    "Our first date song! Will pay ₹50 as soon as you confirm!"
-  )
-  insertRequest.run("req-demo-5a", "batch-demo-5", event1Id, "audience_request", 1, "Tera Ban Jaunga", "Akhil Sachdeva", null, null, "pending_artist", 0, 1, "Karthik & Priya", "Our first date song! Will pay ₹50 as soon as you confirm!", "none", "Priya Sharma (Table 4)")
-  insertRequest.run("req-demo-5b", "batch-demo-5", event1Id, "audience_request", 2, "Pehla Nasha", "Udit Narayan", null, null, "pending_artist", 0, 1, "Karthik & Priya", "Our first date song! Will pay ₹50 as soon as you confirm!", "none", "Priya Sharma (Table 4)")
-  insertRequest.run("req-demo-5c", "batch-demo-5", event1Id, "audience_request", 3, "Wonderwall", "Oasis", null, null, "pending_artist", 0, 1, "Karthik & Priya", "Our first date song! Will pay ₹50 as soon as you confirm!", "none", "Priya Sharma (Table 4)")
-
-  // Batch 6: Another Incoming Pending 3-Song Submission
-  insertBatch.run("batch-demo-6", event1Id, "Siddharth & Friends", "9880011223", "seed-voter-6", 0, null, null)
-  insertRequest.run("req-demo-6a", "batch-demo-6", event1Id, "audience_request", 1, "Dil Chahta Hai", "Shankar-Ehsaan-Loy", null, null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends")
-  insertRequest.run("req-demo-6b", "batch-demo-6", event1Id, "audience_request", 2, "Senorita (ZNMD)", "Farhan Akhtar", null, null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends")
-  insertRequest.run("req-demo-6c", "batch-demo-6", event1Id, "audience_request", 3, "Summer of '69", "Bryan Adams", null, null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends")
-
-  // Also seed Maya's playlist for Event 2 so every home card has live songs ready!
-  insertRequest.run(
-    "playlist-maya-1",
-    null,
-    event2Id,
-    "artist_playlist",
-    1,
-    "Lag Jaa Gale",
-    "Lata Mangeshkar",
-    "https://www.youtube.com/watch?v=TFr6G5zveS8",
-    "TFr6G5zveS8",
-    "confirmed",
-    29,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-  insertRequest.run(
-    "playlist-maya-2",
-    null,
-    event2Id,
-    "artist_playlist",
-    1,
-    "Agar Tum Saath Ho",
-    "Alka Yagnik & Arijit Singh",
-    "https://www.youtube.com/watch?v=sK7riqg2mr4",
-    "sK7riqg2mr4",
-    "confirmed",
-    21,
-    0,
-    null,
-    null,
-    "none",
-    "Artist Playlist"
-  )
-}
-
-const g = globalThis as unknown as { __museDb?: DatabaseSync; __museDbVersion?: number }
-
-function ensureSchemaMigrations(conn: DatabaseSync) {
+function migrate(conn: DatabaseSync) {
   conn.exec(SCHEMA)
-  const alterCols = [
-    "ALTER TABLE song_requests ADD COLUMN karaoke_candidates_json TEXT;",
-    "ALTER TABLE users ADD COLUMN upi_id TEXT;",
-    "ALTER TABLE users ADD COLUMN payee_name TEXT;",
-    "ALTER TABLE users ADD COLUMN bank_name TEXT;",
-    "ALTER TABLE users ADD COLUMN account_number TEXT;",
-    "ALTER TABLE users ADD COLUMN ifsc_code TEXT;",
-    "ALTER TABLE users ADD COLUMN upipay_provider TEXT DEFAULT 'upi_direct';",
-    "ALTER TABLE users ADD COLUMN upipay_merchant_id TEXT;",
-  ]
-  for (const sql of alterCols) {
+  for (const sql of ADDED_COLUMNS) {
     try {
       conn.exec(sql)
     } catch {
-      // Column already exists
+      // column already exists
     }
   }
+}
 
-  // Ensure Arjun Mehta has default UPIPay & Bank details if empty
-  conn
-    .prepare(
-      `UPDATE users
-          SET upi_id = COALESCE(upi_id, 'arjunmehta@ybl'),
-              payee_name = COALESCE(payee_name, 'Arjun Mehta Live'),
-              bank_name = COALESCE(bank_name, 'HDFC Bank • Indiranagar'),
-              account_number = COALESCE(account_number, '5010048291034'),
-              ifsc_code = COALESCE(ifsc_code, 'HDFC0000142'),
-              upipay_provider = COALESCE(upipay_provider, 'upi_direct')
-        WHERE id = 'artist-arjun-01'`
+/**
+ * Demo data is on by default in development and off in production, so a live deployment never
+ * ships the demo artist logins or their placeholder bank details. Override with SEED_DEMO_DATA=true|false.
+ */
+function shouldSeedDemoData() {
+  const flag = process.env.SEED_DEMO_DATA
+  if (flag === "true") return true
+  if (flag === "false") return false
+  return process.env.NODE_ENV !== "production"
+}
+
+type Row = SQLInputValue[]
+
+function seedDemoData(conn: DatabaseSync) {
+  if (conn.prepare("SELECT 1 FROM users WHERE email = ?").get("artist@museing.com")) return
+
+  const day = (offset: number) => new Date(Date.now() + offset * 86400e3).toISOString().slice(0, 10)
+  const today = day(0)
+  const tomorrow = day(1)
+  const nextWeek = day(5)
+  const ARJUN = "artist-arjun-01"
+  const MAYA = "artist-maya-02"
+  const KABIR = "artist-kabir-03"
+  const TONIGHT = "gig-koramangala-tonight"
+  const BANDRA = "gig-bandra-tonight"
+  const demoPassword = hashPassword("artist123")
+  const unsplash = (id: string) => `https://images.unsplash.com/photo-${id}?w=400&auto=format&fit=crop&q=80`
+
+  const users: Row[] = [
+    [ARJUN, "Arjun Mehta & The Midnight Collective", "artist@museing.com", "9876543210", "@arjunmehtalive", unsplash("1511671782779-c97d3d27a1d4"), "Indie-pop & acoustic soul vocalist performing live crowd-curated sets across Bengaluru & Mumbai."],
+    [MAYA, "Maya Sen", "maya@museing.com", "9876543211", "@mayasenmusic", unsplash("1516450360452-9312f5e86fc7"), "Neo-bollywood, retro classics & unplugged acoustic requests."],
+    [KABIR, "Kabir & The Neon Strings", "kabir@museing.com", "9876543212", "@kabirneonstrings", unsplash("1493225457124-a3eb161ffa5f"), "High-energy rock, pop anthems & interactive sing-along nights."],
+  ]
+
+  // id, title, description, date, date only, location, slug, artist, price, karaoke video
+  const events: Row[] = [
+    [TONIGHT, "Unplugged Crowd Request Night", "Browse Arjun's live setlist, upvote the songs you want next, submit 3 song suggestions, or dedicate a song with a ₹50 live shoutout!", `${today}T20:30:00.000Z`, today, "Toit Brewhouse, Indiranagar • Bengaluru", "toit-indiranagar", ARJUN, 499, "sFMRqxCexDk"],
+    [BANDRA, "Bollywood & Retro Sing-Along Live", "Interactive acoustic evening where every song on the setlist is upvoted and shaped by the audience.", `${today}T20:30:00.000Z`, today, "The Quarter, Royal Opera House • Mumbai", "the-quarter-mumbai", MAYA, 699, null],
+    ["gig-indiranagar-tomorrow", "Saturday Arena Anthems & Dedications", "Electric acoustic mashups, live LED karaoke lyrics, and crowd dedications all night.", `${tomorrow}T21:00:00.000Z`, tomorrow, "Hard Rock Cafe, Koregaon Park • Pune", "hard-rock-pune", KABIR, 599, null],
+    ["gig-arjun-saturday", "Saturday Rooftop Acoustic & Dedications", "Live acoustic requests, crowd sing-alongs, and UPIPay instant dedications.", `${tomorrow}T21:00:00.000Z`, tomorrow, "Windmills Craftworks, Whitefield • Bengaluru", "windmills-whitefield", ARJUN, 799, null],
+    ["gig-arjun-friday-next", "Midnight Indie & Sufi Unplugged", "Intimate unplugged setlist powered by audience upvotes.", `${nextWeek}T20:30:00.000Z`, nextWeek, "Fandom at Gilly's Redefined, Koramangala • Bengaluru", "fandom-koramangala", ARJUN, 599, null],
+  ]
+
+  // id, event, requester, phone, voter token, wants dedication, dedicated to, message
+  const batches: Row[] = [
+    ["batch-demo-1", TONIGHT, "Rohan Verma", "9820112233", "seed-voter-1", 1, "Ananya (Happy Anniversary!)", "Please call out Ananya & Rohan's 3rd anniversary before singing this!"],
+    ["batch-demo-2", TONIGHT, "Sneha & Table 7", "9811223344", "seed-voter-2", 1, "Vikram (Birthday Boy!)", "It's Vikram's 25th birthday at Table 7!"],
+    ["batch-demo-3", TONIGHT, "Devika Nair", "9900112233", "seed-voter-3", 0, null, null],
+    ["batch-demo-4", TONIGHT, "Aarav Patel", "9845012345", "seed-voter-4", 1, "Meera", "Dedicated to Meera!"],
+    ["batch-demo-5", TONIGHT, "Priya Sharma (Table 4)", "9731098765", "seed-voter-5", 1, "Karthik & Priya", "Our first date song! Will pay ₹50 as soon as you confirm!"],
+    ["batch-demo-6", TONIGHT, "Siddharth & Friends", "9880011223", "seed-voter-6", 0, null, null],
+  ]
+
+  const yt = (id: string) => [`https://www.youtube.com/watch?v=${id}`, id]
+  const playlist = (id: string, event: string, title: string, artist: string, video: string, upvotes: number): Row =>
+    [id, null, event, "artist_playlist", 1, title, artist, ...yt(video), "confirmed", upvotes, 0, null, null, "none", "Artist Playlist"]
+  const ask = (id: string, batch: string, choice: number, title: string, artist: string, video: string | null, status: string, upvotes: number, wants: number, to: string | null, msg: string | null, pay: string, requester: string): Row =>
+    [id, batch, TONIGHT, "audience_request", choice, title, artist, ...(video ? yt(video) : [null, null]), status, upvotes, wants, to, msg, pay, requester]
+
+  const priya = "Our first date song! Will pay ₹50 as soon as you confirm!"
+  const requests: Row[] = [
+    playlist("playlist-arjun-1", TONIGHT, "gul", "Anuv Jain", "SmaY7RfB6b0", 27),
+    playlist("playlist-arjun-2", TONIGHT, "Mitwa", "Shafqat Amanat Ali (Kabhi Alvida Naa Kehna)", "ru_5PA8cwkE", 19),
+    playlist("playlist-arjun-3", TONIGHT, "Counting Stars", "OneRepublic", "hT_nvWreIhg", 15),
+    playlist("playlist-arjun-4", TONIGHT, "Kun Faya Kun", "A.R. Rahman, Javed Ali, Mohit Chauhan", "T94PHkuydcw", 34),
+    playlist("playlist-maya-1", BANDRA, "Lag Jaa Gale", "Lata Mangeshkar", "TFr6G5zveS8", 29),
+    playlist("playlist-maya-2", BANDRA, "Agar Tum Saath Ho", "Alka Yagnik & Arijit Singh", "sK7riqg2mr4", 21),
+    // Paid dedications (priority section)
+    ask("req-demo-1a", "batch-demo-1", 1, "Kesariya", "Arijit Singh", "sFMRqxCexDk", "confirmed", 18, 1, "Ananya (Happy Anniversary!)", "Please call out Ananya & Rohan's 3rd anniversary before singing this!", "paid", "Rohan Verma"),
+    ask("req-demo-1b", "batch-demo-1", 2, "Tum Se Hi", "Mohit Chauhan", null, "declined", 0, 1, "Ananya", null, "none", "Rohan Verma"),
+    ask("req-demo-1c", "batch-demo-1", 3, "Raabta", "Arijit Singh", null, "declined", 0, 1, "Ananya", null, "none", "Rohan Verma"),
+    ask("req-demo-2a", "batch-demo-2", 1, "Yellow", "Coldplay", "1G4isv_Fylg", "confirmed", 14, 1, "Vikram (Birthday Boy!)", "It's Vikram's 25th birthday at Table 7!", "paid", "Sneha & Table 7"),
+    ask("req-demo-2b", "batch-demo-2", 2, "Fix You", "Coldplay", null, "declined", 0, 1, "Vikram", null, "none", "Sneha & Table 7"),
+    ask("req-demo-2c", "batch-demo-2", 3, "Viva La Vida", "Coldplay", null, "declined", 0, 1, "Vikram", null, "none", "Sneha & Table 7"),
+    // Confirmed crowd queue
+    ask("req-demo-3a", "batch-demo-3", 1, "Channa Mereya", "Arijit Singh", "284Ov7ysmfA", "confirmed", 31, 0, null, null, "none", "Devika Nair"),
+    ask("req-demo-3b", "batch-demo-3", 2, "Kabira", "Tochi Raina", null, "declined", 0, 0, null, null, "none", "Devika Nair"),
+    ask("req-demo-3c", "batch-demo-3", 3, "Ilahi", "Arijit Singh", null, "declined", 0, 0, null, null, "none", "Devika Nair"),
+    // Confirmed by the artist, dedication still awaiting payment
+    ask("req-demo-4a", "batch-demo-4", 1, "Perfect", "Ed Sheeran", "2Vv-BfVoq4g", "confirmed", 22, 1, "Meera", "Dedicated to Meera!", "awaiting_payment", "Aarav Patel"),
+    ask("req-demo-4b", "batch-demo-4", 2, "Thinking Out Loud", "Ed Sheeran", null, "declined", 0, 1, "Meera", null, "none", "Aarav Patel"),
+    ask("req-demo-4c", "batch-demo-4", 3, "Photograph", "Ed Sheeran", null, "declined", 0, 1, "Meera", null, "none", "Aarav Patel"),
+    // Waiting for the artist to pick one of three
+    ask("req-demo-5a", "batch-demo-5", 1, "Tera Ban Jaunga", "Akhil Sachdeva", null, "pending_artist", 0, 1, "Karthik & Priya", priya, "none", "Priya Sharma (Table 4)"),
+    ask("req-demo-5b", "batch-demo-5", 2, "Pehla Nasha", "Udit Narayan", null, "pending_artist", 0, 1, "Karthik & Priya", priya, "none", "Priya Sharma (Table 4)"),
+    ask("req-demo-5c", "batch-demo-5", 3, "Wonderwall", "Oasis", null, "pending_artist", 0, 1, "Karthik & Priya", priya, "none", "Priya Sharma (Table 4)"),
+    ask("req-demo-6a", "batch-demo-6", 1, "Dil Chahta Hai", "Shankar-Ehsaan-Loy", null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends"),
+    ask("req-demo-6b", "batch-demo-6", 2, "Senorita (ZNMD)", "Farhan Akhtar", null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends"),
+    ask("req-demo-6c", "batch-demo-6", 3, "Summer of '69", "Bryan Adams", null, "pending_artist", 0, 0, null, null, "none", "Siddharth & Friends"),
+  ]
+
+  // id, request, type, payer, phone, amount, song, note, order id, utr
+  const transactions: Row[] = [
+    ["tx-demo-1", "req-demo-1a", "dedication", "Rohan Verma", "9820112233", 50, "Kesariya", "Dedicated to Ananya (Happy Anniversary!)", "UPIPAY_DED_1001", "429518293012"],
+    ["tx-demo-2", "req-demo-2a", "dedication", "Sneha & Table 7", "9811223344", 50, "Yellow", "Dedicated to Vikram (Birthday Boy!)", "UPIPAY_DED_1002", "429519847105"],
+    ["tx-demo-3", null, "tip", "Kabir & Table 3", "9845099887", 200, null, "Amazing acoustic rendition of Kun Faya Kun!", "UPIPAY_TIP_1003", "429520491823"],
+  ]
+
+  const insertAll = (sql: string, rows: Row[]) => {
+    const stmt = conn.prepare(sql)
+    for (const r of rows) stmt.run(...r)
+  }
+
+  conn.exec("BEGIN")
+  try {
+    insertAll(
+      `INSERT OR IGNORE INTO users (id, name, email, phone, role, instagram_handle, avatar_url, bio, password_hash)
+       VALUES (?, ?, ?, ?, 'artist', ?, ?, ?, ?)`,
+      users.map((u) => [...u, demoPassword])
     )
-    .run()
-
-  // Ensure Arjun Mehta has an upcoming weekend gig as well so Upcoming Gigs tab shows multiple gigs
-  const tomorrowDateOnly = new Date(Date.now() + 86400e3).toISOString().slice(0, 10)
-  const tomorrowIso = `${tomorrowDateOnly}T21:00:00.000Z`
-  const nextWeekDateOnly = new Date(Date.now() + 5 * 86400e3).toISOString().slice(0, 10)
-  const nextWeekIso = `${nextWeekDateOnly}T20:30:00.000Z`
-
-  conn
-    .prepare(
+    conn
+      .prepare(
+        `UPDATE users SET upi_id = 'arjunmehta@ybl', payee_name = 'Arjun Mehta Live', bank_name = 'HDFC Bank • Indiranagar',
+                          account_number = '5010048291034', ifsc_code = 'HDFC0000142', upipay_provider = 'upi_direct'
+          WHERE id = ?`
+      )
+      .run(ARJUN)
+    insertAll(
       `INSERT OR IGNORE INTO events
         (id, title, description, date, event_date_only, location_name, location_slug, artist_id, ticket_price, active_karaoke_Floor_video_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'artist-arjun-01', ?, NULL)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      events
     )
-    .run(
-      "gig-arjun-saturday",
-      "Saturday Rooftop Acoustic & Dedications",
-      "Live acoustic requests, crowd sing-alongs, and UPIPay instant dedications.",
-      tomorrowIso,
-      tomorrowDateOnly,
-      "Windmills Craftworks, Whitefield • Bengaluru",
-      "windmills-whitefield",
-      799
+    insertAll(
+      `INSERT OR IGNORE INTO song_batches
+        (id, event_id, requester_name, requester_phone, voter_token, wants_dedication, dedicated_to, dedication_message)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      batches
     )
-
-  conn
-    .prepare(
-      `INSERT OR IGNORE INTO events
-        (id, title, description, date, event_date_only, location_name, location_slug, artist_id, ticket_price, active_karaoke_Floor_video_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'artist-arjun-01', ?, NULL)`
+    insertAll(
+      `INSERT OR IGNORE INTO song_requests
+        (id, batch_id, event_id, source_type, choice_index, song_title, original_artist, youtube_url, youtube_video_id, status, upvotes, wants_dedication, dedicated_to, dedication_message, dedication_payment_status, requester_name)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      requests
     )
-    .run(
-      "gig-arjun-friday-next",
-      "Midnight Indie & Sufi Unplugged",
-      "Intimate unplugged setlist powered by audience upvotes.",
-      nextWeekIso,
-      nextWeekDateOnly,
-      "Fandom at Gilly's Redefined, Koramangala • Bengaluru",
-      "fandom-koramangala",
-      599
-    )
-
-  // Seed initial incoming UPIPay transactions for Arjun Mehta if none exist
-  const txCount = conn
-    .prepare("SELECT COUNT(*) AS cnt FROM artist_transactions WHERE artist_id = 'artist-arjun-01'")
-    .get() as { cnt: number } | undefined
-
-  if (!txCount || txCount.cnt === 0) {
-    const insertTx = conn.prepare(
+    insertAll(
       `INSERT OR IGNORE INTO artist_transactions
         (id, artist_id, event_id, request_id, type, payer_name, payer_phone, amount, song_title, note, upi_order_id, upi_utr, provider, status)
-       VALUES (?, 'artist-arjun-01', 'gig-koramangala-tonight', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upipay', 'paid')`
+       VALUES (?, '${ARJUN}', '${TONIGHT}', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'upipay', 'paid')`,
+      transactions
     )
-    insertTx.run(
-      "tx-demo-1",
-      "req-demo-1a",
-      "dedication",
-      "Rohan Verma",
-      "9820112233",
-      50,
-      "Kesariya",
-      "Dedicated to Ananya (Happy Anniversary!)",
-      "UPIPAY_DED_1001",
-      "429518293012"
-    )
-    insertTx.run(
-      "tx-demo-2",
-      "req-demo-2a",
-      "dedication",
-      "Sneha & Table 7",
-      "9811223344",
-      50,
-      "Yellow",
-      "Dedicated to Vikram (Birthday Boy!)",
-      "UPIPAY_DED_1002",
-      "429519847105"
-    )
-    insertTx.run(
-      "tx-demo-3",
-      null,
-      "tip",
-      "Kabir & Table 3",
-      "9845099887",
-      200,
-      null,
-      "Amazing acoustic rendition of Kun Faya Kun!",
-      "UPIPAY_TIP_1003",
-      "429520491823"
-    )
+    conn.exec("COMMIT")
+  } catch (e) {
+    conn.exec("ROLLBACK")
+    throw e
   }
 }
+
+const g = globalThis as unknown as { __museDb?: DatabaseSync; __museDbVersion?: number }
 
 // Single shared connection (survives Next.js dev hot reloads).
 export function db(): DatabaseSync {
@@ -666,15 +395,13 @@ export function db(): DatabaseSync {
     const file = process.env.DATABASE_PATH || path.join(process.cwd(), "data", "muse.db")
     fs.mkdirSync(path.dirname(file), { recursive: true })
     const conn = new DatabaseSync(file)
-    conn.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
-    conn.exec(SCHEMA)
-    seedIfNeeded(conn)
-    ensureSchemaMigrations(conn)
+    conn.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;")
     g.__museDb = conn
-    g.__museDbVersion = 2
-  } else if (g.__museDbVersion !== 2) {
-    ensureSchemaMigrations(g.__museDb)
-    g.__museDbVersion = 2
+  }
+  if (g.__museDbVersion !== SCHEMA_VERSION) {
+    migrate(g.__museDb)
+    if (shouldSeedDemoData()) seedDemoData(g.__museDb)
+    g.__museDbVersion = SCHEMA_VERSION
   }
   return g.__museDb
 }
@@ -687,4 +414,18 @@ export function get<T = any>(sql: string, ...params: any[]): T | undefined {
 }
 export function run(sql: string, ...params: any[]) {
   return db().prepare(sql).run(...params)
+}
+
+/** Runs fn inside a single transaction; rolls back if it throws. fn must be synchronous. */
+export function transaction<T>(fn: () => T): T {
+  const conn = db()
+  conn.exec("BEGIN IMMEDIATE")
+  try {
+    const out = fn()
+    conn.exec("COMMIT")
+    return out
+  } catch (e) {
+    conn.exec("ROLLBACK")
+    throw e
+  }
 }

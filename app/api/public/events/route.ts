@@ -1,5 +1,7 @@
+import crypto from "node:crypto"
 import { NextResponse } from "next/server"
-import { all, get } from "@/lib/server/db"
+import { all, get, run } from "@/lib/server/db"
+import { escapeLike } from "@/lib/server/format"
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -25,7 +27,7 @@ export async function GET(req: Request) {
       (SELECT COUNT(*) FROM song_requests sr WHERE sr.event_id = e.id AND sr.source_type = 'artist_playlist' AND sr.status IN ('confirmed', 'playing')) AS playlist_songs_count,
       (SELECT COALESCE(SUM(sr.upvotes), 0) FROM song_requests sr WHERE sr.event_id = e.id AND sr.status IN ('confirmed', 'playing')) AS total_upvotes,
       (SELECT COUNT(*) FROM song_requests sr WHERE sr.event_id = e.id AND sr.dedication_payment_status = 'paid' AND sr.status IN ('confirmed', 'playing')) AS priority_dedications_count
-    FROM events e
+    FROM (SELECT * FROM events WHERE is_listed = 1) e
     LEFT JOIN users u ON u.id = e.artist_id
   `
 
@@ -42,9 +44,9 @@ export async function GET(req: Request) {
     // Fallback: match by location_slug (most recent/upcoming)
     if (!matched) {
       matched = get(
-        `${baseSelect} WHERE LOWER(e.location_slug) = ? OR LOWER(e.location_name) LIKE ? ORDER BY e.date ASC LIMIT 1`,
+        `${baseSelect} WHERE LOWER(e.location_slug) = ? OR LOWER(e.location_name) LIKE ? ESCAPE '\\' ORDER BY e.date ASC LIMIT 1`,
         locationSlug,
-        `%${locationSlug}%`
+        `%${escapeLike(locationSlug)}%`
       )
     }
 
@@ -68,11 +70,11 @@ export async function GET(req: Request) {
       u.instagram_handle,
       u.avatar_url,
       u.bio,
-      (SELECT e.id FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_id,
-      (SELECT e.title FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_title,
-      (SELECT e.location_name FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_location,
-      (SELECT e.location_slug FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_slug,
-      (SELECT e.event_date_only FROM events e WHERE e.artist_id = u.id ORDER BY e.date ASC LIMIT 1) AS next_event_date
+      (SELECT e.id FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_id,
+      (SELECT e.title FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_title,
+      (SELECT e.location_name FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_location,
+      (SELECT e.location_slug FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_slug,
+      (SELECT e.event_date_only FROM events e WHERE e.artist_id = u.id AND e.is_listed = 1 ORDER BY e.date ASC LIMIT 1) AS next_event_date
     FROM users u
     WHERE u.role = 'artist'
     ORDER BY u.created_at ASC
@@ -80,19 +82,25 @@ export async function GET(req: Request) {
   return NextResponse.json({ events, artists })
 }
 
+// Contact / booking inquiries from the landing page, stored for the team to follow up.
 export async function POST(req: Request) {
-  try {
-    const body = await req.json()
-    const { name, email, phone, inquiryType, eventId, message } = body || {}
-    if (!name || !email) {
-      return NextResponse.json({ error: "Name and email are required." }, { status: 400 })
-    }
-    return NextResponse.json({
-      ok: true,
-      receivedAt: new Date().toISOString(),
-      summary: { name, email, phone, inquiryType: inquiryType || "general", eventId: eventId || null, message },
-    })
-  } catch {
-    return NextResponse.json({ error: "Invalid request payload." }, { status: 400 })
+  const body = await req.json().catch(() => null)
+  if (!body) return NextResponse.json({ error: "Invalid request payload." }, { status: 400 })
+  const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max)
+  const name = clip(body.name, 120)
+  const email = clip(body.email, 200).toLowerCase()
+  if (!name || !/^\S+@\S+\.\S+$/.test(email)) {
+    return NextResponse.json({ error: "Name and a valid email are required." }, { status: 400 })
   }
+  run(
+    "INSERT INTO inquiries (id, name, email, phone, inquiry_type, event_id, message) VALUES (?,?,?,?,?,?,?)",
+    crypto.randomUUID(),
+    name,
+    email,
+    clip(body.phone, 30) || null,
+    clip(body.inquiryType, 40) || "general",
+    clip(body.eventId, 100) || null,
+    clip(body.message, 4000) || null
+  )
+  return NextResponse.json({ ok: true })
 }

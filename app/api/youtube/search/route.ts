@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { extractYouTubeId } from "@/lib/youtube"
+import { requireRole, unauthorized } from "@/lib/server/auth"
 
 export interface YouTubeSearchResult {
   videoId: string
@@ -114,9 +115,11 @@ async function searchYouTubeDataApi(query: string, apiKey: string): Promise<YouT
   }
 }
 
+// Used by the artist console only; signed-in so the API key's quota can't be spent by anyone.
 export async function GET(req: Request) {
+  if (!(await requireRole("artist", "admin"))) return unauthorized()
   const { searchParams } = new URL(req.url)
-  const q = String(searchParams.get("q") ?? "").trim()
+  const q = String(searchParams.get("q") ?? "").trim().slice(0, 200)
 
   if (!q) {
     return NextResponse.json({ results: [] })

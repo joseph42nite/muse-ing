@@ -1,1011 +1,561 @@
 "use client"
 
-import React, { useEffect, useState, useCallback, useRef } from "react"
+import type React from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Reorder, useDragControls } from "framer-motion"
-import QrCodeModal from "@/components/qr-code-modal"
-import MuseLoadingScreen from "@/components/muse-loading-screen"
-import StageTrackActions from "@/components/stage-track-actions"
-import { extractYouTubeId } from "@/lib/youtube"
-import { generateUPIQR } from "@/lib/upipay"
 import {
-  Sparkles,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
   Check,
-  CheckCircle2,
-  Music,
-  X,
-  Tv,
-  QrCode,
-  Plus,
   ExternalLink,
+  GripVertical,
+  LogOut,
+  Menu,
+  Music,
+  Play,
+  Plus,
+  QrCode,
+  Radio,
+  CalendarDays,
+  Search,
+  SkipForward,
+  Trash2,
+  Tv,
+  UserCheck,
   Volume2,
   VolumeX,
-  Heart,
-  LogOut,
-  UserCheck,
-  Search,
-  Trash2,
-  Disc3,
-  ListMusic,
-  Radio,
-  Calendar,
   Wallet,
-  MapPin,
-  ChevronUp,
-  ChevronDown,
-  ChevronsUp,
-  ChevronsDown,
-  ListOrdered,
-  GripVertical,
-  Shuffle,
-  Repeat,
-  MoreHorizontal,
-  Youtube,
-  Loader2,
+  X,
+  type LucideIcon,
 } from "lucide-react"
+import QrCodeModal from "@/components/qr-code-modal"
+import { extractYouTubeId } from "@/lib/youtube"
+import { DEMO_ARTIST, DEMO_LOGIN_ENABLED } from "@/lib/demo"
+import { cn } from "@/lib/utils"
+import { Field, FormDialog } from "../admin/admin-form"
+import { PageHeader } from "../admin/admin-table"
+import "../admin/admin-noir.css"
 
-function getSongThumbnail(song: any): string | null {
-  if (song?.youtube_video_id) {
-    return `https://img.youtube.com/vi/${song.youtube_video_id}/hqdefault.jpg`
-  }
-  const extracted = extractYouTubeId(song?.youtube_url)
-  if (extracted) {
-    return `https://img.youtube.com/vi/${extracted}/hqdefault.jpg`
-  }
-  return null
+type View = "tonight" | "shows" | "money"
+
+const rupees = (n: unknown) => `₹${Number(n || 0).toLocaleString("en-IN")}`
+const requester = (s: any) => (s?.source_type === "artist_playlist" ? null : s?.requester_name || null)
+const isVip = (s: any) => s?.dedication_payment_status === "paid" || Boolean(s?.wants_dedication)
+const videoIdOf = (s: any) => s?.youtube_video_id || extractYouTubeId(s?.youtube_url) || ""
+const thumb = (s: any) => {
+  const id = videoIdOf(s)
+  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : null
+}
+const showDate = (iso?: string) =>
+  iso
+    ? new Date(iso).toLocaleString("en-IN", { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+    : ""
+
+async function artistPost(body: Record<string, unknown>, method: "POST" | "PATCH" = "POST") {
+  const res = await fetch("/api/artist/dashboard", {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`)
+  return json
+}
+const patch = (body: Record<string, unknown>) => artistPost(body, "PATCH").catch(() => null)
+
+/* ───────────────────────────── Small pieces ───────────────────────────── */
+
+function Panel({ title, meta, children, className }: { title: string; meta?: React.ReactNode; children: React.ReactNode; className?: string }) {
+  return (
+    <section className={cn("admin-panel p-5 sm:p-6", className)}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="micro text-[#F4EFE6]">{title}</h2>
+        {meta}
+      </div>
+      {children}
+    </section>
+  )
 }
 
-function SetlistSongRow({
+function Thumb({ song, size = "h-10 w-10" }: { song: any; size?: string }) {
+  const src = thumb(song)
+  return (
+    <div className={cn("shrink-0 overflow-hidden rounded-lg bg-white/[0.06]", size)}>
+      {src ? (
+        <img src={src} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-[#F4EFE6]/30">
+          <Music className="h-4 w-4" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Tag({ children, tone = "line" }: { children: React.ReactNode; tone?: "line" | "cream" | "red" }) {
+  return (
+    <span
+      className={cn(
+        "micro inline-flex h-5 shrink-0 items-center rounded-full px-2 text-[8.5px]!",
+        tone === "cream" && "bg-[#F4EFE6] text-[#14100a]",
+        tone === "red" && "bg-[#D92323] text-white",
+        tone === "line" && "border border-[#F4EFE6]/25 text-[#F4EFE6]/70",
+      )}
+    >
+      {children}
+    </span>
+  )
+}
+
+/** One song in tonight's running order. The grip drags it; the play button sends it to the stage. */
+function SongRow({
   song,
-  index,
-  totalCount,
-  activeKaraokeSong,
-  isKaraokePlaying,
-  handleLoadSongIntoKaraoke,
-  setIsKaraokePlaying,
-  handleMarkPlayed,
-  handleToggleSongUpvote,
-  handleDeletePlaylistSong,
-  handleMoveSong,
+  slot,
+  onStage,
+  draggable,
+  onPlay,
+  onDone,
+  onRemove,
 }: {
   song: any
-  index: number
-  totalCount: number
-  activeKaraokeSong: any
-  isKaraokePlaying: boolean
-  handleLoadSongIntoKaraoke: (song: any) => void
-  setIsKaraokePlaying: (playing: boolean) => void
-  handleMarkPlayed: (id: string) => void
-  handleToggleSongUpvote: (id: string) => void
-  handleDeletePlaylistSong: (id: string) => void
-  handleMoveSong: (id: string, direction: "up" | "down") => void
+  slot?: number
+  onStage: boolean
+  draggable: boolean
+  onPlay: () => void
+  onDone: () => void
+  onRemove?: () => void
 }) {
-  const dragControls = useDragControls()
-  const isCurrentActive = activeKaraokeSong?.id === song.id
-  const isCurrentlyPlaying = isCurrentActive && isKaraokePlaying
-  const isMarkedDone = song.status === "played"
-  const isPaidDedication =
-    song.dedication_payment_status === "paid" || Boolean(song.wants_dedication)
+  const controls = useDragControls()
+  const played = song.status === "played"
 
+  const body = (
+    <>
+      {draggable ? (
+        <button
+          type="button"
+          aria-label="Drag to reorder"
+          onPointerDown={(e) => controls.start(e)}
+          style={{ touchAction: "none" }}
+          className="-ml-1 flex h-9 w-6 shrink-0 cursor-grab items-center justify-center text-[#F4EFE6]/30 hover:text-[#F4EFE6] active:cursor-grabbing"
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+      ) : (
+        <span className="hidden w-5 shrink-0 sm:block" />
+      )}
+      <span className="micro hidden w-5 shrink-0 text-center text-[#F4EFE6]/40 sm:inline">{slot ?? ""}</span>
+      <Thumb song={song} />
+      <div className="min-w-0 flex-1">
+        <p className={cn("truncate text-[14px] font-medium", played && "text-[#F4EFE6]/40 line-through")}>{song.song_title}</p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          {isVip(song) && <Tag tone="cream">₹50</Tag>}
+          {Number(song.upvotes) > 0 && <Tag>♥ {song.upvotes}</Tag>}
+          <span className="truncate text-[12px] text-[#F4EFE6]/50">
+            {requester(song) ? `for ${requester(song)}` : song.original_artist}
+          </span>
+        </div>
+      </div>
+      {onStage ? (
+        <Tag tone="red">On stage</Tag>
+      ) : (
+        <button
+          type="button"
+          onClick={onPlay}
+          aria-label={`Play ${song.song_title}`}
+          className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-[#F4EFE6] px-3 text-[#14100a] transition hover:bg-white sm:px-4"
+        >
+          <Play className="h-3.5 w-3.5 fill-current" />
+          <span className="micro hidden text-[9px]! sm:inline">Play</span>
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onDone}
+        aria-label={played ? "Played" : "Mark played"}
+        title={played ? "Played" : "Mark played"}
+        className={cn(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border transition",
+          played ? "border-transparent bg-[#F4EFE6]/15 text-[#F4EFE6]" : "border-[#F4EFE6]/20 text-[#F4EFE6]/60 hover:border-[#F4EFE6]/60 hover:text-white",
+        )}
+      >
+        <Check className="h-4 w-4" />
+      </button>
+      {onRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label="Remove from setlist"
+          className="hidden h-9 w-7 shrink-0 items-center justify-center text-[#F4EFE6]/25 transition hover:text-[#ff7a7a] sm:flex"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </>
+  )
+
+  const cls = cn(
+    "flex items-center gap-2.5 rounded-2xl px-2 py-2 sm:gap-3",
+    onStage ? "bg-[#D92323]/12 ring-1 ring-[#D92323]/50" : "hover:bg-white/[0.04]",
+  )
+
+  if (!draggable) return <div className={cls}>{body}</div>
   return (
-    <Reorder.Item
-      as="div"
-      value={song}
-      id={song.id}
-      dragListener={false}
-      dragControls={dragControls}
-      whileDrag={{
-        scale: 1.025,
-        boxShadow: "0 22px 35px -8px rgba(24, 22, 21, 0.28), 0 0 0 2px rgba(217, 35, 35, 0.7)",
-        zIndex: 50,
-        backgroundColor: "#FFFFFF",
-      }}
-      transition={{ type: "spring", stiffness: 450, damping: 30 }}
-      className={`group relative flex items-center justify-between gap-3 p-3 rounded-2xl border transition select-none ${
-        isCurrentlyPlaying
-          ? "bg-[#D92323]/8 border-[#D92323]/40 shadow-sm ring-2 ring-[#D92323]/20"
-          : isMarkedDone
-          ? "bg-white/50 border-emerald-400/30 opacity-80 hover:opacity-100"
-          : isPaidDedication
-          ? "bg-[#F4EFE6]/[0.07] border-[#F4EFE6]/40 hover:bg-white/10"
-          : "bg-[#161318] border-white/10 hover:border-white/30 hover:shadow-xs"
-      }`}
-    >
-      {/* Left: Rank + Thumbnail + Title/Artist + Badges */}
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <span className="text-xs font-black text-[#F4EFE6]/60 w-5 text-center shrink-0">
-          {index + 1}
-        </span>
-
-        <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-neutral-900 shrink-0">
-          {getSongThumbnail(song) ? (
-            <img
-              src={getSongThumbnail(song)!}
-              alt={song.song_title}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-neutral-800 text-neutral-400">
-              <Music className="w-5 h-5" />
-            </div>
-          )}
-          {isCurrentlyPlaying && (
-            <div className="absolute inset-0 bg-[#D92323]/60 flex items-center justify-center">
-              <Play className="w-4 h-4 fill-white text-white animate-pulse" />
-            </div>
-          )}
-          {isMarkedDone && !isCurrentlyPlaying && (
-            <div className="absolute inset-0 bg-emerald-900/60 flex items-center justify-center">
-              <Check className="w-4 h-4 text-white stroke-[3]" />
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0 space-y-0.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p
-              className={`text-xs sm:text-sm font-extrabold truncate ${
-                isMarkedDone ? "line-through text-[#F4EFE6]/60" : "text-[#F4EFE6]"
-              }`}
-            >
-              {song.song_title}
-            </p>
-
-            {isMarkedDone && (
-              <span className="px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 text-[9px] font-extrabold flex items-center gap-0.5 shrink-0">
-                <Check className="w-2.5 h-2.5 text-emerald-400" />
-                Played
-              </span>
-            )}
-
-            {isCurrentlyPlaying && (
-              <span className="px-2 py-0.5 rounded-full bg-[#D92323] text-white text-[9px] font-extrabold flex items-center gap-1 shrink-0 animate-pulse">
-                <Play className="w-2 h-2 fill-white" />
-                Playing Video
-              </span>
-            )}
-
-            {isPaidDedication && (
-              <span className="px-1.5 py-0.5 rounded bg-[#F4EFE6] text-[#0b0a0e] text-[9px] font-black shrink-0">
-                ₹50 VIP
-              </span>
-            )}
-          </div>
-
-          <p className="text-[11px] text-[#F4EFE6]/60 truncate">
-            {song.original_artist || (song.source_type === "artist_playlist" ? "Setlist Track" : song.requester_name ? `Requested by ${song.requester_name}` : "Live Track")}
-          </p>
-        </div>
-      </div>
-
-      {/* Right: PLAY YOUTUBE VIDEO BUTTON + MARK DONE BUTTON + ACTIONS */}
-      <div className="flex items-center gap-2.5 shrink-0">
-        
-        {/* 1. PLAY YOUTUBE VIDEO BUTTON (Directly Next to Song) */}
-        {isCurrentlyPlaying ? (
-          <button
-            type="button"
-            onClick={() => setIsKaraokePlaying(false)}
-            className="px-3.5 py-1.5 rounded-full bg-[#D92323] hover:bg-[#b81d1d] text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm cursor-pointer transition shrink-0"
-            title="Pause Playing Video"
-          >
-            <Pause className="w-3.5 h-3.5 fill-current" />
-            <span className="hidden sm:inline">Playing</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => handleLoadSongIntoKaraoke(song)}
-            className="px-3.5 py-1.5 rounded-full bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-extrabold flex items-center gap-1.5 shadow-xs cursor-pointer transition shrink-0 group/play"
-            title="Play YouTube Video next to song"
-          >
-            <Play className="w-3.5 h-3.5 fill-current group-hover/play:scale-110 transition-transform" />
-            <span>Play Video</span>
-          </button>
-        )}
-
-        {/* 2. MARK AS DONE BUTTON */}
-        <button
-          type="button"
-          onClick={() => handleMarkPlayed(song.id)}
-          className={`p-1.5 rounded-xl border transition cursor-pointer shrink-0 ${
-            isMarkedDone
-              ? "bg-emerald-400/10 border-emerald-400/40 text-emerald-400 hover:bg-emerald-400/20"
-              : "border-white/30 bg-white/[0.04] hover:border-emerald-400 hover:text-emerald-300 text-[#F4EFE6]/90"
-          }`}
-          title={isMarkedDone ? "Already marked as Done (click to toggle)" : "Mark as Done"}
-        >
-          <Check className="w-3.5 h-3.5" />
-        </button>
-
-        {/* 3. Upvotes / Heart */}
-        <button
-          type="button"
-          onClick={() => handleToggleSongUpvote(song.id)}
-          className="flex items-center gap-1 text-[11px] font-semibold text-[#F4EFE6]/60 hover:text-[#ff7a7a] cursor-pointer"
-          title="Upvote"
-        >
-          <Heart
-            className={`w-3.5 h-3.5 ${
-              (song.upvotes || 0) > 0 ? "fill-[#D92323] text-[#ff7a7a]" : "text-neutral-300"
-            }`}
-          />
-          <span>{song.upvotes || 0}</span>
-        </button>
-
-        {/* 4. Delete from Playlist (if artist's playlist) */}
-        {song.source_type === "artist_playlist" && (
-          <button
-            type="button"
-            onClick={() => handleDeletePlaylistSong(song.id)}
-            className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#ff7a7a] transition cursor-pointer p-1"
-            title="Remove from Playlist"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {/* 5. Three Lines Reorder Handle: Hold & drag anywhere to reorder queue */}
-        <div
-          className="flex items-center gap-1 pl-1.5 border-l border-white/10 text-[#F4EFE6]/75 shrink-0"
-          title="Hold and drag to reorder setlist queue"
-        >
-          <div
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              dragControls.start(e)
-            }}
-            style={{ touchAction: "none" }}
-            className="flex flex-col items-center justify-center gap-[3px] py-1.5 px-2 rounded-lg hover:bg-white/10 active:scale-110 active:bg-[#D92323]/15 text-[#F4EFE6]/60 hover:text-white cursor-grab active:cursor-grabbing transition select-none group/handle"
-            title="Hold and drag to move anywhere in setlist"
-          >
-            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
-            <span className="w-3.5 h-[2px] bg-[#F4EFE6]/70 group-hover/handle:bg-[#F4EFE6] rounded-full transition-colors" />
-          </div>
-
-          {/* Quick Nudge Buttons */}
-          <div className="flex flex-col -space-y-0.5">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleMoveSong(song.id, "up")
-              }}
-              disabled={index === 0}
-              className="p-0.5 rounded hover:bg-white/10 text-[#F4EFE6]/75 hover:text-white disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition"
-              title="Push up in setlist"
-            >
-              <ChevronUp className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleMoveSong(song.id, "down")
-              }}
-              disabled={index === totalCount - 1}
-              className="p-0.5 rounded hover:bg-white/10 text-[#F4EFE6]/75 hover:text-white disabled:opacity-25 cursor-pointer disabled:cursor-not-allowed transition"
-              title="Push down in setlist"
-            >
-              <ChevronDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      </div>
+    <Reorder.Item as="div" value={song} id={song.id} dragListener={false} dragControls={controls} className={cn(cls, "bg-[#0f0d12]/0")}>
+      {body}
     </Reorder.Item>
   )
 }
+
+/* ───────────────────────────── Page ───────────────────────────── */
 
 export default function ArtistDashboardPage() {
   const router = useRouter()
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [needsAuth, setNeedsAuth] = useState(false)
-  const [selectedEventId, setSelectedEventId] = useState<string>("")
+  const [selectedEventId, setSelectedEventId] = useState("")
+  const [view, setView] = useState<View>("tonight")
+  const [menuOpen, setMenuOpen] = useState(false)
   const [qrOpen, setQrOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [newShowOpen, setNewShowOpen] = useState(false)
 
-  // Quick Add Song Form State
-  const [showAddPlaylistForm, setShowAddPlaylistForm] = useState(false)
-  const [playlistTitle, setPlaylistTitle] = useState("")
-  const [playlistArtist, setPlaylistArtist] = useState("")
-  const [playlistYoutubeUrl, setPlaylistYoutubeUrl] = useState("")
-  const [addingPlaylist, setAddingPlaylist] = useState(false)
-
-  // YouTube Karaoke & HDMI State (Never autoplays on load)
-  const [activeKaraokeSong, setActiveKaraokeSong] = useState<any>(null)
-  const [karaokeVideoId, setKaraokeVideoId] = useState<string>("")
-  const [customYoutubeInput, setCustomYoutubeInput] = useState<string>("")
-  const [hdmiConnected, setHdmiConnected] = useState(false)
-  const [muteKaraokeAudio, setMuteKaraokeAudio] = useState(false)
-  const [isKaraokePlaying, setIsKaraokePlaying] = useState(false)
-
-  // In-Player YouTube Search State
-  const [ytSearchQuery, setYtSearchQuery] = useState("")
-  const [ytSearchResults, setYtSearchResults] = useState<any[]>([])
-  const [isSearchingYt, setIsSearchingYt] = useState(false)
-  const [ytSearchSubmitted, setYtSearchSubmitted] = useState(false)
-  const [showYtResultsPanel, setShowYtResultsPanel] = useState(false)
-  const [ytApiConnected, setYtApiConnected] = useState<boolean | null>(null)
-
-  // Sync search input with the currently selected song title
-  useEffect(() => {
-    if (activeKaraokeSong?.song_title) {
-      const suggested = `${activeKaraokeSong.song_title} ${activeKaraokeSong.original_artist || ""} karaoke`.trim()
-      setYtSearchQuery(suggested)
-    }
-  }, [activeKaraokeSong?.id, activeKaraokeSong?.song_title])
-
-  // Auto-mark Done on YouTube Video End or Near-End
-  const autoMarkedIdsRef = useRef<Set<string>>(new Set())
-  const ytPlayerRef = useRef<any>(null)
-  const lastPlaybackReportRef = useRef(0)
-  const activeKaraokeSongRef = useRef<any>(null)
-  activeKaraokeSongRef.current = activeKaraokeSong
+  // Stage
+  const [activeSong, setActiveSong] = useState<any>(null)
+  const [videoId, setVideoId] = useState("")
+  const [playing, setPlaying] = useState(false)
+  const [muted, setMuted] = useState(false)
+  const [ledOpen, setLedOpen] = useState(false)
   const [doneToast, setDoneToast] = useState<{ id: string; title: string } | null>(null)
-  const [playlistViewFilter, setPlaylistViewFilter] = useState<"playlist" | "requests" | "dedications" | "all">("playlist")
-  const [currentDateStr, setCurrentDateStr] = useState<string>("")
 
-  useEffect(() => {
-    setCurrentDateStr(
-      new Date().toLocaleDateString("en-US", {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      })
-    )
-  }, [])
+  // Video search
+  const [ytQuery, setYtQuery] = useState("")
+  const [ytResults, setYtResults] = useState<any[] | null>(null)
+  const [ytSearching, setYtSearching] = useState(false)
+  const [ytConnected, setYtConnected] = useState<boolean | null>(null)
 
-  // Optional custom YouTube URL override per pending song confirmation
-  const [confirmYoutubeUrls] = useState<Record<string, string>>({})
+  // Add song
+  const [addOpen, setAddOpen] = useState(false)
+  const [newTitle, setNewTitle] = useState("")
+  const [newArtist, setNewArtist] = useState("")
+  const [newUrl, setNewUrl] = useState("")
+  const [adding, setAdding] = useState(false)
 
-  // Pending batches tab filter: 'all' | 'dedication' | 'regular'
-  const [pendingBatchFilter, setPendingBatchFilter] = useState<"all" | "dedication" | "regular">("all")
-
-  // Single Unified Main Tab (No duplicate tabs)
-  const [activeTab, setActiveTab] = useState<"music" | "batches" | "videos" | "shows" | "bank">("music")
-
-  // Left Sidebar Track Filter
-  const [sidebarFilter, setSidebarFilter] = useState<"all" | "playlist" | "dedications" | "requests">("all")
-  const [searchFilter, setSearchFilter] = useState("")
-
-  // Bank & UPIPay State
-  const [upiId, setUpiId] = useState("")
-  const [payeeName, setPayeeName] = useState("")
-  const [bankName, setBankName] = useState("")
-  const [accountNumber, setAccountNumber] = useState("")
-  const [ifscCode, setIfscCode] = useState("")
-  const [upipayProvider, setUpipayProvider] = useState<"upi_direct" | "phonepe" | "paytm">("upi_direct")
-  const [upipayMerchantId, setUpipayMerchantId] = useState("")
+  // Payments
+  const [settlingId, setSettlingId] = useState<string | null>(null)
+  const [bank, setBank] = useState<Record<string, string>>({})
+  const [bankMsg, setBankMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [savingBank, setSavingBank] = useState(false)
-  const [bankSavedMsg, setBankSavedMsg] = useState<string | null>(null)
-  const [bankErrorMsg, setBankErrorMsg] = useState<string | null>(null)
 
-  // Modals for Profile & New Gig
-  const [showProfileModal, setShowProfileModal] = useState(false)
-  const [profileName, setProfileName] = useState("")
-  const [profileInsta, setProfileInsta] = useState("")
-  const [profileAvatar, setProfileAvatar] = useState("")
-  const [profileBio, setProfileBio] = useState("")
+  // Profile / new show forms
+  const [profile, setProfile] = useState<Record<string, string>>({})
+  const [show, setShow] = useState<Record<string, string>>({})
 
-  const [showNewGigModal, setShowNewGigModal] = useState(false)
-  const [newGigTitle, setNewGigTitle] = useState("")
-  const [newGigLocation, setNewGigLocation] = useState("")
-  const [newGigDate, setNewGigDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [newGigPrice, setNewGigPrice] = useState("499")
-
-  // Debounce ref for setlist reordering persistence
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const autoMarked = useRef<Set<string>>(new Set())
+  const ytPlayer = useRef<any>(null)
+  const lastReport = useRef(0)
+  const activeRef = useRef<any>(null)
+  activeRef.current = activeSong
+  const saveOrderTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchDashboard = useCallback(
     async (evId?: string) => {
       try {
-        const targetId = evId ?? selectedEventId
-        const url = targetId
-          ? `/api/artist/dashboard?eventId=${encodeURIComponent(targetId)}`
-          : "/api/artist/dashboard"
-        const res = await fetch(url, { cache: "no-store" })
+        const id = evId ?? selectedEventId
+        const res = await fetch(id ? `/api/artist/dashboard?eventId=${encodeURIComponent(id)}` : "/api/artist/dashboard", {
+          cache: "no-store",
+        })
         if (res.status === 401) {
           setNeedsAuth(true)
-          setLoading(false)
           return
         }
-        if (res.ok) {
-          const json = await res.json()
-          setNeedsAuth(false)
-          setData(json)
-          if (json.activeGig && !targetId) {
-            setSelectedEventId(json.activeGig.id)
-          }
-          if (json.artist) {
-            setProfileName((prev) => prev || json.artist.name || "")
-            setProfileInsta((prev) => prev || json.artist.instagram_handle || "")
-            setProfileAvatar((prev) => prev || json.artist.avatar_url || "")
-            setProfileBio((prev) => prev || json.artist.bio || "")
-            setUpiId((prev) => prev || json.artist.upi_id || "arjunmehta@ybl")
-            setPayeeName((prev) => prev || json.artist.payee_name || json.artist.name || "")
-            setBankName((prev) => prev || json.artist.bank_name || "")
-            setAccountNumber((prev) => prev || json.artist.account_number || "")
-            setIfscCode((prev) => prev || json.artist.ifsc_code || "")
-            setUpipayProvider((prev) => prev || json.artist.upipay_provider || "upi_direct")
-            setUpipayMerchantId((prev) => prev || json.artist.upipay_merchant_id || "")
-          }
+        if (!res.ok) return
+        const json = await res.json()
+        setNeedsAuth(false)
+        setData(json)
+        if (json.activeGig && !id) setSelectedEventId(json.activeGig.id)
+        const a = json.artist
+        if (a) {
+          setBank((b) =>
+            Object.keys(b).length
+              ? b
+              : {
+                  upi_id: a.upi_id || "",
+                  payee_name: a.payee_name || a.name || "",
+                  bank_name: a.bank_name || "",
+                  account_number: a.account_number || "",
+                  ifsc_code: a.ifsc_code || "",
+                  upipay_provider: a.upipay_provider || "upi_direct",
+                  upipay_merchant_id: a.upipay_merchant_id || "",
+                },
+          )
         }
       } catch {
-        // ignore transient errors
+        // transient; the next poll retries
       } finally {
         setLoading(false)
       }
     },
-    [selectedEventId]
+    [selectedEventId],
   )
 
   useEffect(() => {
     fetchDashboard()
-    const interval = setInterval(() => {
-      fetchDashboard()
-    }, 3500)
-    return () => clearInterval(interval)
+    const t = setInterval(() => fetchDashboard(), 3500)
+    return () => clearInterval(t)
   }, [fetchDashboard])
 
-  const handleDemoArtistLogin = async () => {
-    setLoading(true)
-    await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "artist@museing.com", password: "artist123" }),
-    })
-    await fetchDashboard()
-  }
-
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
-    router.push("/login")
-  }
-
-  const broadcastToLedScreen = (videoId: string, song?: any, muted?: boolean) => {
-    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
-      const bc = new BroadcastChannel("muse_led_screen")
-      bc.postMessage({
-        type: "LOAD_KARAOKE",
-        videoId,
-        song,
-        muted: muted ?? muteKaraokeAudio,
-      })
-      bc.close()
-    }
-  }
-
-  const handleConnectHdmiScreen = () => {
-    const gigId = data?.activeGig?.id || "gig-koramangala-tonight"
-    const popup = window.open(
-      `/artist/led-screen?eventId=${encodeURIComponent(gigId)}`,
-      "MuseVenueLED",
-      "popup,width=1280,height=720"
-    )
-    setHdmiConnected(true)
-    if (popup) {
-      setTimeout(() => {
-        broadcastToLedScreen(karaokeVideoId, activeKaraokeSong, muteKaraokeAudio)
-      }, 900)
-    }
-  }
-
-  const handleLoadSongIntoKaraoke = async (song: any, overrideVideoId?: string) => {
-    if (song?.id) {
-      autoMarkedIdsRef.current.delete(song.id)
-    }
-    setActiveKaraokeSong(song)
-    const resolvedVideoId =
-      overrideVideoId ||
-      song.youtube_video_id ||
-      extractYouTubeId(song.youtube_url) ||
-      ""
-
-    setKaraokeVideoId(resolvedVideoId)
-    setIsKaraokePlaying(Boolean(resolvedVideoId))
-    setCustomYoutubeInput(resolvedVideoId ? `https://www.youtube.com/watch?v=${resolvedVideoId}` : "")
-    if (resolvedVideoId) {
-      broadcastToLedScreen(resolvedVideoId, song, muteKaraokeAudio)
-    }
-
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "set_now_playing",
-        request_id: song.id,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleAddPlaylistSong = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!playlistTitle.trim() || !data?.activeGig?.id) return
-    setAddingPlaylist(true)
-    try {
-      await fetch("/api/artist/dashboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "add_playlist_song",
-          event_id: data.activeGig.id,
-          song_title: playlistTitle,
-          original_artist: playlistArtist,
-          youtube_url: playlistYoutubeUrl,
-        }),
-      })
-      setPlaylistTitle("")
-      setPlaylistArtist("")
-      setPlaylistYoutubeUrl("")
-      setShowAddPlaylistForm(false)
-      fetchDashboard()
-    } finally {
-      setAddingPlaylist(false)
-    }
-  }
-
-  const handleToggleSongUpvote = async (requestId: string) => {
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "toggle_upvote",
-        request_id: requestId,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleConfirmAudienceSong = async (requestId: string) => {
-    const customYt = confirmYoutubeUrls[requestId] || undefined
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "confirm_song",
-        request_id: requestId,
-        youtube_url: customYt,
-        decline_others: true,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleDeclineBatch = async (batchId: string) => {
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "decline_batch",
-        batch_id: batchId,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleDeclineSong = async (requestId: string) => {
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "decline_song",
-        request_id: requestId,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleReorderSongs = (newOrder: any[]) => {
-    const updated = newOrder.map((s: any, idx: number) => ({
-      ...s,
-      choice_index: idx + 1,
-    }))
-
-    setData((prev: any) => (prev ? { ...prev, artistPlaylist: updated } : prev))
-
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
-    saveTimeoutRef.current = setTimeout(async () => {
-      await fetch("/api/artist/dashboard", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "reorder_entire_playlist",
-          ordered_ids: updated.map((s: any) => s.id),
-        }),
-      })
-    }, 350)
-  }
-
-  const handleMoveSong = (songId: string, direction: "up" | "down") => {
-    const currentList = [...(data?.artistPlaylist || [])]
-    const idx = currentList.findIndex((s: any) => s.id === songId)
-    if (idx === -1) return
-    const targetIdx = direction === "up" ? idx - 1 : idx + 1
-    if (targetIdx < 0 || targetIdx >= currentList.length) return
-    const [moved] = currentList.splice(idx, 1)
-    currentList.splice(targetIdx, 0, moved)
-    handleReorderSongs(currentList)
-  }
-
-  const handleMarkPlayed = useCallback(
-    async (requestId: string) => {
-      await fetch("/api/artist/dashboard", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "mark_played",
-          request_id: requestId,
-        }),
-      })
-      fetchDashboard()
-    },
-    [fetchDashboard]
-  )
-
-  // Auto-mark as done when the YouTube video finishes or is in the end of finishing
-  const triggerAutoMarkDone = useCallback(
-    async (songIdOverride?: string) => {
-      const targetId = songIdOverride || activeKaraokeSong?.id
-      if (!targetId || autoMarkedIdsRef.current.has(targetId)) return
-      autoMarkedIdsRef.current.add(targetId)
-
-      const targetTitle = activeKaraokeSong?.song_title || "Song"
-      setDoneToast({ id: targetId, title: targetTitle })
-      setTimeout(() => {
-        setDoneToast((prev) => (prev?.id === targetId ? null : prev))
-      }, 7000)
-
-      await handleMarkPlayed(targetId)
-    },
-    [activeKaraokeSong, handleMarkPlayed]
-  )
-
-  // 1. Load YouTube IFrame API script once
   useEffect(() => {
-    if (typeof window === "undefined") return
+    setMenuOpen(false)
+    window.scrollTo({ top: 0 })
+  }, [view])
+
+  /* ── Stage controls ── */
+
+  const broadcast = (vid: string, song: any, mute = muted) => {
+    if (typeof window === "undefined" || !("BroadcastChannel" in window)) return
+    const bc = new BroadcastChannel("muse_led_screen")
+    bc.postMessage({ type: "LOAD_KARAOKE", videoId: vid, song, muted: mute })
+    bc.close()
+  }
+
+  const openLedScreen = () => {
+    const gigId = data?.activeGig?.id
+    if (!gigId) return
+    const popup = window.open(`/artist/led-screen?eventId=${encodeURIComponent(gigId)}`, "MuseVenueLED", "popup,width=1280,height=720")
+    setLedOpen(true)
+    if (popup) setTimeout(() => broadcast(videoId, activeSong), 900)
+  }
+
+  const playSong = async (song: any, overrideVideo?: string) => {
+    if (song?.id) autoMarked.current.delete(song.id)
+    const vid = overrideVideo || videoIdOf(song)
+    setActiveSong(song)
+    setVideoId(vid)
+    setPlaying(Boolean(vid))
+    setYtResults(null)
+    if (vid) broadcast(vid, song)
+    await patch({ action: "set_now_playing", request_id: song.id })
+    fetchDashboard()
+  }
+
+  const markPlayed = useCallback(
+    async (id: string) => {
+      await patch({ action: "mark_played", request_id: id })
+      fetchDashboard()
+    },
+    [fetchDashboard],
+  )
+
+  const autoMarkDone = useCallback(async () => {
+    const song = activeRef.current
+    if (!song?.id || autoMarked.current.has(song.id)) return
+    autoMarked.current.add(song.id)
+    setDoneToast({ id: song.id, title: song.song_title || "Song" })
+    setTimeout(() => setDoneToast((t) => (t?.id === song.id ? null : t)), 7000)
+    await markPlayed(song.id)
+  }, [markPlayed])
+
+  // YouTube IFrame API: load once, then watch for the end of each video so it's marked played.
+  useEffect(() => {
     if (!(window as any).YT) {
       const tag = document.createElement("script")
       tag.src = "https://www.youtube.com/iframe_api"
-      const firstScriptTag = document.getElementsByTagName("script")[0]
-      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag)
+      document.head.appendChild(tag)
     }
   }, [])
 
-  // Helper to subscribe the YouTube iframe to postMessage state/time events
-  const registerYouTubeIframeListener = useCallback(() => {
-    if (typeof window === "undefined") return
+  const bindPlayer = useCallback(() => {
     const iframe = document.getElementById("stage-active-player") as HTMLIFrameElement | null
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage(
-        JSON.stringify({ event: "listening", id: "stage-active-player", channel: "widget" }),
-        "*"
-      )
-      iframe.contentWindow.postMessage(
-        JSON.stringify({
-          event: "command",
-          func: "addEventListener",
-          args: ["onStateChange"],
-          id: "stage-active-player",
-          channel: "widget",
-        }),
-        "*"
-      )
-    }
+    if (!iframe?.contentWindow) return
+    iframe.contentWindow.postMessage(JSON.stringify({ event: "listening", id: "stage-active-player", channel: "widget" }), "*")
     const YT = (window as any).YT
-    if (YT?.Player && iframe) {
+    if (YT?.Player) {
       try {
-        ytPlayerRef.current = new YT.Player(iframe, {
-          events: {
-            onStateChange: (e: any) => {
-              if (e?.data === 0) triggerAutoMarkDone()
-            },
-          },
-        })
+        ytPlayer.current = new YT.Player(iframe, { events: { onStateChange: (e: any) => e?.data === 0 && autoMarkDone() } })
       } catch {
         // already bound
       }
     }
-  }, [triggerAutoMarkDone])
+  }, [autoMarkDone])
 
-  // 2. YouTube postMessage listener: Detects state change (ended) or nearing the end
   useEffect(() => {
-    const handleMessage = (e: MessageEvent) => {
+    const onMessage = (e: MessageEvent) => {
       try {
-        const payload = typeof e.data === "string" ? JSON.parse(e.data) : e.data
-        // Video finished (info === 0 is ENDED)
-        if (payload?.event === "onStateChange" && (payload?.info === 0 || payload?.info === "0")) {
-          triggerAutoMarkDone()
-        }
-        // Video in the end of finishing (within last 4 seconds) or playerState === 0
-        if (payload?.event === "infoDelivery" && payload?.info) {
-          if (payload.info.playerState === 0) {
-            triggerAutoMarkDone()
-          }
-          const cur = payload.info.currentTime
-          const dur = payload.info.duration
-          if (typeof cur === "number" && typeof dur === "number" && dur > 5 && cur >= dur - 4) {
-            triggerAutoMarkDone()
-          }
+        const p = typeof e.data === "string" ? JSON.parse(e.data) : e.data
+        if (p?.event === "onStateChange" && String(p.info) === "0") autoMarkDone()
+        if (p?.event === "infoDelivery" && p.info) {
+          if (p.info.playerState === 0) autoMarkDone()
+          const { currentTime: cur, duration: dur } = p.info
+          if (typeof cur === "number" && typeof dur === "number" && dur > 5 && cur >= dur - 4) autoMarkDone()
         }
       } catch {
-        // ignore non-json messages
+        // not a YouTube message
       }
     }
-    window.addEventListener("message", handleMessage)
-    return () => window.removeEventListener("message", handleMessage)
-  }, [triggerAutoMarkDone])
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [autoMarkDone])
 
-  // 3. Keep YouTube listener registered & poll player instance for near-end detection
   useEffect(() => {
-    registerYouTubeIframeListener()
-    const interval = setInterval(() => {
-      registerYouTubeIframeListener()
+    bindPlayer()
+    const t = setInterval(() => {
+      bindPlayer()
+      const p = ytPlayer.current
+      if (!p || typeof p.getCurrentTime !== "function") return
       try {
-        if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === "function") {
-          const cur = ytPlayerRef.current.getCurrentTime()
-          const dur = ytPlayerRef.current.getDuration()
-          if (typeof cur === "number" && typeof dur === "number" && dur > 5 && cur >= dur - 4) {
-            triggerAutoMarkDone()
-          }
-          const songId = activeKaraokeSongRef.current?.id
-          const now = Date.now()
-          if (songId && typeof cur === "number" && now - lastPlaybackReportRef.current > 2000) {
-            lastPlaybackReportRef.current = now
-            const state = typeof ytPlayerRef.current.getPlayerState === "function" ? ytPlayerRef.current.getPlayerState() : -1
-            fetch("/api/artist/dashboard", {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ action: "report_playback", request_id: songId, position: cur, playing: state === 1 }),
-            }).catch(() => {})
-          }
+        const cur = p.getCurrentTime()
+        const dur = p.getDuration()
+        if (dur > 5 && cur >= dur - 4) autoMarkDone()
+        const id = activeRef.current?.id
+        const now = Date.now()
+        if (id && now - lastReport.current > 2000) {
+          lastReport.current = now
+          patch({ action: "report_playback", request_id: id, position: cur, playing: p.getPlayerState?.() === 1 })
         }
       } catch {
-        // ignore
+        // player not ready
       }
     }, 1000)
-    return () => clearInterval(interval)
-  }, [karaokeVideoId, isKaraokePlaying, registerYouTubeIframeListener, triggerAutoMarkDone])
+    return () => clearInterval(t)
+  }, [videoId, playing, bindPlayer, autoMarkDone])
 
-  // 4. Default active song from today's playlist on first load if not chosen yet
+  // Suggested video search for the song on stage
   useEffect(() => {
-    if (data?.artistPlaylist?.length > 0 && !activeKaraokeSong) {
-      const defaultSong =
-        data.artistPlaylist.find((s: any) => s.status === "playing") ||
-        data.artistPlaylist.find((s: any) => s.status !== "played") ||
-        data.artistPlaylist[0]
-      if (defaultSong) {
-        setActiveKaraokeSong(defaultSong)
-        const resolved =
-          defaultSong.youtube_video_id ||
-          extractYouTubeId(defaultSong.youtube_url) ||
-          ""
-        setKaraokeVideoId(resolved)
-        setCustomYoutubeInput(resolved ? `https://www.youtube.com/watch?v=${resolved}` : "")
-      }
-    }
-  }, [data, activeKaraokeSong])
+    if (activeSong?.song_title) setYtQuery(`${activeSong.song_title} ${activeSong.original_artist || ""} karaoke`.replace(/\s+/g, " ").trim())
+  }, [activeSong?.id, activeSong?.song_title, activeSong?.original_artist])
 
-  const handleDeletePlaylistSong = async (requestId: string) => {
-    await fetch("/api/artist/dashboard", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "delete_song",
-        request_id: requestId,
-      }),
-    })
-    fetchDashboard()
-  }
-
-  const handleSaveCustomYoutubeUrl = async () => {
-    const extracted = extractYouTubeId(customYoutubeInput)
-    if (extracted) {
-      setKaraokeVideoId(extracted)
-      setIsKaraokePlaying(true)
-      broadcastToLedScreen(extracted, activeKaraokeSong, muteKaraokeAudio)
-      if (activeKaraokeSong?.id) {
-        await fetch("/api/artist/dashboard", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "attach_youtube",
-            request_id: activeKaraokeSong.id,
-            youtube_url: customYoutubeInput,
-          }),
-        })
-        fetchDashboard()
-      }
-    }
-  }
-
-  const handleSearchYouTube = async (customQ?: string) => {
-    const q = (customQ ?? ytSearchQuery).trim()
-    if (!q) return
-
-    // If it's a direct YouTube link or 11-char video ID, load and attach immediately
-    const directId = extractYouTubeId(q)
-    if (directId) {
-      setKaraokeVideoId(directId)
-      setIsKaraokePlaying(true)
-      setCustomYoutubeInput(`https://www.youtube.com/watch?v=${directId}`)
-      broadcastToLedScreen(directId, activeKaraokeSong, muteKaraokeAudio)
-      if (activeKaraokeSong?.id) {
-        await fetch("/api/artist/dashboard", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            action: "attach_youtube",
-            request_id: activeKaraokeSong.id,
-            youtube_url: `https://www.youtube.com/watch?v=${directId}`,
-          }),
-        })
-        fetchDashboard()
-      }
-      setShowYtResultsPanel(false)
-      return
-    }
-
-    setIsSearchingYt(true)
-    setYtSearchSubmitted(true)
-    setShowYtResultsPanel(true)
-    try {
-      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`)
-      if (res.ok) {
-        const json = await res.json()
-        setYtSearchResults(Array.isArray(json.results) ? json.results : [])
-        if (typeof json.api_connected === "boolean") {
-          setYtApiConnected(json.api_connected)
-        }
-      } else {
-        setYtSearchResults([])
-      }
-    } catch {
-      setYtSearchResults([])
-    } finally {
-      setIsSearchingYt(false)
-    }
-  }
-
-  const handleSelectYouTubeVideo = async (video: any) => {
-    if (!video?.videoId) return
-    const vidId = video.videoId
-    setKaraokeVideoId(vidId)
-    setIsKaraokePlaying(true)
-    setCustomYoutubeInput(`https://www.youtube.com/watch?v=${vidId}`)
-    broadcastToLedScreen(vidId, activeKaraokeSong, muteKaraokeAudio)
-
-    if (activeKaraokeSong?.id) {
-      await fetch("/api/artist/dashboard", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "attach_youtube",
-          request_id: activeKaraokeSong.id,
-          youtube_url: `https://www.youtube.com/watch?v=${vidId}`,
-        }),
-      })
+  const loadVideo = async (vid: string) => {
+    setVideoId(vid)
+    setPlaying(true)
+    setYtResults(null)
+    broadcast(vid, activeSong)
+    if (activeSong?.id) {
+      await patch({ action: "attach_youtube", request_id: activeSong.id, youtube_url: `https://www.youtube.com/watch?v=${vid}` })
       fetchDashboard()
     }
   }
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
+  const searchYouTube = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const q = ytQuery.trim()
+    if (!q) return
+    const direct = extractYouTubeId(q)
+    if (direct) return loadVideo(direct)
+    setYtSearching(true)
+    try {
+      const res = await fetch(`/api/youtube/search?q=${encodeURIComponent(q)}`)
+      const json = res.ok ? await res.json() : {}
+      setYtResults(Array.isArray(json.results) ? json.results : [])
+      if (typeof json.api_connected === "boolean") setYtConnected(json.api_connected)
+    } catch {
+      setYtResults([])
+    } finally {
+      setYtSearching(false)
+    }
+  }
+
+  /* ── Setlist & requests ── */
+
+  const addSong = async (e: React.FormEvent) => {
     e.preventDefault()
-    await fetch("/api/artist/dashboard", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "update_profile",
-        name: profileName,
-        instagram_handle: profileInsta,
-        avatar_url: profileAvatar,
-        bio: profileBio,
-      }),
-    })
-    setShowProfileModal(false)
+    if (!newTitle.trim() || !data?.activeGig?.id) return
+    setAdding(true)
+    try {
+      await artistPost({
+        action: "add_playlist_song",
+        event_id: data.activeGig.id,
+        song_title: newTitle,
+        original_artist: newArtist,
+        youtube_url: newUrl,
+      })
+      setNewTitle("")
+      setNewArtist("")
+      setNewUrl("")
+      setAddOpen(false)
+      fetchDashboard()
+    } catch {
+      // stays open so they can retry
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const removeSong = async (id: string) => {
+    await patch({ action: "delete_song", request_id: id })
     fetchDashboard()
   }
 
-  const handleSaveBankDetails = async (e: React.FormEvent) => {
+  const reorder = (list: any[]) => {
+    const updated = list.map((s, i) => ({ ...s, choice_index: i + 1 }))
+    setData((d: any) => (d ? { ...d, artistPlaylist: updated } : d))
+    if (saveOrderTimer.current) clearTimeout(saveOrderTimer.current)
+    saveOrderTimer.current = setTimeout(() => patch({ action: "reorder_entire_playlist", ordered_ids: updated.map((s) => s.id) }), 350)
+  }
+
+  const acceptSong = async (id: string) => {
+    await patch({ action: "confirm_song", request_id: id, decline_others: true })
+    fetchDashboard()
+  }
+  const declineSong = async (id: string) => {
+    await patch({ action: "decline_song", request_id: id })
+    fetchDashboard()
+  }
+  const passBatch = async (id: string) => {
+    await patch({ action: "decline_batch", batch_id: id })
+    fetchDashboard()
+  }
+
+  const settle = async (txId: string, received: boolean) => {
+    setSettlingId(txId)
+    try {
+      await artistPost({ action: received ? "confirm_payment" : "reject_payment", transaction_id: txId }).catch(() => null)
+      await fetchDashboard()
+    } finally {
+      setSettlingId(null)
+    }
+  }
+
+  const saveBank = async (e: React.FormEvent) => {
     e.preventDefault()
     setSavingBank(true)
-    setBankSavedMsg(null)
-    setBankErrorMsg(null)
+    setBankMsg(null)
     try {
-      const res = await fetch("/api/artist/dashboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "update_bank_details",
-          upi_id: upiId,
-          payee_name: payeeName,
-          bank_name: bankName,
-          account_number: accountNumber,
-          ifsc_code: ifscCode,
-          upipay_provider: upipayProvider,
-          upipay_merchant_id: upipayMerchantId,
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        setBankErrorMsg(json.error || "Failed to save.")
-      } else {
-        setBankSavedMsg("Saved!")
-        setTimeout(() => setBankSavedMsg(null), 4000)
-        fetchDashboard()
-      }
-    } catch {
-      setBankErrorMsg("Network error.")
+      await artistPost({ action: "update_bank_details", ...bank })
+      setBankMsg({ ok: true, text: "Saved." })
+      fetchDashboard()
+    } catch (err) {
+      setBankMsg({ ok: false, text: err instanceof Error ? err.message : "Couldn't save." })
     } finally {
       setSavingBank(false)
     }
   }
 
-  const handleCreateGig = async (e: React.FormEvent) => {
-    e.preventDefault()
-    const res = await fetch("/api/artist/dashboard", {
+  const switchShow = (id: string) => {
+    setSelectedEventId(id)
+    setActiveSong(null)
+    setVideoId("")
+    setPlaying(false)
+    fetchDashboard(id)
+    setView("tonight")
+  }
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" })
+    router.push("/login")
+  }
+
+  const demoLogin = async () => {
+    setLoading(true)
+    await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "create_gig",
-        title: newGigTitle,
-        location_name: newGigLocation,
-        date: `${newGigDate}T20:30:00.000Z`,
-        ticket_price: Number(newGigPrice) || 0,
-      }),
+      body: JSON.stringify(DEMO_ARTIST),
     })
-    const json = await res.json()
-    setShowNewGigModal(false)
-    if (json.id) {
-      setSelectedEventId(json.id)
-      fetchDashboard(json.id)
-    }
+    await fetchDashboard()
   }
 
-  if (loading && !data && !needsAuth) {
-    return <MuseLoadingScreen isLoading={true} />
-  }
-
-  if (needsAuth) {
-    return (
-      <div
-        className="min-h-screen bg-[radial-gradient(120%_80%_at_50%_0%,#5a0910_0%,#1a0507_55%,#070709_100%)] text-[#F4EFE6] flex items-center justify-center p-4"
-        style={{ fontFamily: "var(--font-inter), sans-serif" }}
-      >
-        <div className="max-w-sm w-full bg-[#121014]/90 border border-white/10 rounded-[28px] p-8 text-center space-y-5 shadow-2xl">
-          <Link href="/" className="inline-flex items-center justify-center select-none">
-            <span className="title-x text-[40px]">M-</span>
-          </Link>
-          <div className="space-y-1">
-            <h1 className="title-x text-[24px]">Artist portal</h1>
-            <p className="text-xs text-[#F4EFE6]/60">Sign in to open your live stage console.</p>
-          </div>
-          <div className="space-y-2">
-            <button
-              type="button"
-              onClick={handleDemoArtistLogin}
-              className="w-full py-2.5 px-4 rounded-full bg-[#D92323] text-white font-semibold text-xs hover:bg-[#b81d1d] transition cursor-pointer"
-            >
-              Demo Login (Arjun Mehta)
-            </button>
-            <Link
-              href="/login"
-              className="block w-full py-2.5 px-4 rounded-full bg-[#161318] border border-white/12 text-[#F4EFE6] text-xs font-semibold hover:border-[#F4EFE6]/60 transition"
-            >
-              Sign In
-            </Link>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  /* ── Derived ── */
 
   const {
     artist,
@@ -1015,1590 +565,725 @@ export default function ArtistDashboardPage() {
     upvotedQueue = [],
     artistPlaylist = [],
     pendingBatches = [],
+    playedSongs = [],
     transactions = [],
-    earningsSummary = { totalRevenue: 0, dedicationRevenue: 0, tipRevenue: 0, totalTransactions: 0 },
+    earningsSummary = { totalRevenue: 0, dedicationRevenue: 0, tipRevenue: 0, pendingCount: 0, pendingAmount: 0 },
   } = data || {}
 
-  const previewUpiQr = generateUPIQR({
-    vpa: upiId || artist?.upi_id || "arjunmehta@ybl",
-    name: payeeName || artist?.payee_name || artist?.name || "Live Artist",
-    amount: 50,
-    orderId: "UPIPAY_PREVIEW_50",
-    note: "Song Dedication (₹50)",
-    mode: "fixed",
+  // Running order: on stage first, paid dedications, then the artist's own order, then most loved; played last
+  const setlist = [...artistPlaylist].sort((a: any, b: any) => {
+    const on = (s: any) => (s.id === activeSong?.id && playing) || s.status === "playing"
+    if (on(a) !== on(b)) return on(a) ? -1 : 1
+    if ((a.status === "played") !== (b.status === "played")) return a.status === "played" ? 1 : -1
+    if (isVip(a) !== isVip(b)) return isVip(a) ? -1 : 1
+    const ai = a.choice_index > 0 ? a.choice_index : 999
+    const bi = b.choice_index > 0 ? b.choice_index : 999
+    if (ai !== bi) return ai - bi
+    return Number(b.upvotes || 0) - Number(a.upvotes || 0)
   })
+  // Requests the artist accepted that aren't already on the setlist
+  const crowdPicks = [...priorityDedications, ...upvotedQueue.filter((s: any) => !priorityDedications.some((p: any) => p.id === s.id))]
 
-  const currentStageSong =
-    activeKaraokeSong ||
-    artistPlaylist.find((s: any) => s.status === "playing") ||
-    priorityDedications[0] ||
-    artistPlaylist[0] ||
-    upvotedQueue[0] ||
-    null
+  const queue = [...crowdPicks.filter(isVip), ...setlist, ...crowdPicks.filter((s: any) => !isVip(s))].filter(
+    (s: any, i: number, all: any[]) => all.findIndex((x) => x.id === s.id) === i,
+  )
+  const activeIdx = queue.findIndex((s: any) => s.id === activeSong?.id)
+  const isNext = (s: any) => s.status !== "played" && s.id !== activeSong?.id
+  const nextSong = queue.slice(activeIdx + 1).find(isNext) || queue.find(isNext) || null
 
-  const readyToPayBatchesCount = pendingBatches.filter((b: any) => Boolean(b.wants_dedication)).length
-  const regularBatchesCount = pendingBatches.filter((b: any) => !b.wants_dedication).length
+  // Put something on the stage card on first load (never autoplays)
+  useEffect(() => {
+    if (activeSong || !data) return
+    const pick =
+      [...(data.artistPlaylist || []), ...(data.priorityDedications || []), ...(data.upvotedQueue || [])].find(
+        (s: any) => s.status === "playing",
+      ) ||
+      (data.artistPlaylist || []).find((s: any) => s.status !== "played") ||
+      (data.priorityDedications || [])[0] ||
+      (data.upvotedQueue || [])[0]
+    if (pick) {
+      setActiveSong(pick)
+      setVideoId(videoIdOf(pick))
+    }
+  }, [data, activeSong])
 
-  const filteredPendingBatches = pendingBatches.filter((b: any) => {
-    if (pendingBatchFilter === "dedication") return Boolean(b.wants_dedication)
-    if (pendingBatchFilter === "regular") return !b.wants_dedication
-    return true
-  })
+  const pendingTx = transactions.filter((t: any) => t.status === "pending")
+  const paidTx = transactions.filter((t: any) => t.status === "paid")
+  const waitingRequests = pendingBatches.filter((b: any) => (b.songs || []).some((s: any) => s.status === "pending_artist"))
 
-  // Unified tracklist filtered by Left Sidebar selection
-  const allTracksPool = [
-    ...priorityDedications.map((s: any) => ({ ...s, _tag: "₹50 Paid" })),
-    ...artistPlaylist.map((s: any) => ({ ...s, _tag: "Playlist" })),
-    ...upvotedQueue.map((s: any) => ({ ...s, _tag: "Request" })),
+  /* ── Signed out / loading ── */
+
+  if (needsAuth) {
+    return (
+      <div className="admin-noir flex items-center justify-center px-5">
+        <div className="admin-panel w-full max-w-sm p-8">
+          <div className="dots">
+            <i />
+          </div>
+          <h1 className="title-x mt-4 text-[30px]">Artist portal</h1>
+          <p className="fine mt-3 text-[13px]!">Sign in to run tonight&apos;s stage.</p>
+          <div className="mt-7 flex flex-col gap-2">
+            <Link href="/login" className="btn-light justify-center">
+              Sign in
+            </Link>
+            {DEMO_LOGIN_ENABLED && (
+              <button type="button" onClick={demoLogin} className="btn-ghost justify-center">
+                Try the demo artist
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading && !data) {
+    return (
+      <div className="admin-noir flex items-center justify-center">
+        <p className="micro text-[#F4EFE6]/50">Loading tonight…</p>
+      </div>
+    )
+  }
+
+  /* ── Shell ── */
+
+  const nav: { id: View; label: string; icon: LucideIcon; badge?: string; alert?: boolean }[] = [
+    { id: "tonight", label: "Tonight", icon: Radio, badge: waitingRequests.length ? String(waitingRequests.length) : undefined },
+    { id: "shows", label: "Shows", icon: CalendarDays },
+    {
+      id: "money",
+      label: "Money",
+      icon: Wallet,
+      badge: earningsSummary.pendingCount ? String(earningsSummary.pendingCount) : undefined,
+      alert: earningsSummary.pendingCount > 0,
+    },
   ]
 
-  const filteredTracks = allTracksPool
-    .filter((s: any) => {
-      if (sidebarFilter === "playlist") return s.source_type === "artist_playlist"
-      if (sidebarFilter === "dedications") return s.dedication_payment_status === "paid" || Boolean(s.wants_dedication)
-      if (sidebarFilter === "requests") return s.source_type === "audience_request"
-      return true
-    })
-    .filter((s: any) => {
-      if (!searchFilter.trim()) return true
-      const q = searchFilter.toLowerCase()
-      return (
-        s.song_title?.toLowerCase().includes(q) ||
-        s.original_artist?.toLowerCase().includes(q) ||
-        s.requester_name?.toLowerCase().includes(q)
-      )
-    })
-
-  // Filtered & sorted tracks specifically for Today's Setlist (Tab 1)
-  const displaySongsForTab1 =
-    playlistViewFilter === "playlist"
-      ? artistPlaylist
-      : playlistViewFilter === "requests"
-      ? upvotedQueue
-      : playlistViewFilter === "dedications"
-      ? priorityDedications
-      : filteredTracks
-
-  const sortedTab1Songs = [...displaySongsForTab1].sort((a: any, b: any) => {
-    // 1. Currently active or playing song goes to top
-    const aPlaying = (a.id === activeKaraokeSong?.id && isKaraokePlaying) || a.status === "playing" ? 1 : 0
-    const bPlaying = (b.id === activeKaraokeSong?.id && isKaraokePlaying) || b.status === "playing" ? 1 : 0
-    if (bPlaying !== aPlaying) return bPlaying - aPlaying
-
-    // 2. Played songs pushed to bottom
-    const aPlayed = a.status === "played" ? 1 : 0
-    const bPlayed = b.status === "played" ? 1 : 0
-    if (bPlayed !== aPlayed) return aPlayed - bPlayed
-
-    // 3. VIP paid dedications
-    const aPaid = (a.dedication_payment_status === "paid" || Boolean(a.wants_dedication)) ? 1 : 0
-    const bPaid = (b.dedication_payment_status === "paid" || Boolean(b.wants_dedication)) ? 1 : 0
-    if (bPaid !== aPaid) return bPaid - aPaid
-
-    // 4. Setlist queue custom choice index order
-    const aChoice = typeof a.choice_index === "number" && a.choice_index > 0 ? a.choice_index : 999
-    const bChoice = typeof b.choice_index === "number" && b.choice_index > 0 ? b.choice_index : 999
-    if (aChoice !== bChoice) return aChoice - bChoice
-
-    // 5. Songs being upvoted a lot pushed to top!
-    const bVotes = Number(b.upvotes || 0)
-    const aVotes = Number(a.upvotes || 0)
-    if (bVotes !== aVotes) return bVotes - aVotes
-
-    return 0
-  })
-
-  // The NEXT SONG in Today's Playlist:
-  // Must strictly be the next unplayed song following the active song in Today's Playlist / Setlist!
-  const todayPlaylistSongs =
-    sortedTab1Songs.length > 0
-      ? sortedTab1Songs
-      : artistPlaylist.length > 0
-      ? artistPlaylist
-      : data?.artistPlaylist || []
-
-  const activeIndexInPlaylist = todayPlaylistSongs.findIndex(
-    (s: any) => s.id === activeKaraokeSong?.id
+  const navLinks = (
+    <nav className="flex flex-col gap-1">
+      {nav.map(({ id, label, icon: Icon, badge, alert }) => (
+        <button
+          key={id}
+          type="button"
+          onClick={() => setView(id)}
+          className={cn(
+            "micro flex items-center gap-3 rounded-full px-4 py-3 text-[10px]! transition",
+            view === id ? "bg-[#F4EFE6] text-[#14100a]" : "text-[#F4EFE6]/65 hover:bg-white/[0.06] hover:text-white",
+          )}
+        >
+          <Icon className="h-4 w-4 shrink-0" />
+          <span className="flex-1 text-left">{label}</span>
+          {badge && (
+            <span
+              className={cn(
+                "flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[9px]",
+                alert ? "bg-[#D92323] text-white" : view === id ? "bg-[#14100a] text-[#F4EFE6]" : "bg-[#F4EFE6]/15 text-[#F4EFE6]",
+              )}
+            >
+              {badge}
+            </span>
+          )}
+        </button>
+      ))}
+    </nav>
   )
 
-  let nextPlaylistSong: any = null
-  if (activeIndexInPlaylist !== -1) {
-    nextPlaylistSong =
-      todayPlaylistSongs
-        .slice(activeIndexInPlaylist + 1)
-        .find((s: any) => s.status !== "played" && s.id !== activeKaraokeSong?.id) || null
-  }
+  const stageTools = activeGig && (
+    <div className="space-y-1">
+      <p className="micro px-4 pb-1 text-[#F4EFE6]/40">Stage</p>
+      {[
+        { label: ledOpen ? "LED screen on" : "Open LED screen", icon: Tv, onClick: openLedScreen },
+        { label: "Table QR", icon: QrCode, onClick: () => setQrOpen(true) },
+      ].map(({ label, icon: Icon, onClick }) => (
+        <button
+          key={label}
+          type="button"
+          onClick={onClick}
+          className="micro flex w-full items-center gap-3 rounded-full px-4 py-2.5 text-[10px]! text-[#F4EFE6]/65 transition hover:bg-white/[0.06] hover:text-white"
+        >
+          <Icon className="h-4 w-4" /> {label}
+        </button>
+      ))}
+      <a
+        href={`/live/${activeGig.id}`}
+        target="_blank"
+        rel="noreferrer"
+        className="micro flex items-center gap-3 rounded-full px-4 py-2.5 text-[10px]! text-[#F4EFE6]/65 transition hover:bg-white/[0.06] hover:text-white"
+      >
+        <ExternalLink className="h-4 w-4" /> Audience view
+      </a>
+    </div>
+  )
 
-  // Fallback: If no unplayed song after active song, find the first unplayed song in Today's Playlist
-  if (!nextPlaylistSong) {
-    nextPlaylistSong =
-      todayPlaylistSongs.find(
-        (s: any) => s.status !== "played" && s.id !== activeKaraokeSong?.id
-      ) || null
-  }
+  const footer = (
+    <div className="border-t border-white/10 pt-4">
+      <p className="truncate text-xs text-[#F4EFE6]">{artist?.name}</p>
+      <p className="truncate text-[11px] text-[#F4EFE6]/45">{artist?.email}</p>
+      <div className="mt-3 flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => {
+            setProfile({
+              name: artist?.name || "",
+              instagram_handle: artist?.instagram_handle || "",
+              avatar_url: artist?.avatar_url || "",
+              bio: artist?.bio || "",
+            })
+            setProfileOpen(true)
+          }}
+          className="micro flex items-center gap-2 text-[#F4EFE6]/60 transition hover:text-white"
+        >
+          <UserCheck className="h-3.5 w-3.5" /> Profile
+        </button>
+        <button type="button" onClick={logout} className="micro flex items-center gap-2 text-[#F4EFE6]/60 transition hover:text-white">
+          <LogOut className="h-3.5 w-3.5" /> Sign out
+        </button>
+      </div>
+    </div>
+  )
 
-  const filteredTab1Songs = sortedTab1Songs.filter((s: any) => {
-    if (!searchFilter.trim()) return true
-    const q = searchFilter.toLowerCase()
-    return (
-      s.song_title?.toLowerCase().includes(q) ||
-      s.original_artist?.toLowerCase().includes(q) ||
-      s.requester_name?.toLowerCase().includes(q)
-    )
-  })
+  const brand = (
+    <Link href="/" className="block">
+      <span className="title-x block text-[26px]">M-</span>
+      <span className="micro mt-1 block text-[#F4EFE6]/50">Artist</span>
+    </Link>
+  )
 
-  return (
-    <div
-      className="min-h-screen w-full bg-[#0b0a0e] text-[#F4EFE6] flex flex-col justify-between select-none"
-      style={{ fontFamily: "var(--font-inter), sans-serif" }}
-    >
-      <MuseLoadingScreen isLoading={false} minDurationMs={2600} />
+  /* ── Views ── */
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          1. SINGLE TOP HEADER (Untouched Brand Header: m- + HDMI / Profile / Sign Out)
-      ═══════════════════════════════════════════════════════════════════ */}
-      <header className="sticky top-0 z-30 bg-[#0b0a0e]/90 backdrop-blur-md border-b border-white/10 px-6 sm:px-10 py-3.5 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
-          <Link
-            href="/"
-            aria-label="muse-ing home"
-            className="group flex items-center transition-transform duration-300 hover:scale-105 cursor-pointer select-none"
-            title="Muse-ing Home"
-          >
-            <span className="title-x text-[26px] sm:text-[30px]">M-</span>
-          </Link>
-        </div>
-
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <button
-            type="button"
-            onClick={handleConnectHdmiScreen}
-            className="px-4 py-2 rounded-full bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-          >
-            <Tv className="w-3.5 h-3.5" />
-            <span>{hdmiConnected ? "HDMI Screen Active" : "Connect HDMI Screen"}</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowProfileModal(true)}
-            className="px-3.5 py-2 rounded-full bg-[#161318] border border-white/12 hover:border-[#F4EFE6]/60 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition"
-          >
-            <UserCheck className="w-3.5 h-3.5 text-[#F4EFE6]" />
-            <span>Profile</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="p-2 rounded-full bg-[#161318] border border-white/12 text-[#F4EFE6]/60 hover:text-[#ff7a7a] hover:border-[#D92323]/30 transition cursor-pointer"
-            title="Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
-      </header>
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          2. FULL-WIDTH LAPTOP VIEWPORT SPREAD (No Duplicate Inner Header)
-          Left Sidebar (Filters + Playlists) | Right Stage Area
-      ═══════════════════════════════════════════════════════════════════ */}
-      <div className="flex flex-col lg:flex-row flex-1 w-full">
-        
-        {/* ─────────────────────────────────────────────────────────────
-            LEFT SIDEBAR (Warm Cream #F4EFE6 — No Duplicate Logo)
-        ───────────────────────────────────────────────────────────── */}
-        <aside className="w-full lg:w-[240px] xl:w-[260px] shrink-0 border-b lg:border-b-0 lg:border-r border-white/10 px-6 py-6 flex flex-col justify-between bg-[#0e0c10]">
-          <div className="space-y-7">
-            {/* Queue Filter Group -> 3 Buttons: Setlist, Shows, Bank */}
-            <div className="space-y-1">
-              <p className="px-2.5 micro text-[#F4EFE6]/60 mb-2">
-                Queue Filter
+  const paymentsToConfirm = pendingTx.length > 0 && (
+    <section className="admin-panel border-[#D92323]/45! p-5 sm:p-6">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="micro text-[#ff7a7a]">
+          {pendingTx.length} payment{pendingTx.length > 1 ? "s" : ""} to confirm · {rupees(earningsSummary.pendingAmount)}
+        </h2>
+        <p className="fine">Check your UPI app, then mark what arrived.</p>
+      </div>
+      <ul className="divide-y divide-white/[0.07]">
+        {pendingTx.map((tx: any) => (
+          <li key={tx.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3 text-[13px]">
+            <span className="title-x w-16 shrink-0 text-[18px]">{rupees(tx.amount)}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{tx.payer_name}</p>
+              <p className="truncate text-[12px] text-[#F4EFE6]/50">
+                {tx.type === "tip" ? "Tip" : tx.song_title || "Dedication"}
+                {tx.upi_utr && <span className="ml-2 font-mono">UTR {tx.upi_utr}</span>}
               </p>
-              {[
-                { id: "music", label: "Setlist", icon: ListMusic, count: artistPlaylist.length },
-                { id: "shows", label: "Shows", icon: Calendar, count: gigs.length },
-                { id: "bank", label: "Bank", icon: Wallet, count: `₹${earningsSummary.totalRevenue || 0}` },
-              ].map((item) => {
-                const Icon = item.icon
-                const active = activeTab === item.id
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setActiveTab(item.id as any)
-                    }}
-                    className={`w-full px-3 py-2.5 rounded-xl text-xs flex items-center justify-between transition cursor-pointer ${
-                      active
-                        ? "bg-[#D92323]/12 text-[#ff7a7a] font-bold"
-                        : "text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2.5">
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{item.label}</span>
-                    </span>
-                    <span className="text-[10px] opacity-70">{item.count}</span>
-                  </button>
-                )
-              })}
             </div>
-
-            {/* Stage Shortcuts Group */}
-            <div className="space-y-1">
-              <p className="px-2.5 micro text-[#F4EFE6]/60 mb-2">
-                Stage Links
-              </p>
-              {activeGig && (
-                <Link
-                  href={`/live/${activeGig.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="w-full px-3 py-2 rounded-xl text-xs text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium flex items-center gap-2.5 transition"
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-[#ff7a7a]" />
-                  <span>Audience View</span>
-                </Link>
-              )}
-              <button
-                type="button"
-                onClick={() => setQrOpen(true)}
-                className="w-full px-3 py-2 rounded-xl text-xs text-[#F4EFE6]/60 hover:text-white hover:bg-white/5 font-medium flex items-center gap-2.5 transition cursor-pointer"
-              >
-                <QrCode className="w-3.5 h-3.5 text-[#F4EFE6]" />
-                <span>Table QR</span>
+            <div className="flex gap-2">
+              <button type="button" disabled={settlingId === tx.id} onClick={() => settle(tx.id, true)} className="btn-light btn-sm disabled:opacity-50">
+                Received
+              </button>
+              <button type="button" disabled={settlingId === tx.id} onClick={() => settle(tx.id, false)} className="btn-ghost btn-sm disabled:opacity-50">
+                Not received
               </button>
             </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 
-            {/* Tonight's Playlist Quick List */}
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center justify-between px-2.5">
-                <span className="micro text-[#F4EFE6]/60">
-                  Playlists
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowAddPlaylistForm((v) => !v)}
-                  className="w-5 h-5 rounded-full bg-[#161318] border border-white/12 hover:bg-[#D92323] hover:text-white hover:border-[#D92323] flex items-center justify-center text-[#F4EFE6] transition cursor-pointer"
-                  title="Add Song"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-              </div>
+  const onStage = activeSong && playing
+  const nowPlaying = (
+    <Panel
+      title={onStage ? "On stage now" : "Ready to play"}
+      meta={
+        onStage && (
+          <span className="micro flex items-center gap-2 text-[#ff7a7a]">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D92323] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[#D92323]" />
+            </span>
+            Live
+          </span>
+        )
+      }
+    >
+      <h3 className="title-x truncate text-[24px] sm:text-[30px]">{activeSong?.song_title || "Pick a song"}</h3>
+      <p className="mt-2 truncate text-[13px] text-[#F4EFE6]/55">
+        {activeSong
+          ? [activeSong.original_artist, requester(activeSong) && `for ${requester(activeSong)}`].filter(Boolean).join(" · ") || "Setlist"
+          : "Hit play on any song below."}
+      </p>
 
-              <div className="space-y-1 max-h-[260px] overflow-y-auto pr-1">
-                {artistPlaylist.map((song: any) => (
-                  <div
-                    key={song.id}
-                    onClick={() => handleLoadSongIntoKaraoke(song)}
-                    className="px-2.5 py-1.5 rounded-lg hover:bg-white/10 flex items-center justify-between gap-1 cursor-pointer group transition"
-                  >
-                    <span className="text-xs text-[#F4EFE6]/60 group-hover:text-white font-medium truncate">
-                      {song.song_title}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleDeletePlaylistSong(song.id)
-                      }}
-                      className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-[#ff7a7a]"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+      <div className="mt-5 aspect-video w-full overflow-hidden rounded-2xl border border-white/10 bg-black">
+        {videoId ? (
+          <iframe
+            id="stage-active-player"
+            key={`${videoId}-${muted}`}
+            onLoad={bindPlayer}
+            src={`https://www.youtube.com/embed/${videoId}?autoplay=${playing ? 1 : 0}&mute=${muted ? 1 : 0}&enablejsapi=1&rel=0&origin=${
+              typeof window !== "undefined" ? window.location.origin : ""
+            }`}
+            title={activeSong?.song_title || "Karaoke video"}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="h-full w-full border-0"
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <Music className="h-6 w-6 text-[#F4EFE6]/30" />
+            <p className="fine">{activeSong ? "No video for this song yet. Search for one below." : "Nothing loaded."}</p>
           </div>
-        </aside>
-
-        {/* ─────────────────────────────────────────────────────────────
-            RIGHT MAIN STAGE AREA (Full Width Laptop Spread)
-        ───────────────────────────────────────────────────────────── */}
-        <main className="flex-1 flex flex-col bg-[#0b0a0e] overflow-hidden">
-          
-          {/* 1. HERO BANNER IN THE STUDIO REDS */}
-          <div
-            className="relative px-8 sm:px-12 pt-6 pb-12 text-white overflow-hidden"
-            style={{
-              background: "radial-gradient(120% 140% at 75% 0%, #8f0d16 0%, #5a0910 35%, #1a0507 75%, #0b0a0e 100%)",
-            }}
-          >
-            {/* Right Cutout Portrait */}
-            <img
-              src={
-                artist?.avatar_url ||
-                "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&auto=format&fit=crop&q=80"
-              }
-              alt={artist?.name || "Artist"}
-              className="absolute right-6 bottom-0 h-[108%] w-[38%] object-cover object-top pointer-events-none opacity-85"
-              style={{
-                maskImage: "linear-gradient(to left, rgba(0,0,0,1) 45%, transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1) 45%, transparent 100%)",
-              }}
-            />
-
-            {/* Search Pill Only (No Duplicate Header Icons) */}
-            <div className="relative z-10 flex items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-2 bg-white/15 backdrop-blur-md border border-white/15 rounded-full px-4 py-2 w-full max-w-[280px]">
-                <Search className="w-3.5 h-3.5 text-white/80 shrink-0" />
-                <input
-                  type="text"
-                  value={searchFilter}
-                  onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Search"
-                  className="bg-transparent text-xs text-white placeholder-white/70 focus:outline-none w-full"
-                />
-                {searchFilter && (
-                  <button
-                    type="button"
-                    onClick={() => setSearchFilter("")}
-                    className="text-white/70 hover:text-white"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Artist Title */}
-            <div className="relative z-10 space-y-2">
-              <div className="dots"><i /></div>
-              <span className="micro block pt-1 text-white/65">Artist</span>
-              <h1 className="title-x text-[40px] sm:text-[58px]">
-                {artist?.name?.split("&")[0]?.trim() || "Arjun Mehta"}
-              </h1>
-            </div>
-          </div>
-
-          {/* 2. ROUNDED SHEET OVERLAPPING BANNER */}
-          <div className="relative z-20 -mt-5 rounded-t-[28px] bg-[#0b0a0e] px-8 sm:px-12 pt-6 pb-8 flex-1 flex flex-col justify-between">
-            
-            {/* Quick Add Song Popover Form */}
-            {showAddPlaylistForm && (
-              <form
-                onSubmit={handleAddPlaylistSong}
-                className="mb-5 p-3.5 rounded-2xl bg-[#161318] border border-white/12 flex flex-wrap items-center gap-2.5 shadow-xs"
-              >
-                <input
-                  type="text"
-                  required
-                  value={playlistTitle}
-                  onChange={(e) => setPlaylistTitle(e.target.value)}
-                  placeholder="Song Title *"
-                  className="flex-1 min-w-[160px] px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={playlistArtist}
-                  onChange={(e) => setPlaylistArtist(e.target.value)}
-                  placeholder="Artist"
-                  className="w-40 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                />
-                <input
-                  type="text"
-                  value={playlistYoutubeUrl}
-                  onChange={(e) => setPlaylistYoutubeUrl(e.target.value)}
-                  placeholder="YouTube URL (Optional)"
-                  className="w-52 px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={addingPlaylist}
-                  className="px-5 py-2 rounded-xl bg-[#D92323] text-white text-xs font-bold cursor-pointer"
-                >
-                  {addingPlaylist ? "..." : "Add"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowAddPlaylistForm(false)}
-                  className="p-1.5 text-[#F4EFE6]/60 hover:text-white"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </form>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════
-                TAB 1: MUSIC (Today's Playlist + Side-by-Side YouTube Player)
-            ═══════════════════════════════════════════════════════ */}
-            {activeTab === "music" && (
-              <div className="space-y-6 flex-1">
-                {/* A. PLAYLIST HEADER & VIEW CONTROLS */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-[#121014]/80 p-4 sm:p-5 rounded-2xl border border-white/10 shadow-xs">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2.5 flex-wrap">
-                      <ListMusic className="w-5 h-5 text-[#ff7a7a]" />
-                      <h2 className="title-x text-[18px] sm:text-[22px]">
-                        Today&apos;s Playlist
-                      </h2>
-
-                      {/* Today's Date Badge */}
-                      <span className="px-2.5 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[11px] font-bold flex items-center gap-1.5 shadow-2xs">
-                        <Calendar className="w-3 h-3 text-[#F4EFE6]" />
-                        <span>{currentDateStr || "Today"}</span>
-                      </span>
-
-                      <span className="px-2 py-0.5 rounded-full bg-white/10 text-[#F4EFE6] text-[11px] font-bold">
-                        {artistPlaylist.length} Songs
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-400/15 text-emerald-300 text-[11px] font-bold flex items-center gap-1">
-                        <Check className="w-3 h-3 text-emerald-400" />
-                        {artistPlaylist.filter((s: any) => s.status === "played").length} Played
-                      </span>
-                    </div>
-
-                    {/* Show Name & Location */}
-                    <div className="flex items-center gap-2 text-xs font-semibold text-[#F4EFE6]/60 flex-wrap">
-                      <span className="text-[#F4EFE6] font-extrabold flex items-center gap-1">
-                        <Disc3 className="w-3.5 h-3.5 text-[#ff7a7a]" />
-                        <span>{activeGig?.title || "Unplugged Live Night"}</span>
-                      </span>
-                      <span className="text-[#F4EFE6]/35">•</span>
-                      <span className="flex items-center gap-1 text-[#F4EFE6]/60">
-                        <MapPin className="w-3.5 h-3.5 text-[#ff7a7a]" />
-                        <span>{activeGig?.location_name || "Indiranagar, Bengaluru"}</span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* B. 2-COLUMN GRID: TODAY'S PLAYLIST (LEFT) + YOUTUBE PLAYER (RIGHT) */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-7 items-start">
-                  
-                  {/* ─────────────────────────────────────────────────────────────
-                      LEFT COLUMN (SPAN 7): TODAY'S PLAYLIST SONGS LIST
-                  ───────────────────────────────────────────────────────────── */}
-                  <div className="lg:col-span-7 space-y-6">
-                    
-                    {/* Songs List */}
-                    <div className="space-y-2">
-                      {filteredTab1Songs.length === 0 ? (
-                        <div className="bg-[#121014]/80 rounded-2xl p-8 text-center space-y-3 border border-white/10">
-                          <Music className="w-8 h-8 text-[#F4EFE6]/35 mx-auto" />
-                          <p className="text-xs font-bold text-[#F4EFE6]/60">
-                            No songs found for this filter.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setShowAddPlaylistForm(true)}
-                            className="px-4 py-1.5 rounded-full bg-[#D92323] text-white text-xs font-bold cursor-pointer"
-                          >
-                            + Add a Song to Setlist
-                          </button>
-                        </div>
-                      ) : (
-                        <Reorder.Group
-                          as="div"
-                          axis="y"
-                          values={filteredTab1Songs}
-                          onReorder={handleReorderSongs}
-                          className="space-y-2"
-                        >
-                          {filteredTab1Songs.map((song: any, index: number) => (
-                            <SetlistSongRow
-                              key={song.id}
-                              song={song}
-                              index={index}
-                              totalCount={filteredTab1Songs.length}
-                              activeKaraokeSong={activeKaraokeSong}
-                              isKaraokePlaying={isKaraokePlaying}
-                              handleLoadSongIntoKaraoke={handleLoadSongIntoKaraoke}
-                              setIsKaraokePlaying={setIsKaraokePlaying}
-                              handleMarkPlayed={handleMarkPlayed}
-                              handleToggleSongUpvote={handleToggleSongUpvote}
-                              handleDeletePlaylistSong={handleDeletePlaylistSong}
-                              handleMoveSong={handleMoveSong}
-                            />
-                          ))}
-                        </Reorder.Group>
-                      )}
-                    </div>
-
-                    {/* Incoming Song Batches grouped by person/batch */}
-                    {pendingBatches.length > 0 && (
-                      <div className="pt-4 border-t border-white/10 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <h3 className="micro text-[#F4EFE6] flex items-center gap-1.5">
-                            <Radio className="w-3.5 h-3.5 text-[#ff7a7a]" />
-                            <span>Incoming Song Batches ({pendingBatches.length})</span>
-                          </h3>
-                          <button
-                            type="button"
-                            onClick={() => setActiveTab("batches")}
-                            className="text-xs font-bold text-[#ff7a7a] hover:underline cursor-pointer"
-                          >
-                            View All Batches →
-                          </button>
-                        </div>
-
-                        <div className="space-y-3">
-                          {pendingBatches.slice(0, 4).map((batch: any) => {
-                            const pendingSongs = (batch.songs || []).filter(
-                              (s: any) => s.status === "pending_artist"
-                            )
-                            if (pendingSongs.length === 0) return null
-                            const isGolden = Boolean(batch.wants_dedication)
-
-                            return (
-                              <div
-                                key={batch.id}
-                                className={`rounded-2xl p-3.5 transition ${
-                                  isGolden
-                                    ? "bg-[#F4EFE6]/[0.07] border-2 border-[#F4EFE6]/50 shadow-sm ring-2 ring-[#F4EFE6]/30"
-                                    : "bg-[#161318] border border-white/10 shadow-2xs hover:border-white/30"
-                                }`}
-                              >
-                                {/* Header: Requester name + VIP badge + Pass/Delete Batch */}
-                                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-white/10">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-xs font-black text-[#F4EFE6]">
-                                      {batch.requester_name || "Audience Member"}
-                                    </span>
-                                    {isGolden && (
-                                      <span className="px-2 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[10px] font-black shadow-xs flex items-center gap-1">
-                                        <Sparkles className="w-2.5 h-2.5 fill-[#0b0a0e]" />
-                                        ₹50 Golden Dedication
-                                      </span>
-                                    )}
-                                    <span className="text-[10px] font-semibold text-[#F4EFE6]/60">
-                                      Pick 1 of {pendingSongs.length}
-                                    </span>
-                                  </div>
-
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeclineBatch(batch.id)}
-                                    className="text-[11px] font-bold text-neutral-400 hover:text-red-400 transition cursor-pointer px-1.5 py-0.5 rounded"
-                                    title="Decline entire batch"
-                                  >
-                                    Pass Batch
-                                  </button>
-                                </div>
-
-                                {/* Songs within this person's batch */}
-                                <div className="space-y-1.5">
-                                  {pendingSongs.map((s: any) => (
-                                    <div
-                                      key={s.id}
-                                      className={`p-2.5 rounded-xl flex items-center justify-between gap-3 transition ${
-                                        isGolden
-                                          ? "bg-white/90 border border-[#F4EFE6]/40 hover:bg-white/10 shadow-2xs"
-                                          : "bg-white/[0.04] border border-white/10 hover:bg-white/10 hover:border-white/25"
-                                      }`}
-                                    >
-                                      {/* Clean song name & artist */}
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-xs sm:text-sm font-extrabold text-[#F4EFE6] truncate">
-                                          {s.song_title}
-                                        </p>
-                                        {s.original_artist && (
-                                          <p className="text-[10px] sm:text-[11px] text-[#F4EFE6]/60 truncate">
-                                            {s.original_artist}
-                                          </p>
-                                        )}
-                                      </div>
-
-                                      {/* Select or Delete this song */}
-                                      <div className="flex items-center gap-1.5 shrink-0">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleConfirmAudienceSong(s.id)}
-                                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 shadow-xs ${
-                                            isGolden
-                                              ? "bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] font-black"
-                                              : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e]"
-                                          }`}
-                                          title="Pick this song for setlist"
-                                        >
-                                          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                          <span>Select</span>
-                                        </button>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => handleDeclineSong(s.id)}
-                                          className="p-1.5 rounded-xl border border-white/12 hover:border-red-400 text-neutral-400 hover:text-red-400 transition cursor-pointer"
-                                          title="Delete song"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* ─────────────────────────────────────────────────────────────
-                      RIGHT COLUMN (SPAN 5): STICKY YOUTUBE VIDEO PLAYER
-                      Plays Video Next to Song + Auto-Marks as Done on Finish
-                  ───────────────────────────────────────────────────────────── */}
-                  <div className="lg:col-span-5 sticky top-20 space-y-4">
-                    <div className="bg-[#161318] rounded-3xl p-5 border border-white/10 shadow-sm space-y-4">
-                      
-                      {/* Video Player Header */}
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          {isKaraokePlaying ? (
-                            <div className="flex items-center gap-2">
-                              <span className="relative flex h-2.5 w-2.5">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D92323] opacity-75" />
-                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#D92323]" />
-                              </span>
-                              <span className="text-xs font-black uppercase tracking-wider text-[#ff7a7a]">
-                                Now Playing
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="micro text-[#F4EFE6]/60">
-                              YouTube Player
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Song Title & Original Artist */}
-                      <div>
-                        <h3 className="title-x text-[16px] truncate">
-                          {activeKaraokeSong?.song_title || "Select a Song from Playlist"}
-                        </h3>
-                        <p className="text-xs text-[#F4EFE6]/60 truncate mt-0.5">
-                          {activeKaraokeSong?.original_artist || "Click 'Play Video' next to any song to watch and perform"}
-                        </p>
-                        {activeKaraokeSong?.status === "played" && (
-                          <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-md bg-emerald-400/15 text-emerald-300 text-[10px] font-bold">
-                            <Check className="w-3 h-3 text-emerald-400" />
-                            Completed & Marked as Done
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Interactive YouTube Player Embed */}
-                      <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black shadow-md relative border border-white/10">
-                        <iframe
-                          id="stage-active-player"
-                          onLoad={registerYouTubeIframeListener}
-                          src={`https://www.youtube.com/embed/${karaokeVideoId}?autoplay=${
-                            isKaraokePlaying ? 1 : 0
-                          }&mute=${muteKaraokeAudio ? 1 : 0}&enablejsapi=1&origin=${
-                            typeof window !== "undefined" ? window.location.origin : ""
-                          }&rel=0`}
-                          title={activeKaraokeSong?.song_title || "Karaoke Backing Video"}
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          className="w-full h-full border-0"
-                        />
-                      </div>
-
-                      {/* Completion Toast Notification with Upvoted Next Song */}
-                      {doneToast && (
-                        <div className="p-3.5 rounded-2xl bg-emerald-600 text-white flex items-center justify-between gap-3 shadow-md animate-in fade-in duration-300">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <CheckCircle2 className="w-4 h-4 text-white shrink-0" />
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold truncate">
-                                &quot;{doneToast.title}&quot; marked done!
-                              </p>
-                              {nextPlaylistSong && (
-                                <p className="text-[10px] text-emerald-100 truncate">
-                                  Up Next: {nextPlaylistSong.song_title}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          {nextPlaylistSong && (
-                            <button
-                              type="button"
-                              onClick={() => handleLoadSongIntoKaraoke(nextPlaylistSong)}
-                              className="px-3 py-1.5 rounded-xl bg-[#161318] text-emerald-200 text-xs font-black hover:bg-emerald-400/15 transition shrink-0 cursor-pointer shadow-xs flex items-center gap-1"
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              <span>Play Next</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Quick Action Controls Under Player */}
-                      <div className="flex items-center justify-between gap-2 flex-wrap pt-1">
-                        <StageTrackActions
-                          isMarkDoneVisible={Boolean(activeKaraokeSong?.id && activeKaraokeSong.status !== "played")}
-                          onMarkDone={() => activeKaraokeSong?.id && handleMarkPlayed(activeKaraokeSong.id)}
-                          isNextTrackVisible={Boolean(nextPlaylistSong)}
-                          onNextTrack={() => nextPlaylistSong && handleLoadSongIntoKaraoke(nextPlaylistSong)}
-                          nextTrackTitle={nextPlaylistSong?.song_title}
-                        />
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setMuteKaraokeAudio((m) => !m)}
-                            className="p-2 rounded-xl bg-white/[0.04] border border-white/12 text-[#F4EFE6]/60 hover:text-white transition cursor-pointer"
-                            title={muteKaraokeAudio ? "Unmute Video Audio" : "Mute Video Audio (Perform Live)"}
-                          >
-                            {muteKaraokeAudio ? (
-                              <VolumeX className="w-3.5 h-3.5 text-[#ff7a7a]" />
-                            ) : (
-                              <Volume2 className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleConnectHdmiScreen}
-                            className="px-3 py-1.5 rounded-xl bg-white/[0.04] border border-white/12 hover:border-[#F4EFE6]/60 text-[#F4EFE6] text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                            title="Cast to LED / Stage Screen via HDMI"
-                          >
-                            <Tv className="w-3.5 h-3.5 text-[#F4EFE6]/80" />
-                            <span>LED Screen</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Up Next Card (Dynamically Pushes Most Upvoted Song to the Artist) */}
-                      {nextPlaylistSong && (
-                        <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-3 shadow-2xs">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="relative w-11 h-11 rounded-xl overflow-hidden bg-neutral-900 shrink-0">
-                              {getSongThumbnail(nextPlaylistSong) ? (
-                                <img
-                                  src={getSongThumbnail(nextPlaylistSong)!}
-                                  alt={nextPlaylistSong.song_title}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <div className="w-full h-full flex items-center justify-center bg-neutral-800 text-neutral-400">
-                                  <Music className="w-5 h-5" />
-                                </div>
-                              )}
-                              {(nextPlaylistSong.upvotes || 0) > 0 && (
-                                <div className="absolute bottom-0 inset-x-0 bg-[#D92323] text-white text-[8px] font-black text-center py-0.5 leading-none">
-                                  +{nextPlaylistSong.upvotes}
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-[#ff7a7a] flex items-center gap-0.5">
-                                  <Sparkles className="w-2.5 h-2.5" />
-                                  Up Next in Setlist
-                                </span>
-                                {todayPlaylistSongs.findIndex((s: any) => s.id === nextPlaylistSong.id) >= 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-white/10 text-[#F4EFE6] text-[9px] font-black">
-                                    Slot #{todayPlaylistSongs.findIndex((s: any) => s.id === nextPlaylistSong.id) + 1}
-                                  </span>
-                                )}
-                                {(nextPlaylistSong.upvotes || 0) > 0 && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#D92323]/20 text-[#ff7a7a] text-[9px] font-black flex items-center gap-0.5">
-                                    <Heart className="w-2.5 h-2.5 fill-current" />
-                                    {nextPlaylistSong.upvotes} Votes
-                                  </span>
-                                )}
-                                {nextPlaylistSong.dedication_payment_status === "paid" && (
-                                  <span className="px-1.5 py-0.2 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[9px] font-black">
-                                    ₹50 VIP
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs font-black text-[#F4EFE6] truncate">
-                                {nextPlaylistSong.song_title}
-                              </p>
-                              <p className="text-[10px] text-[#F4EFE6]/60 truncate">
-                                {nextPlaylistSong.original_artist || "Setlist Track"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleLoadSongIntoKaraoke(nextPlaylistSong)}
-                            className="px-3 py-1.5 rounded-xl bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] text-xs font-bold flex items-center gap-1 transition cursor-pointer shrink-0 shadow-xs"
-                            title={`Play ${nextPlaylistSong.song_title}`}
-                          >
-                            <Play className="w-3 h-3 fill-current" />
-                            <span>Play Next</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {/* YouTube Search & Video Picker (No need to leave app to copy/paste) */}
-                      <div className="pt-3 border-t border-white/10 space-y-2.5">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <div className="flex items-center gap-1.5">
-                            <Youtube className="w-4 h-4 text-[#ff7a7a]" />
-                            <span className="text-[11px] font-black uppercase tracking-wider text-[#F4EFE6]">
-                              Search YouTube
-                            </span>
-                            {ytApiConnected === true ? (
-                              <span className="px-1.5 py-0.2 rounded-md bg-emerald-400/15 text-emerald-300 text-[9px] font-black flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/100 animate-pulse" />
-                                Live API
-                              </span>
-                            ) : ytApiConnected === false ? (
-                              <span
-                                className="px-1.5 py-0.2 rounded-md bg-[#F4EFE6]/15 text-[#F4EFE6] text-[9px] font-bold"
-                                title="Add YOUTUBE_API_KEY in .env.local for live web search"
-                              >
-                                Catalog Mode
-                              </span>
-                            ) : null}
-                          </div>
-                          {showYtResultsPanel && ytSearchResults.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setShowYtResultsPanel(false)}
-                              className="text-[10px] font-bold text-[#F4EFE6]/60 hover:text-white cursor-pointer"
-                            >
-                              Hide Results
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Search Input Bar */}
-                        <form
-                          onSubmit={(e) => {
-                            e.preventDefault()
-                            handleSearchYouTube()
-                          }}
-                          className="flex gap-2"
-                        >
-                          <div className="relative flex-1">
-                            <Search className="w-3.5 h-3.5 text-[#F4EFE6]/60 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                            <input
-                              type="text"
-                              value={ytSearchQuery}
-                              onChange={(e) => setYtSearchQuery(e.target.value)}
-                              placeholder="Search YouTube or paste URL..."
-                              className="w-full pl-8 pr-7 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs text-[#F4EFE6] focus:outline-none focus:border-[#D92323] transition"
-                            />
-                            {ytSearchQuery && (
-                              <button
-                                type="button"
-                                onClick={() => setYtSearchQuery("")}
-                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-300 cursor-pointer"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                          <button
-                            type="submit"
-                            disabled={isSearchingYt || !ytSearchQuery.trim()}
-                            className="px-3.5 py-2 rounded-xl bg-[#D92323] hover:bg-[#b81d1d] text-white text-xs font-bold cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-1.5 shrink-0 shadow-xs"
-                          >
-                            {isSearchingYt ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Search className="w-3.5 h-3.5" />
-                            )}
-                            <span>Search</span>
-                          </button>
-                        </form>
-
-                        {/* Quick 1-Click Search Variation Chips */}
-                        {activeKaraokeSong?.song_title && (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] text-[#F4EFE6]/60 font-semibold">Try:</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const q = `${activeKaraokeSong.song_title} karaoke lyrics`
-                                setYtSearchQuery(q)
-                                handleSearchYouTube(q)
-                              }}
-                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
-                            >
-                              Karaoke
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const q = `${activeKaraokeSong.song_title} acoustic guitar backing`
-                                setYtSearchQuery(q)
-                                handleSearchYouTube(q)
-                              }}
-                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
-                            >
-                              Acoustic
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const q = `${activeKaraokeSong.song_title} ${activeKaraokeSong.original_artist || ""} official instrumental`
-                                setYtSearchQuery(q)
-                                handleSearchYouTube(q)
-                              }}
-                              className="px-2 py-0.5 rounded-lg bg-white/10 border border-white/15 hover:bg-white/20 text-[10px] font-semibold text-[#F4EFE6] cursor-pointer transition"
-                            >
-                              Instrumental
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Results List */}
-                        {showYtResultsPanel && (
-                          <div className="space-y-1.5 pt-1">
-                            {isSearchingYt ? (
-                              <div className="p-4 text-center rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-center gap-2 text-xs font-semibold text-[#F4EFE6]/60">
-                                <Loader2 className="w-4 h-4 animate-spin text-[#ff7a7a]" />
-                                <span>Searching YouTube for &quot;{ytSearchQuery}&quot;...</span>
-                              </div>
-                            ) : ytSearchResults.length === 0 && ytSearchSubmitted ? (
-                              <div className="p-3 text-center rounded-2xl bg-white/[0.04] border border-white/10 text-xs text-[#F4EFE6]/60">
-                                No videos found. Try different keywords or paste a YouTube link.
-                              </div>
-                            ) : (
-                              <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
-                                {ytSearchResults.map((video: any) => {
-                                  const isLoaded = karaokeVideoId === video.videoId
-                                  return (
-                                    <div
-                                      key={video.videoId}
-                                      onClick={() => handleSelectYouTubeVideo(video)}
-                                      className={`p-2 rounded-xl flex items-center justify-between gap-2.5 border transition cursor-pointer group ${
-                                        isLoaded
-                                          ? "bg-[#D92323]/20 border-[#D92323] text-[#F4EFE6] ring-1 ring-[#D92323]/30"
-                                          : "bg-white/[0.04] border-white/10 hover:border-[#D92323]/50 hover:bg-white/10"
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2.5 min-w-0">
-                                        <div className="relative w-14 h-9 rounded-lg overflow-hidden bg-neutral-900 shrink-0">
-                                          <img
-                                            src={video.thumbnail || `https://img.youtube.com/vi/${video.videoId}/hqdefault.jpg`}
-                                            alt={video.title}
-                                            className="w-full h-full object-cover"
-                                          />
-                                          {video.duration && (
-                                            <span className="absolute bottom-0.5 right-0.5 px-1 py-0.2 rounded bg-black/80 text-white text-[8px] font-bold">
-                                              {video.duration}
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="min-w-0">
-                                          <p className={`text-[11px] font-bold truncate ${isLoaded ? "text-[#ff7a7a] font-black" : "text-[#F4EFE6]"}`}>
-                                            {video.title}
-                                          </p>
-                                          <p className="text-[10px] text-[#F4EFE6]/60 truncate">
-                                            {video.channel || "YouTube"}
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      {isLoaded ? (
-                                        <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-[#D92323] text-white shrink-0">
-                                          Loaded
-                                        </span>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          className="text-[10px] font-extrabold px-2.5 py-1 rounded-lg bg-[#F4EFE6] group-hover:bg-white/10 text-[#0b0a0e] transition shrink-0 flex items-center gap-1 shadow-2xs"
-                                        >
-                                          <Play className="w-2.5 h-2.5 fill-current" />
-                                          <span>Play</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════
-                TAB 2: BATCHES (Full Incoming 3-Song Batches View)
-            ═══════════════════════════════════════════════════════ */}
-            {activeTab === "batches" && (
-              <div className="space-y-4 flex-1">
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <h2 className="title-x text-[16px]">
-                    PICK A SONG : Incoming 3-Song Batches ({pendingBatches.length})
-                  </h2>
-                  <div className="flex items-center gap-1 bg-[#161318] border border-white/10 p-1 rounded-full">
-                    <button
-                      type="button"
-                      onClick={() => setPendingBatchFilter("all")}
-                      className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
-                        pendingBatchFilter === "all" ? "bg-[#F4EFE6] text-[#0b0a0e]" : "text-[#F4EFE6]/60"
-                      }`}
-                    >
-                      All ({pendingBatches.length})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingBatchFilter("dedication")}
-                      className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
-                        pendingBatchFilter === "dedication"
-                          ? "bg-[#F4EFE6] text-[#F4EFE6]"
-                          : "text-[#F4EFE6]/80"
-                      }`}
-                    >
-                      ₹50 Ready ({readyToPayBatchesCount})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPendingBatchFilter("regular")}
-                      className={`px-3 py-1 rounded-full text-[11px] font-bold cursor-pointer ${
-                        pendingBatchFilter === "regular"
-                          ? "bg-[#D92323] text-white"
-                          : "text-[#F4EFE6]/60"
-                      }`}
-                    >
-                      Standard ({regularBatchesCount})
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredPendingBatches.map((batch: any) => {
-                    const isGolden = Boolean(batch.wants_dedication)
-                    return (
-                      <div
-                        key={batch.id}
-                        className={`rounded-2xl p-4 space-y-3 transition ${
-                          isGolden
-                            ? "bg-[#F4EFE6]/[0.07] border-2 border-[#F4EFE6]/50 shadow-md ring-4 ring-[#F4EFE6]/20"
-                            : "bg-[#161318] border border-white/10 shadow-2xs hover:border-white/25"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between pb-2 border-b border-white/10">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-black text-[#F4EFE6]">
-                              {batch.requester_name || "Audience Member"}
-                            </span>
-                            {isGolden && (
-                              <span className="px-2 py-0.5 rounded-full bg-[#F4EFE6] text-[#0b0a0e] text-[10px] font-black shadow-xs flex items-center gap-1">
-                                <Sparkles className="w-2.5 h-2.5 fill-[#0b0a0e]" />
-                                ₹50 Golden Dedication
-                              </span>
-                            )}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleDeclineBatch(batch.id)}
-                            className="text-[11px] text-[#F4EFE6]/60 hover:text-[#ff7a7a] font-semibold cursor-pointer"
-                          >
-                            Pass Batch
-                          </button>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          {batch.songs.map((s: any, idx: number) => {
-                            if (s.status !== "pending_artist") return null
-                            return (
-                              <div
-                                key={s.id}
-                                className={`flex items-center justify-between gap-2 p-2.5 rounded-xl transition ${
-                                  isGolden
-                                    ? "bg-white/95 border border-[#F4EFE6]/40 hover:bg-white/10 shadow-2xs"
-                                    : "bg-white/[0.04] border border-white/10 hover:border-white/25 hover:bg-white/10"
-                                }`}
-                              >
-                                <div className="min-w-0 pr-2">
-                                  <p className="text-xs sm:text-sm font-extrabold text-[#F4EFE6] truncate">
-                                    {idx + 1}. {s.song_title}
-                                  </p>
-                                  {s.original_artist && (
-                                    <p className="text-[11px] text-[#F4EFE6]/60 truncate">
-                                      {s.original_artist}
-                                    </p>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleConfirmAudienceSong(s.id)}
-                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1 shadow-xs ${
-                                      isGolden
-                                        ? "bg-[#F4EFE6] hover:bg-white text-[#0b0a0e] font-black"
-                                        : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e]"
-                                    }`}
-                                  >
-                                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                                    <span>Select</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeclineSong(s.id)}
-                                    className="p-1.5 rounded-xl border border-white/12 hover:border-red-400 text-neutral-400 hover:text-red-400 transition cursor-pointer"
-                                    title="Delete song"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════
-                TAB 3: VIDEOS (Stage Karaoke Player — Autoplay=0 on Load)
-            ═══════════════════════════════════════════════════════ */}
-            {activeTab === "videos" && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-                <div className="lg:col-span-8 aspect-video rounded-2xl overflow-hidden bg-black shadow-md">
-                  <iframe
-                    id="stage-active-player"
-                    onLoad={registerYouTubeIframeListener}
-                    src={`https://www.youtube.com/embed/${karaokeVideoId}?autoplay=${isKaraokePlaying ? 1 : 0}&mute=${muteKaraokeAudio ? 1 : 0}&enablejsapi=1&origin=${typeof window !== "undefined" ? window.location.origin : ""}&rel=0`}
-                    title="Stage Karaoke Player"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-full border-0"
-                  />
-                </div>
-
-                <div className="lg:col-span-4 space-y-3">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={customYoutubeInput}
-                      onChange={(e) => setCustomYoutubeInput(e.target.value)}
-                      placeholder="Paste YouTube URL or ID"
-                      className="flex-1 px-3 py-2 rounded-xl bg-[#161318] border border-white/12 text-xs focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSaveCustomYoutubeUrl}
-                      className="px-4 py-2 rounded-xl bg-[#D92323] text-white text-xs font-bold cursor-pointer"
-                    >
-                      Load
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════
-                TAB 4: SHOWS (Upcoming Gigs & List View with Stats)
-            ═══════════════════════════════════════════════════════ */}
-            {activeTab === "shows" && (
-              <div className="space-y-4 flex-1">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <h2 className="title-x text-[16px] sm:text-[18px]">
-                      All Shows ({gigs.length})
-                    </h2>
-                    <p className="text-xs text-[#F4EFE6]/60 mt-0.5">
-                      Review crowd engagement, upvotes, dedications, and live audience tips per show.
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowNewGigModal(true)}
-                    className="px-4 py-2 rounded-full bg-[#D92323] hover:bg-[#b81d1d] text-white text-xs font-semibold uppercase tracking-[0.14em] shadow-xs cursor-pointer transition active:scale-[0.98]"
-                  >
-                    + Add Show
-                  </button>
-                </div>
-
-                {/* Shows List View */}
-                <div className="space-y-3">
-                  {gigs.map((gig: any) => {
-                    const isActive = activeGig?.id === gig.id
-                    const upvotesCount = Number(gig.total_upvotes || 0)
-                    const dedicationsCount = Number(gig.dedications_count || 0)
-                    const dedicationsAmount = Number(gig.dedications_amount || 0)
-                    const tipsCount = Number(gig.tips_count || 0)
-                    const tipsAmount = Number(gig.tips_amount || 0)
-
-                    return (
-                      <div
-                        key={gig.id}
-                        className={`rounded-2xl p-4 sm:p-5 border transition flex flex-col md:flex-row md:items-center justify-between gap-4 ${
-                          isActive
-                            ? "bg-[#161318] border-2 border-[#D92323] shadow-sm ring-2 ring-[#D92323]/15"
-                            : "bg-[#161318] border-white/10 hover:border-white/30 shadow-2xs"
-                        }`}
-                      >
-                        {/* Left: Date + Title + Location + Active Status */}
-                        <div className="space-y-1.5 min-w-0 md:max-w-md">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-xs font-black text-[#ff7a7a] px-2 py-0.5 rounded-md bg-[#D92323]/20">
-                              {gig.event_date_only || "Tonight"}
-                            </span>
-                            {isActive && (
-                              <span className="px-2 py-0.5 rounded-full bg-[#D92323] text-white text-[9px] font-black uppercase tracking-wider flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#161318] animate-pulse" />
-                                Current Active Stage
-                              </span>
-                            )}
-                          </div>
-
-                          <h3 className="title-x text-[15px] truncate">
-                            {gig.title}
-                          </h3>
-
-                          <div className="flex items-center gap-1.5 text-xs text-[#F4EFE6]/60 truncate">
-                            <MapPin className="w-3.5 h-3.5 text-[#ff7a7a] shrink-0" />
-                            <span className="truncate">{gig.location_name}</span>
-                          </div>
-                        </div>
-
-                        {/* Center: Real Stats Grid (Upvotes, Dedications, Tips) */}
-                        <div className="grid grid-cols-3 gap-2 sm:gap-3 py-2 md:py-0 border-y md:border-y-0 md:border-x border-white/10 md:px-6">
-                          {/* 1. UPVOTES */}
-                          <div className="px-3 py-2 rounded-xl bg-white/[0.04] border border-white/8 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#F4EFE6]/60">
-                              <Heart className="w-3 h-3 text-[#ff7a7a] fill-[#D92323]" />
-                              <span>Upvotes</span>
-                            </div>
-                            <p className="text-base sm:text-lg font-black text-[#F4EFE6]">
-                              {upvotesCount}
-                            </p>
-                          </div>
-
-                          {/* 2. DEDICATIONS */}
-                          <div className="px-3 py-2 rounded-xl bg-[#F4EFE6]/[0.06] border border-[#F4EFE6]/30 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-[#F4EFE6]/80">
-                              <Sparkles className="w-3 h-3 text-[#F4EFE6]/80 fill-[#F4EFE6]" />
-                              <span>Dedications</span>
-                            </div>
-                            <p className="text-base sm:text-lg font-black text-[#F4EFE6]">
-                              {dedicationsCount}
-                            </p>
-                            {dedicationsAmount > 0 && (
-                              <p className="text-[10px] font-bold text-[#F4EFE6]/80">
-                                ₹{dedicationsAmount}
-                              </p>
-                            )}
-                          </div>
-
-                          {/* 3. TIPS */}
-                          <div className="px-3 py-2 rounded-xl bg-emerald-400/10/70 border border-emerald-400/40 text-center space-y-0.5 min-w-[85px]">
-                            <div className="flex items-center justify-center gap-1 text-[10px] font-black uppercase tracking-wider text-emerald-200">
-                              <Wallet className="w-3 h-3 text-emerald-400" />
-                              <span>Tips</span>
-                            </div>
-                            <p className="text-base sm:text-lg font-black text-emerald-200">
-                              {tipsCount}
-                            </p>
-                            {tipsAmount > 0 && (
-                              <p className="text-[10px] font-bold text-emerald-300">
-                                ₹{tipsAmount}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right: Actions (Switch/Active + View Public Stage) */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedEventId(gig.id)
-                              fetchDashboard(gig.id)
-                              setActiveTab("music")
-                            }}
-                            className={`px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.14em] cursor-pointer transition select-none active:scale-[0.98] ${
-                              isActive
-                                ? "bg-[#D92323] text-white shadow-xs"
-                                : "bg-[#F4EFE6] hover:bg-white/10 text-[#0b0a0e] shadow-xs"
-                            }`}
-                          >
-                            {isActive ? "Stage Active" : "Switch Stage"}
-                          </button>
-
-                          <Link
-                            href={`/live/${gig.id}`}
-                            target="_blank"
-                            className="p-2 rounded-full bg-white/[0.04] hover:bg-white/10 border border-white/12 text-[#F4EFE6] transition shadow-2xs"
-                            title="Open public live venue URL"
-                          >
-                            <ExternalLink className="w-4 h-4" />
-                          </Link>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* ═══════════════════════════════════════════════════════
-                TAB 5: BANK (Money Coming In & UPIPay Setup)
-            ═══════════════════════════════════════════════════════ */}
-            {activeTab === "bank" && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1">
-                {/* Left: Money Coming In */}
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-[linear-gradient(160deg,#8f0d16,#3a060b)] text-white p-4">
-                      <span className="text-[10px] uppercase font-bold opacity-75">Total</span>
-                      <p className="text-2xl font-extrabold mt-0.5">
-                        ₹{earningsSummary.totalRevenue || 0}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-[#F4EFE6]/[0.06] border border-[#F4EFE6]/30 p-4">
-                      <span className="text-[10px] uppercase font-bold text-[#F4EFE6]/80">
-                        Dedications
-                      </span>
-                      <p className="text-2xl font-extrabold text-[#F4EFE6] mt-0.5">
-                        ₹{earningsSummary.dedicationRevenue || 0}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-emerald-400/10 border border-emerald-400/40 p-4">
-                      <span className="text-[10px] uppercase font-bold text-emerald-300">Tips</span>
-                      <p className="text-2xl font-extrabold text-emerald-200 mt-0.5">
-                        ₹{earningsSummary.tipRevenue || 0}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    {transactions.map((tx: any) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between p-3 rounded-xl bg-[#161318] border border-white/10 text-xs"
-                      >
-                        <div>
-                          <span className="font-bold text-[#F4EFE6]">{tx.payer_name}</span>
-                          <span className="text-[#F4EFE6]/60 ml-2">
-                            {tx.song_title || tx.note || "Tip"}
-                          </span>
-                        </div>
-                        <span className="font-mono font-extrabold text-emerald-300">
-                          +₹{tx.amount}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right: Compact Bank & UPIPay Form */}
-                <form
-                  onSubmit={handleSaveBankDetails}
-                  className="lg:col-span-5 space-y-2.5 bg-[#161318] p-4 rounded-2xl border border-white/10"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-extrabold text-[#F4EFE6]">UPIPay &amp; Bank</span>
-                    <span className="text-[10px] font-mono text-emerald-300 font-bold">0% Fee</span>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="UPI ID (e.g. arjunmehta@ybl) *"
-                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
-                  />
-                  <input
-                    type="text"
-                    required
-                    value={payeeName}
-                    onChange={(e) => setPayeeName(e.target.value)}
-                    placeholder="Account Holder Name *"
-                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input
-                      type="text"
-                      value={bankName}
-                      onChange={(e) => setBankName(e.target.value)}
-                      placeholder="Bank Name"
-                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                    />
-                    <input
-                      type="text"
-                      value={ifscCode}
-                      onChange={(e) => setIfscCode(e.target.value.toUpperCase())}
-                      placeholder="IFSC Code"
-                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    value={accountNumber}
-                    onChange={(e) => setAccountNumber(e.target.value)}
-                    placeholder="Account Number"
-                    className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <select
-                      value={upipayProvider}
-                      onChange={(e) => setUpipayProvider(e.target.value as any)}
-                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs focus:outline-none"
-                    >
-                      <option value="upi_direct">Direct UPI</option>
-                      <option value="phonepe">PhonePe Biz</option>
-                      <option value="paytm">Paytm Biz</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={upipayMerchantId}
-                      onChange={(e) => setUpipayMerchantId(e.target.value)}
-                      placeholder="Merchant ID"
-                      className="w-full px-3 py-2 rounded-xl bg-white/[0.04] border border-white/12 text-xs font-mono focus:outline-none"
-                    />
-                  </div>
-                  {bankErrorMsg && <p className="text-[11px] text-[#ff7a7a] font-bold">{bankErrorMsg}</p>}
-                  {bankSavedMsg && <p className="text-[11px] text-emerald-300 font-bold">{bankSavedMsg}</p>}
-                  <button
-                    type="submit"
-                    disabled={savingBank}
-                    className="w-full py-2 rounded-xl bg-[#D92323] hover:bg-[#b81d1d] text-white text-xs font-bold cursor-pointer transition"
-                  >
-                    {savingBank ? "Saving..." : "Save Bank Details"}
-                  </button>
-                  <code className="block text-[9px] font-mono text-[#F4EFE6]/60 truncate">
-                    {previewUpiQr.upiUri}
-                  </code>
-                </form>
-              </div>
-            )}
-          </div>
-        </main>
+        )}
       </div>
 
-      {/* ─────────────────────────────────────────────────────────
-          BOTTOM FULL-WIDTH STICKY PLAYER BAR (Muse Brand Accents)
-      ───────────────────────────────────────────────────────── */}
-      <footer className="sticky bottom-0 z-30 border-t border-white/10 bg-[#0e0c10]/95 backdrop-blur-md px-6 sm:px-10 py-3 flex flex-wrap items-center justify-between gap-4">
-        {/* Left: Song Art + Name + Heart */}
-        <div className="flex items-center gap-3 min-w-[200px]">
-          {currentStageSong && getSongThumbnail(currentStageSong) ? (
-            <img
-              src={getSongThumbnail(currentStageSong)!}
-              alt={currentStageSong?.song_title || "Track"}
-              className="w-10 h-10 rounded-xl object-cover shrink-0"
-            />
-          ) : (
-            <div className="w-10 h-10 rounded-xl bg-neutral-800 text-neutral-400 flex items-center justify-center shrink-0">
-              <Music className="w-5 h-5" />
+      {doneToast && (
+        <p className="mt-3 rounded-xl border border-[#F4EFE6]/15 bg-[#F4EFE6]/[0.06] px-3 py-2 text-[12.5px]">
+          “{doneToast.title}” marked played.
+        </p>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {nextSong && (
+          <button type="button" onClick={() => playSong(nextSong)} className="btn-light min-w-0 flex-1 justify-center sm:flex-none">
+            <SkipForward className="h-4 w-4 shrink-0" />
+            <span className="truncate">Next · {nextSong.song_title}</span>
+          </button>
+        )}
+        {activeSong?.id && activeSong.status !== "played" && (
+          <button type="button" onClick={() => markPlayed(activeSong.id)} className="btn-ghost">
+            <Check className="h-4 w-4" /> Done
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setMuted((m) => !m)}
+          aria-label={muted ? "Unmute video" : "Mute video"}
+          title={muted ? "Unmute video" : "Mute video (sing over it)"}
+          className={cn("btn-ghost w-[46px] justify-center px-0!", muted && "border-[#D92323]/60! text-[#ff7a7a]")}
+        >
+          {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {activeSong && (
+        <form onSubmit={searchYouTube} className="mt-5 border-t border-white/10 pt-4">
+          <span className="micro block text-[#F4EFE6]/45">Wrong video? Search YouTube or paste a link</span>
+          <div className="mt-1 flex items-center gap-2">
+            <input value={ytQuery} onChange={(e) => setYtQuery(e.target.value)} className="admin-field flex-1" placeholder="Song name karaoke" />
+            <button type="submit" disabled={ytSearching} aria-label="Search" className="btn-ghost btn-sm shrink-0">
+              <Search className="h-3.5 w-3.5" /> {ytSearching ? "…" : "Find"}
+            </button>
+          </div>
+          {ytResults && (
+            <div className="mt-3">
+              {ytConnected === false && <p className="fine mb-2">Live search is off (no YouTube key), so these are suggestions.</p>}
+              {!ytResults.length ? (
+                <p className="fine">No videos found.</p>
+              ) : (
+                <ul className="max-h-[280px] space-y-1 overflow-y-auto">
+                  {ytResults.map((v: any) => (
+                    <li key={v.videoId}>
+                      <button
+                        type="button"
+                        onClick={() => loadVideo(v.videoId)}
+                        className="flex w-full items-center gap-3 rounded-xl p-1.5 text-left transition hover:bg-white/[0.05]"
+                      >
+                        <img
+                          src={v.thumbnail || `https://img.youtube.com/vi/${v.videoId}/hqdefault.jpg`}
+                          alt=""
+                          className="h-10 w-16 shrink-0 rounded-md object-cover"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13px]">{v.title}</span>
+                          <span className="block truncate text-[11px] text-[#F4EFE6]/45">
+                            {[v.channel, v.duration].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                        <Play className="h-3.5 w-3.5 shrink-0 text-[#F4EFE6]/60" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <button type="button" onClick={() => setYtResults(null)} className="micro mt-2 text-[#F4EFE6]/45 hover:text-white">
+                Close
+              </button>
             </div>
           )}
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <p className="text-xs font-extrabold text-[#F4EFE6] truncate">
-                {currentStageSong?.song_title || "Ready"}
-              </p>
-              <Heart className="w-3 h-3 text-[#ff7a7a] shrink-0" />
-            </div>
-            <p className="text-[11px] text-[#F4EFE6]/60 truncate">
-              {currentStageSong?.original_artist || artist?.name || "Live"}
-            </p>
-          </div>
-        </div>
+        </form>
+      )}
+    </Panel>
+  )
 
-        {/* Center: Transport + Crimson Circle Play Button + Slim Progress Bar */}
-        <div className="flex flex-col items-center gap-1.5 flex-1 max-w-lg">
-          <div className="flex items-center gap-4 text-[#F4EFE6]/60">
-            <Shuffle className="w-3.5 h-3.5 hover:text-white cursor-pointer" />
-            <button
-              type="button"
-              onClick={() => {
-                if (artistPlaylist.length > 0) handleLoadSongIntoKaraoke(artistPlaylist[0])
-              }}
-              className="hover:text-white cursor-pointer"
-            >
-              <SkipBack className="w-4 h-4 fill-current" />
-            </button>
+  const requests = (
+    <Panel
+      title="Requests"
+      meta={<span className="micro text-[#F4EFE6]/45">{waitingRequests.length ? `${waitingRequests.length} waiting` : "All clear"}</span>}
+    >
+      {!waitingRequests.length ? (
+        <p className="fine text-[13px]!">No requests waiting. New ones from the room show up here.</p>
+      ) : (
+        <ul className="space-y-3">
+          {waitingRequests.map((batch: any) => {
+            const songs = (batch.songs || []).filter((s: any) => s.status === "pending_artist")
+            const paid = Boolean(batch.wants_dedication)
+            return (
+              <li key={batch.id} className={cn("rounded-2xl border p-3.5", paid ? "border-[#F4EFE6]/45 bg-[#F4EFE6]/[0.05]" : "border-white/[0.08]")}>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate text-[13px] font-medium">{batch.requester_name || "Someone in the room"}</span>
+                    {paid && <Tag tone="cream">₹50 dedication</Tag>}
+                  </div>
+                  <button type="button" onClick={() => passBatch(batch.id)} className="micro shrink-0 text-[#F4EFE6]/45 hover:text-[#ff7a7a]">
+                    Pass
+                  </button>
+                </div>
+                {songs.length > 1 && <p className="fine mb-1.5">Pick one</p>}
+                <ul className="space-y-1">
+                  {songs.map((s: any) => (
+                    <li key={s.id} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => acceptSong(s.id)}
+                        className="group flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-white/[0.08] px-3 py-2 text-left transition hover:border-[#F4EFE6]/60 hover:bg-white/[0.04]"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-[13.5px]">{s.song_title}</span>
+                          {s.original_artist && <span className="block truncate text-[11.5px] text-[#F4EFE6]/45">{s.original_artist}</span>}
+                        </span>
+                        <span className="micro flex items-center gap-1 text-[#F4EFE6]/50 group-hover:text-white">
+                          <Plus className="h-3.5 w-3.5" /> Accept
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => declineSong(s.id)}
+                        aria-label={`Decline ${s.song_title}`}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#F4EFE6]/30 transition hover:text-[#ff7a7a]"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Panel>
+  )
 
-            <button
-              type="button"
-              onClick={() => {
-                if (!isKaraokePlaying && currentStageSong) {
-                  handleLoadSongIntoKaraoke(currentStageSong)
-                } else {
-                  setIsKaraokePlaying((v) => !v)
-                }
-              }}
-              className="w-9 h-9 rounded-full bg-[#D92323] hover:bg-[#b81d1d] text-white flex items-center justify-center shadow-md cursor-pointer transition"
-            >
-              {isKaraokePlaying ? (
-                <Pause className="w-4 h-4 fill-current" />
-              ) : (
-                <Play className="w-4 h-4 fill-current ml-0.5" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                if (artistPlaylist.length > 1) handleLoadSongIntoKaraoke(artistPlaylist[1])
-              }}
-              className="hover:text-white cursor-pointer"
-            >
-              <SkipForward className="w-4 h-4 fill-current" />
-            </button>
-            <Repeat className="w-3.5 h-3.5 hover:text-white cursor-pointer" />
-          </div>
-
-          <div className="w-full flex items-center gap-2 text-[10px] text-[#F4EFE6]/60 font-medium">
-            <span>{isKaraokePlaying ? "1:18" : "0:00"}</span>
-            <div className="flex-1 h-1 rounded-full bg-white/10 relative overflow-hidden">
-              <div
-                className={`h-full bg-[#D92323] rounded-full ${
-                  isKaraokePlaying ? "w-1/2" : "w-0"
-                }`}
-              />
-            </div>
-            <span>3:45</span>
-          </div>
-        </div>
-
-        {/* Right: Lyrics/HDMI + Mute + Volume Bar */}
-        <div className="flex items-center gap-3 text-[#F4EFE6]/60">
-          <button
-            type="button"
-            onClick={handleConnectHdmiScreen}
-            className={`hover:text-white cursor-pointer ${
-              hdmiConnected ? "text-[#ff7a7a]" : ""
-            }`}
-            title="HDMI Screen"
-          >
-            <Tv className="w-4 h-4" />
+  const played = playedSongs.length
+  const setlistPanel = (
+    <Panel
+      className="px-3 sm:px-6"
+      title="Running order"
+      meta={
+        <div className="flex items-center gap-4">
+          <span className="micro text-[#F4EFE6]/45">
+            {played} played · {queue.filter((s: any) => s.status !== "played").length} to go
+          </span>
+          <button type="button" onClick={() => setAddOpen((o) => !o)} className="btn-ghost btn-sm">
+            {addOpen ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />} {addOpen ? "Close" : "Add song"}
           </button>
+        </div>
+      }
+    >
+      {addOpen && (
+        <form onSubmit={addSong} className="mb-5 grid gap-4 rounded-2xl border border-white/[0.08] p-4 sm:grid-cols-[1.3fr_1fr_1.3fr_auto] sm:items-end">
+          <Field label="Song">
+            <input className="admin-field" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} required autoFocus />
+          </Field>
+          <Field label="Artist">
+            <input className="admin-field" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
+          </Field>
+          <Field label="YouTube link (optional)">
+            <input className="admin-field" value={newUrl} onChange={(e) => setNewUrl(e.target.value)} />
+          </Field>
+          <button type="submit" disabled={adding} className="btn-light btn-sm disabled:opacity-60">
+            {adding ? "Adding…" : "Add"}
+          </button>
+        </form>
+      )}
 
+      {crowdPicks.length > 0 && (
+        <div className="mb-4">
+          <p className="micro mb-1 px-2 text-[#F4EFE6]/45">Accepted from the room</p>
+          {crowdPicks.map((s: any) => (
+            <SongRow
+              key={s.id}
+              song={s}
+              onStage={Boolean(onStage && s.id === activeSong?.id)}
+              draggable={false}
+              onPlay={() => playSong(s)}
+              onDone={() => markPlayed(s.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {!setlist.length ? (
+        <p className="fine px-2 text-[13px]!">No songs on tonight&apos;s setlist yet. Add a few to get started.</p>
+      ) : (
+        <>
+          {crowdPicks.length > 0 && <p className="micro mb-1 px-2 text-[#F4EFE6]/45">Your setlist</p>}
+          <Reorder.Group as="div" axis="y" values={setlist} onReorder={reorder} className="space-y-0.5">
+            {setlist.map((s: any, i: number) => (
+              <SongRow
+                key={s.id}
+                song={s}
+                slot={i + 1}
+                onStage={Boolean(onStage && s.id === activeSong?.id)}
+                draggable
+                onPlay={() => playSong(s)}
+                onDone={() => markPlayed(s.id)}
+                onRemove={() => removeSong(s.id)}
+              />
+            ))}
+          </Reorder.Group>
+        </>
+      )}
+    </Panel>
+  )
+
+  const tonightEarned = Number(activeGig?.tips_amount || 0) + Number(activeGig?.dedications_amount || 0)
+  const stats: { label: string; value: string; alert?: boolean; onClick?: () => void }[] = [
+    { label: "Played", value: `${played}/${played + queue.filter((s: any) => s.status !== "played").length}` },
+    { label: "Requests waiting", value: String(waitingRequests.length), alert: waitingRequests.length > 0 },
+    { label: "Upvotes", value: String(activeGig?.total_upvotes || 0) },
+    {
+      label: earningsSummary.pendingCount ? "To confirm" : "Earned tonight",
+      value: earningsSummary.pendingCount ? rupees(earningsSummary.pendingAmount) : rupees(tonightEarned),
+      alert: earningsSummary.pendingCount > 0,
+      onClick: () => setView("money"),
+    },
+  ]
+
+  const tonight = !activeGig ? (
+    <div className="space-y-8">
+      <PageHeader title="No show yet" subtitle="Add tonight's show to open the stage, take requests and put lyrics on the screen." />
+      <button type="button" onClick={() => setNewShowOpen(true)} className="btn-light">
+        <Plus className="h-4 w-4" /> Add a show
+      </button>
+    </div>
+  ) : (
+    <div className="space-y-6">
+      <PageHeader
+        title={activeGig.title}
+        subtitle={[showDate(activeGig.date), activeGig.location_name].filter(Boolean).join(" · ")}
+        actions={
+          <>
+            <button type="button" onClick={openLedScreen} className="btn-light btn-sm">
+              <Tv className="h-3.5 w-3.5" /> {ledOpen ? "LED screen on" : "LED screen"}
+            </button>
+            <button type="button" onClick={() => setQrOpen(true)} className="btn-ghost btn-sm">
+              <QrCode className="h-3.5 w-3.5" /> Table QR
+            </button>
+          </>
+        }
+      />
+
+      {paymentsToConfirm}
+
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {stats.map((s) => {
+          const inner = (
+            <>
+              <p className="micro text-[#F4EFE6]/50">{s.label}</p>
+              <p className={cn("title-x mt-3 text-[24px]", s.alert && "text-[#ff7a7a]!")}>{s.value}</p>
+            </>
+          )
+          return s.onClick ? (
+            <button key={s.label} type="button" onClick={s.onClick} className="admin-panel p-4 text-left transition hover:border-[#F4EFE6]/45!">
+              {inner}
+            </button>
+          ) : (
+            <div key={s.label} className="admin-panel p-4">
+              {inner}
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+        <div className="xl:sticky xl:top-6">{nowPlaying}</div>
+        <div className="min-w-0 space-y-6">
+          {requests}
+          {setlistPanel}
+        </div>
+      </div>
+    </div>
+  )
+
+  const shows = (
+    <div className="space-y-8">
+      <PageHeader
+        title="Shows"
+        subtitle="Every show you're booked for. Open one to run its stage."
+        actions={
           <button
             type="button"
             onClick={() => {
-              const nextMute = !muteKaraokeAudio
-              setMuteKaraokeAudio(nextMute)
-              broadcastToLedScreen(karaokeVideoId, activeKaraokeSong, nextMute)
+              setShow({ title: "", location_name: "", date: new Date().toISOString().slice(0, 10), ticket_price: "499" })
+              setNewShowOpen(true)
             }}
-            className="hover:text-white cursor-pointer"
-            title="Mute Audio"
+            className="btn-light btn-sm"
           >
-            {muteKaraokeAudio ? (
-              <VolumeX className="w-4 h-4 text-[#ff7a7a]" />
-            ) : (
-              <Volume2 className="w-4 h-4" />
-            )}
+            <Plus className="h-3.5 w-3.5" /> Add show
           </button>
+        }
+      />
+      <Panel title="All shows" meta={<span className="micro text-[#F4EFE6]/45">{gigs.length}</span>}>
+        {!gigs.length ? (
+          <p className="fine text-[13px]!">No shows yet.</p>
+        ) : (
+          <ul className="divide-y divide-white/[0.07]">
+            {gigs.map((g: any) => {
+              const current = g.id === activeGig?.id
+              return (
+                <li key={g.id} className="flex flex-wrap items-center gap-x-5 gap-y-2 py-3.5 text-[13px]">
+                  <span className="micro w-32 shrink-0 text-[#F4EFE6]/55">{showDate(g.date) || g.event_date_only}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{g.title}</p>
+                    <p className="truncate text-[12px] text-[#F4EFE6]/45">{g.location_name}</p>
+                  </div>
+                  <span className="text-[12px] text-[#F4EFE6]/55">
+                    ♥ {g.total_upvotes} · {g.dedications_count} dedications · {rupees(Number(g.tips_amount) + Number(g.dedications_amount))}
+                  </span>
+                  {current ? (
+                    <Tag tone="red">Open now</Tag>
+                  ) : (
+                    <button type="button" onClick={() => switchShow(g.id)} className="btn-ghost btn-sm">
+                      Open
+                    </button>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  )
 
-          <div className="w-16 h-1 rounded-full bg-white/15 overflow-hidden hidden sm:block">
-            <div
-              className={`h-full bg-[#D92323] ${muteKaraokeAudio ? "w-0" : "w-3/4"}`}
-            />
+  const setB = (k: string) => (e: { target: { value: string } }) => setBank((b) => ({ ...b, [k]: e.target.value }))
+  const money = (
+    <div className="space-y-8">
+      <PageHeader title="Money" subtitle="Dedications and tips paid straight to your UPI. Confirm what arrived, and keep your payout details current." />
+      {paymentsToConfirm}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total", value: earningsSummary.totalRevenue },
+          { label: "Dedications", value: earningsSummary.dedicationRevenue },
+          { label: "Tips", value: earningsSummary.tipRevenue },
+        ].map((s) => (
+          <div key={s.label} className="admin-panel p-4">
+            <p className="micro text-[#F4EFE6]/50">{s.label}</p>
+            <p className="title-x mt-3 text-[20px] sm:text-[24px]">{rupees(s.value)}</p>
           </div>
-        </div>
-      </footer>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+        <Panel title="Received" meta={<span className="micro text-[#F4EFE6]/45">{paidTx.length}</span>}>
+          {!paidTx.length ? (
+            <p className="fine text-[13px]!">Nothing yet.</p>
+          ) : (
+            <ul className="max-h-[480px] divide-y divide-white/[0.07] overflow-y-auto">
+              {paidTx.map((tx: any) => (
+                <li key={tx.id} className="flex items-center gap-4 py-3 text-[13px]">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{tx.payer_name}</p>
+                    <p className="truncate text-[12px] text-[#F4EFE6]/45">{tx.song_title || tx.note || (tx.type === "tip" ? "Tip" : "Dedication")}</p>
+                  </div>
+                  <span className="font-mono">{rupees(tx.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+        <Panel title="Payout details">
+          <form onSubmit={saveBank} className="space-y-5">
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="UPI ID">
+                <input className="admin-field" value={bank.upi_id ?? ""} onChange={setB("upi_id")} placeholder="yourname@ybl" required />
+              </Field>
+              <Field label="Account holder">
+                <input className="admin-field" value={bank.payee_name ?? ""} onChange={setB("payee_name")} required />
+              </Field>
+              <Field label="Bank">
+                <input className="admin-field" value={bank.bank_name ?? ""} onChange={setB("bank_name")} />
+              </Field>
+              <Field label="IFSC">
+                <input
+                  className="admin-field"
+                  value={bank.ifsc_code ?? ""}
+                  onChange={(e) => setBank((b) => ({ ...b, ifsc_code: e.target.value.toUpperCase() }))}
+                />
+              </Field>
+              <Field label="Account number" className="block sm:col-span-2">
+                <input className="admin-field" value={bank.account_number ?? ""} onChange={setB("account_number")} />
+              </Field>
+              <Field label="Collect with">
+                <select className="admin-field" value={bank.upipay_provider ?? "upi_direct"} onChange={setB("upipay_provider")}>
+                  <option value="upi_direct">Direct UPI</option>
+                  <option value="phonepe">PhonePe Business</option>
+                  <option value="paytm">Paytm Business</option>
+                </select>
+              </Field>
+              <Field label="Merchant ID">
+                <input className="admin-field" value={bank.upipay_merchant_id ?? ""} onChange={setB("upipay_merchant_id")} />
+              </Field>
+            </div>
+            <div className="flex items-center gap-4">
+              <button type="submit" disabled={savingBank} className="btn-light btn-sm disabled:opacity-60">
+                {savingBank ? "Saving…" : "Save"}
+              </button>
+              {bankMsg && <span className={cn("text-[12px]", bankMsg.ok ? "text-[#F4EFE6]/70" : "text-[#ff7a7a]")}>{bankMsg.text}</span>}
+            </div>
+          </form>
+        </Panel>
+      </div>
+    </div>
+  )
 
-      {/* ─────────────────────────────────────────────────────────────
-          MODALS
-      ───────────────────────────────────────────────────────────── */}
+  const setP = (k: string) => (e: { target: { value: string } }) => setProfile((p) => ({ ...p, [k]: e.target.value }))
+  const setS = (k: string) => (e: { target: { value: string } }) => setShow((s) => ({ ...s, [k]: e.target.value }))
+
+  return (
+    <div className="admin-noir">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 flex-col justify-between gap-8 overflow-y-auto border-r border-white/[0.07] bg-[#0b0a0e]/80 p-6 backdrop-blur-xl lg:flex">
+        <div className="space-y-8">
+          {brand}
+          {navLinks}
+          {stageTools}
+        </div>
+        {footer}
+      </aside>
+
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.07] bg-[#0b0a0e]/85 px-5 py-4 backdrop-blur-xl sm:px-8 lg:hidden">
+        {brand}
+        <button
+          type="button"
+          onClick={() => setMenuOpen((o) => !o)}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          className="relative flex h-10 w-10 items-center justify-center rounded-full bg-[#F4EFE6] text-[#14100a]"
+        >
+          {menuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+          {!menuOpen && (waitingRequests.length > 0 || earningsSummary.pendingCount > 0) && (
+            <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-[#0b0a0e] bg-[#D92323]" />
+          )}
+        </button>
+      </header>
+      {menuOpen && (
+        <div className="fixed inset-x-0 bottom-0 top-[73px] z-20 flex flex-col justify-between gap-6 overflow-y-auto bg-[#0b0a0e]/95 px-5 py-6 backdrop-blur-xl sm:px-8 lg:hidden">
+          <div className="space-y-8">
+            {navLinks}
+            {stageTools}
+          </div>
+          {footer}
+        </div>
+      )}
+
+      <main className="min-w-0 px-5 py-8 sm:px-8 lg:ml-60 lg:px-10 lg:py-10">
+        {view === "tonight" && tonight}
+        {view === "shows" && shows}
+        {view === "money" && money}
+      </main>
+
       {qrOpen && activeGig && (
         <QrCodeModal
           open={qrOpen}
@@ -2611,111 +1296,66 @@ export default function ArtistDashboardPage() {
         />
       )}
 
-      {showProfileModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#161318] rounded-3xl p-6 text-[#F4EFE6] shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="title-x text-[20px]">Profile</h3>
-              <button
-                type="button"
-                onClick={() => setShowProfileModal(false)}
-                className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-neutral-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveProfile} className="space-y-2.5">
-              <input
-                type="text"
-                required
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                placeholder="Artist Name"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-              />
-              <input
-                type="text"
-                value={profileInsta}
-                onChange={(e) => setProfileInsta(e.target.value)}
-                placeholder="@instagram"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-              />
-              <input
-                type="url"
-                value={profileAvatar}
-                onChange={(e) => setProfileAvatar(e.target.value)}
-                placeholder="Avatar URL"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#D92323] text-white text-xs font-bold cursor-pointer"
-              >
-                Save
-              </button>
-            </form>
-          </div>
+      <FormDialog
+        open={profileOpen}
+        onClose={() => setProfileOpen(false)}
+        title="Profile"
+        description="What the room sees on your stage page."
+        submitLabel="Save"
+        onSubmit={async () => {
+          await artistPost({ action: "update_profile", ...profile })
+          fetchDashboard()
+        }}
+      >
+        <Field label="Name">
+          <input className="admin-field" value={profile.name ?? ""} onChange={setP("name")} required />
+        </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Instagram">
+            <input className="admin-field" value={profile.instagram_handle ?? ""} onChange={setP("instagram_handle")} placeholder="@handle" />
+          </Field>
+          <Field label="Photo URL">
+            <input className="admin-field" value={profile.avatar_url ?? ""} onChange={setP("avatar_url")} />
+          </Field>
         </div>
-      )}
+        <Field label="Bio">
+          <textarea className="admin-field min-h-[70px] resize-y" value={profile.bio ?? ""} onChange={setP("bio")} />
+        </Field>
+      </FormDialog>
 
-      {showNewGigModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-[#161318] rounded-3xl p-6 text-[#F4EFE6] shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="title-x text-[20px]">New show</h3>
-              <button
-                type="button"
-                onClick={() => setShowNewGigModal(false)}
-                className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-neutral-400"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateGig} className="space-y-2.5">
-              <input
-                type="text"
-                required
-                value={newGigTitle}
-                onChange={(e) => setNewGigTitle(e.target.value)}
-                placeholder="Show Title *"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-              />
-              <input
-                type="text"
-                required
-                value={newGigLocation}
-                onChange={(e) => setNewGigLocation(e.target.value)}
-                placeholder="Venue *"
-                className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="date"
-                  required
-                  value={newGigDate}
-                  onChange={(e) => setNewGigDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-                />
-                <input
-                  type="number"
-                  value={newGigPrice}
-                  onChange={(e) => setNewGigPrice(e.target.value)}
-                  placeholder="Price (₹)"
-                  className="w-full px-3 py-2 rounded-xl bg-white/5 text-xs focus:outline-none"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-[#D92323] text-white text-xs font-bold cursor-pointer"
-              >
-                Create
-              </button>
-            </form>
-          </div>
+      <FormDialog
+        open={newShowOpen}
+        onClose={() => setNewShowOpen(false)}
+        title="Add show"
+        description="Starts at 8:30 pm on the day. You can take requests as soon as it's added."
+        submitLabel="Add show"
+        onSubmit={async () => {
+          const json = await artistPost({
+            action: "create_gig",
+            title: show.title,
+            location_name: show.location_name,
+            date: new Date(`${show.date}T20:30`).toISOString(),
+            ticket_price: Number(show.ticket_price) || 0,
+          })
+          if (json.id) switchShow(json.id)
+        }}
+      >
+        <Field label="Show name">
+          <input className="admin-field" value={show.title ?? ""} onChange={setS("title")} required />
+        </Field>
+        <Field label="Venue">
+          <input className="admin-field" value={show.location_name ?? ""} onChange={setS("location_name")} required />
+        </Field>
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Date">
+            <input type="date" className="admin-field" value={show.date ?? ""} onChange={setS("date")} required />
+          </Field>
+          <Field label="Ticket price (₹)">
+            <input type="number" min={0} className="admin-field" value={show.ticket_price ?? ""} onChange={setS("ticket_price")} />
+          </Field>
         </div>
-      )}
+      </FormDialog>
     </div>
   )
 }
+

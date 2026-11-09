@@ -9,7 +9,7 @@ const COLUMNS = [
     links: [
       { label: "Upcoming gigs", href: "/events" },
       { label: "Book a table", to: 1 },
-      { label: "Venue check-in", href: "/venue-checkin" },
+      { label: "Venue login", href: "/login" },
     ],
   },
   {

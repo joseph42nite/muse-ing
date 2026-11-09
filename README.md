@@ -1,81 +1,56 @@
-# Shaders Hero Section
+# Muse-ing
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Live gigs where the room shapes the setlist: audiences upvote songs, send requests and paid
+dedications, and tip the artist over UPI; artists run the set, the karaoke screen and synced lyrics
+from one console; promoters sell tickets through Cashfree; venues check guests in at the door.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/josephhyphening-4663s-projects/v0-shaders-hero-section)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/projects/ShjQgMgtfrt)
+Originally scaffolded on [v0.app](https://v0.app/chat/projects/ShjQgMgtfrt).
 
-## Overview
+## Getting started
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+Requires Node.js 22.13+ (the app uses the built-in `node:sqlite`).
+
+```sh
+npm install
+cp .env.example .env.local   # fill in Cashfree / YouTube keys as needed
+npm run dev
+```
+
+The SQLite database is created automatically at `data/muse.db` (override with `DATABASE_PATH`).
+
+In development the database is seeded with demo artists, gigs and requests, and the login pages show
+a one-click demo artist login. Neither happens in a production build unless you opt in with
+`SEED_DEMO_DATA=true` and `NEXT_PUBLIC_DEMO_LOGIN=true`.
+
+Create an admin account once the app has started at least once:
+
+```sh
+node scripts/create-admin.mjs "Your Name" you@example.com 'a-strong-password'
+```
+
+## Scripts
+
+| Command             | What it does                    |
+| ------------------- | ------------------------------- |
+| `npm run dev`       | Dev server                      |
+| `npm run build`     | Production build (type-checked) |
+| `npm start`         | Serve the production build      |
+| `npm run lint`      | ESLint                          |
+| `npm run typecheck` | `tsc --noEmit`                  |
+| `npm test`          | Jest                            |
+
+## Payments
+
+**Tickets (Cashfree).** Each booking gets a Cashfree Payment Link. In the Cashfree dashboard, enable
+payment-link webhooks pointing to `<SITE_URL>/api/cashfree/webhook`. The post-payment page also
+checks the link status directly, so bookings settle even if a webhook is late.
+
+**Tips and dedications (direct UPI).** The audience pays the artist's own UPI ID through `upi://`
+deep links. Direct UPI transfers send no confirmation back, so a payment the audience reports is
+saved as `pending` and doesn't count until the artist checks their UPI app and marks it **Received**
+in the console's Bank tab (dedications only jump the queue after that). **Not received** discards the
+claim, and the audience member can pay again.
 
 ## Deployment
 
-Your project is live at:
-
-**[https://vercel.com/josephhyphening-4663s-projects/v0-shaders-hero-section](https://vercel.com/josephhyphening-4663s-projects/v0-shaders-hero-section)**
-
-## Build your app
-
-Continue building your app on:
-
-**[https://v0.app/chat/projects/ShjQgMgtfrt](https://v0.app/chat/projects/ShjQgMgtfrt)**
-
-## Getting Started
-
-To get a local copy up and running, follow these simple steps.
-
-### Prerequisites
-
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
-
-### Installation
-
-1. Clone the repo
-   ```sh
-   git clone https://github.com/your_username_/your_project_name.git
-   ```
-2. Install NPM packages
-   ```sh
-   npm install
-   ```
-3. Copy `.env.example` to `.env.local` and fill in your Cashfree keys (see below).
-4. Start the app: `npm run dev`. The SQLite database is created automatically at `data/muse.db`.
-5. Create an admin account (after the app has started once):
-   ```sh
-   node scripts/create-admin.mjs "Your Name" you@example.com 'a-strong-password'
-   ```
-
-### Payments (Cashfree)
-
-Booking links create a Cashfree Payment Link per booking. In the Cashfree dashboard, enable
-webhooks for payment links and point them to `<SITE_URL>/api/cashfree/webhook`. The post-payment
-page also checks the link status directly, so bookings settle even if a webhook is delayed.
-
-### Requirements
-
-Node.js 22.5+ (uses the built-in `node:sqlite`). Because data lives in a local file, deploy to a
-server with persistent disk (not serverless).
-
-## Testing
-
-There are no tests yet. Please add tests for any new features or bug fixes.
-
-## Linting
-
-To run the linter, use the following command:
-
-```sh
-npm run lint
-```
-
-## How It Works
-
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+Data lives in a local SQLite file, so deploy to a server with a persistent disk (not serverless).

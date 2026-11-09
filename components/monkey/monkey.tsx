@@ -22,9 +22,6 @@ import {
 } from "./store"
 import {
   CIG_X,
-  crease,
-  fbm3,
-  hash3,
   HEAD_O,
   headSDF,
   sdCap,

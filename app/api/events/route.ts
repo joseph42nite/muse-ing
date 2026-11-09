@@ -34,13 +34,23 @@ export async function POST(req: Request) {
   if (!Number.isFinite(price) || price < 0) {
     return NextResponse.json({ error: "Enter a valid ticket price." }, { status: 400 })
   }
-  if (venueId && !get("SELECT 1 FROM users WHERE id = ? AND role = 'venue'", venueId)) {
+  const venue = venueId ? get<{ name: string }>("SELECT name FROM users WHERE id = ? AND role = 'venue'", venueId) : undefined
+  if (venueId && !venue) {
     return NextResponse.json({ error: "Selected venue not found." }, { status: 400 })
   }
   const id = crypto.randomUUID()
   run(
-    "INSERT INTO events (id, title, description, date, venue_id, created_by, ticket_price) VALUES (?,?,?,?,?,?,?)",
-    id, title, String(b.description ?? "").trim() || null, date.toISOString(), venueId, user.id, price,
+    `INSERT INTO events (id, title, description, date, event_date_only, location_name, venue_id, created_by, ticket_price)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    id,
+    title,
+    String(b.description ?? "").trim() || null,
+    date.toISOString(),
+    date.toISOString().slice(0, 10), // public listings filter on this
+    venue?.name ?? null,
+    venueId,
+    user.id,
+    price,
   )
   return NextResponse.json({ id })
 }
