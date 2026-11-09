@@ -181,7 +181,23 @@ export default function AudienceLiveGigPage({
 
   // ── Lyrics view (first view): follows whatever the artist is playing ──
   const [clock, setClock] = useState(0)
-  const [view, setView] = useState<"player" | "lyrics" | "list">("player")
+  const [view, setView] = useState<"player" | "lyrics">("player")
+  // The setlist opens as a Liquid Glass sheet over whichever screen is showing
+  const [listOpen, setListOpen] = useState(false)
+  useEffect(() => {
+    if (!listOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setListOpen(false)
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [listOpen])
+  // A trackpad or mouse wheel flips between now playing and lyrics, once per gesture
+  const wheelAt = useRef(0)
+  const onWheelFlip = (e: React.WheelEvent) => {
+    if (listOpen || Math.abs(e.deltaY) < 30 || Date.now() - wheelAt.current < 900) return
+    wheelAt.current = Date.now()
+    if (e.deltaY > 0 && view === "player") setView("lyrics")
+    if (e.deltaY < 0 && view === "lyrics") setView("player")
+  }
   const [lyrics, setLyrics] = useState<{
     synced: boolean
     lines: { t: number; text: string }[]
@@ -546,14 +562,6 @@ export default function AudienceLiveGigPage({
     handleUpvote(playerSong, { x: rect.left + rect.width / 2, y: rect.top })
   }
 
-  const MenuLines = ({ dark }: { dark?: boolean }) => (
-    <span className="flex w-5 flex-col items-end gap-[4px]">
-      {["w-5", "w-4", "w-3"].map((w) => (
-        <span key={w} className={`h-[1.5px] ${w} rounded ${dark ? "bg-[#F4EFE6]/85" : "bg-[#1c1c1f]"}`} />
-      ))}
-    </span>
-  )
-
   const InstagramGlyph = ({ className = "h-5 w-5" }: { className?: string }) => (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <defs>
@@ -673,14 +681,25 @@ export default function AudienceLiveGigPage({
         <AnimatePresence mode="wait" initial={false}>
           {/* ───────── Screen 2 · Now playing ───────── */}
           {view === "player" && (
-            <motion.section key="player" {...slide} className="absolute inset-0 flex flex-col overflow-hidden bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]">
-              {/* disc stage is laid out in flow below; its red capsule reaches up behind the header */}
-              <header className="relative z-10 flex shrink-0 items-center justify-between px-[6cqw] pt-[max(20px,5cqw)]">
-                <button type="button" aria-label="Setlist" onClick={() => setView("list")} className="-m-2 p-2">
+            <motion.section
+              key="player"
+              {...slide}
+              // swipe up (or pull the lyrics tab) to open the lyrics
+              drag="y"
+              dragDirectionLock
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0.35, bottom: 0.06 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y < -70 || info.velocity.y < -450) setView("lyrics")
+              }}
+              onWheel={onWheelFlip}
+              className="absolute inset-0 flex flex-col overflow-hidden overscroll-none bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]"
+            >
+              {/* disc stage is laid out in flow below; its red capsule reaches up behind the header.
+                  The glass menu button floats over the top-right corner of every screen. */}
+              <header className="relative z-10 flex h-11 shrink-0 items-center justify-between px-[5cqw] mt-[max(16px,4cqw)]">
+                <button type="button" aria-label="Open the setlist" onClick={() => setListOpen(true)} className="-m-2 p-2">
                   <ChevronDown className="h-6 w-6" strokeWidth={1.4} />
-                </button>
-                <button type="button" aria-label="Setlist" onClick={() => setView("list")} className="-m-2 p-2">
-                  <MenuLines dark />
                 </button>
               </header>
 
@@ -756,27 +775,39 @@ export default function AudienceLiveGigPage({
 
           {/* ───────── Screen 3 · Lyrics ───────── */}
           {view === "lyrics" && (
-            <motion.section key="lyrics" {...slide} className="absolute inset-0 overflow-hidden bg-[#0d0c0e] text-white">
+            <motion.section
+              key="lyrics"
+              {...slide}
+              // swipe down to go back to now playing
+              drag="y"
+              dragDirectionLock
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0.06, bottom: 0.35 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 70 || info.velocity.y > 450) setView("player")
+              }}
+              onWheel={onWheelFlip}
+              className="absolute inset-0 overflow-hidden overscroll-none bg-[#0d0c0e] text-white"
+            >
               <img src={artistPhoto} alt="" aria-hidden="true" className="absolute inset-x-0 top-0 h-[85%] w-full object-cover grayscale contrast-110 brightness-[0.55]" />
               <div className="absolute inset-0 bg-[#8f0d16] mix-blend-multiply opacity-75" />
               <div className="absolute inset-0 bg-[#0d0c0e]/40" />
               <div className="absolute inset-x-0 top-0 h-[22%] bg-gradient-to-b from-[#0d0c0e]/80 to-transparent" />
               <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#0d0c0e] from-[35%] to-transparent" />
 
-              <header className="absolute inset-x-0 top-0 z-10 flex items-start justify-between px-[7cqw] pt-[9cqw]">
-                <button type="button" aria-label="Back to now playing" onClick={() => setView("player")} className="text-white/85">
+              <header className="absolute inset-x-0 top-[max(16px,4cqw)] z-10 flex items-start justify-between px-[5cqw]">
+                <button type="button" aria-label="Back to now playing" onClick={() => setView("player")} className="-m-2 grid h-11 w-11 shrink-0 place-items-center p-2 text-white/85">
                   <ChevronUp className="h-6 w-6" strokeWidth={1.4} />
                 </button>
-                <div className="min-w-0 flex-1 px-3 text-center">
+                <div className="min-w-0 flex-1 px-3 pt-1 text-center">
                   <div className="flex items-center justify-center gap-[2cqw]">
-                    <p className="micro min-w-0 truncate text-[2.8cqw]! text-[#F4EFE6]/90">{event.artist_name || "Live set"}</p>
+                    <p className="micro min-w-0 truncate text-[max(10px,2.8cqw)]! text-[#F4EFE6]/90">{event.artist_name || "Live set"}</p>
                     <FollowPill />
                   </div>
-                  {venue && <p className="micro mt-[1cqw] truncate text-[2.2cqw]! text-[#F4EFE6]/45">{venue}</p>}
+                  {venue && <p className="micro mt-[1cqw] truncate text-[max(9px,2.2cqw)]! text-[#F4EFE6]/45">{venue}</p>}
                 </div>
-                <button type="button" aria-label="Setlist" onClick={() => setView("list")} className="mt-1.5">
-                  <MenuLines dark />
-                </button>
+                {/* room for the floating glass menu button */}
+                <span className="h-11 w-11 shrink-0" aria-hidden="true" />
               </header>
 
               {/* album disc, half off the left edge, with its orbit arc */}
@@ -855,164 +886,221 @@ export default function AudienceLiveGigPage({
               </div>
             </motion.section>
           )}
+        </AnimatePresence>
 
-          {/* ───────── Screen 1 · Setlist ───────── */}
-          {view === "list" && (
-            <motion.section key="list" {...slide} className="absolute inset-0 flex flex-col bg-[radial-gradient(120%_60%_at_50%_0%,#5a0910_0%,#1a0507_50%,#070709_100%)] text-[#F4EFE6]">
-              <header className="flex items-center justify-between px-[7cqw] pt-[11cqw]">
-                <div>
-                  <div className="dots"><i /></div>
-                  <h1 className="title-x mt-[2.4cqw] text-[8cqw]">Setlist</h1>
-                </div>
-                <div className="flex items-center gap-[5cqw]">
-                  <button type="button" aria-label="Search songs" onClick={() => setShowSearchModal(true)}>
-                    <Search className="h-[5cqw] w-[5cqw]" strokeWidth={1.8} />
-                  </button>
-                  <button type="button" aria-label="Request songs" onClick={() => setShowRequestModal(true)}>
-                    <Plus className="h-[5.4cqw] w-[5.4cqw]" strokeWidth={1.8} />
-                  </button>
-                  <button type="button" aria-label="Close setlist" onClick={() => setView("player")}>
-                    <X className="h-[5.4cqw] w-[5.4cqw]" strokeWidth={1.8} />
-                  </button>
-                </div>
+        {/* ───────── Setlist · a Liquid Glass sheet that springs out of the menu button ───────── */}
+        <AnimatePresence>
+          {listOpen && (
+            <motion.div
+              key="setlist-scrim"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.25 }}
+              onClick={() => setListOpen(false)}
+              className="absolute inset-0 z-30 bg-black/40"
+              aria-hidden="true"
+            />
+          )}
+          {listOpen && (
+            <motion.div
+              key="setlist"
+              role="dialog"
+              aria-label="Setlist"
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.4, transition: { duration: 0.28, ease: [0.32, 0.72, 0, 1] } }}
+              transition={{ type: "spring", stiffness: 380, damping: 34, mass: 0.9 }}
+              style={{ transformOrigin: "calc(100% - 5cqw - 12px) calc(max(16px, 4cqw) + 12px)" }}
+              className="glass-thick absolute inset-x-[8px] top-[8px] bottom-[max(8px,env(safe-area-inset-bottom))] z-30 flex flex-col overflow-hidden rounded-[30px] text-[#F4EFE6]"
+            >
+              <header className="flex shrink-0 items-center gap-2 pl-[max(18px,5cqw)] pr-[calc(5cqw+44px)] pt-[max(8px,calc(4cqw-8px))]">
+                <h2 className="title-x flex-1 text-[max(26px,7cqw)] leading-none">Setlist</h2>
+                <button
+                  type="button"
+                  aria-label="Search songs"
+                  onClick={() => setShowSearchModal(true)}
+                  className="glass glass-button grid h-10 w-10 place-items-center rounded-full"
+                >
+                  <Search className="h-[18px] w-[18px]" strokeWidth={1.8} />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Request songs"
+                  onClick={() => setShowRequestModal(true)}
+                  className="glass glass-button grid h-10 w-10 place-items-center rounded-full"
+                >
+                  <Plus className="h-[19px] w-[19px]" strokeWidth={1.8} />
+                </button>
               </header>
-              <a
-                href={instagramUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="micro mt-[2cqw] flex items-center gap-[1.8cqw] px-[7cqw] text-[2.4cqw]! text-[#F4EFE6]/55"
-              >
-                <span className="truncate">{event.artist_name}</span>
-                <span>·</span>
-                <InstagramGlyph className="h-[3.4cqw] w-[3.4cqw] shrink-0 text-[#F4EFE6]" />
-                <span className="shrink-0 text-[#F4EFE6]">Follow</span>
-              </a>
+              {instagramUrl ? (
+                <a
+                  href={instagramUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="micro mt-2 flex min-w-0 items-center gap-2 px-[max(18px,5cqw)] text-[11px]! text-[#F4EFE6]/55"
+                >
+                  <span className="truncate">{event.artist_name}</span>
+                  <span>·</span>
+                  <InstagramGlyph className="h-3.5 w-3.5 shrink-0 text-[#F4EFE6]" />
+                  <span className="shrink-0 text-[#F4EFE6]">Follow</span>
+                </a>
+              ) : (
+                <p className="micro mt-2 truncate px-[max(18px,5cqw)] text-[11px]! text-[#F4EFE6]/55">{event.artist_name}</p>
+              )}
 
-              {/* rail + cards */}
-              <div className="relative mt-[7cqw] h-[64cqw] shrink-0">
-                <div className="absolute inset-y-[4cqw] left-0 w-[86cqw] rounded-r-[9cqw] border border-l-0 border-white/10 bg-white/[0.04]" />
-                <div className="absolute inset-y-[4cqw] left-0 flex w-[14cqw] flex-col-reverse items-center justify-around">
-                  {[
-                    { id: "all", label: "All" },
-                    { id: "top", label: "Top" },
-                    { id: "dedications", label: "Dedicated" },
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setActiveTab(tab.id as any)}
-                      className={`micro -rotate-90 whitespace-nowrap text-[2.4cqw]! transition ${
-                        activeTab === tab.id ? "text-[#F4EFE6]" : "text-[#F4EFE6]/40"
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="no-scrollbar absolute inset-y-0 left-[16cqw] right-0 flex snap-x snap-mandatory gap-[4cqw] overflow-x-auto pr-[8cqw]">
+              {/* filter: a glass segmented control */}
+              <div className="mx-[max(18px,5cqw)] mt-4 flex shrink-0 rounded-full bg-black/25 p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "top", label: "Top" },
+                  { id: "dedications", label: "Dedicated" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className="micro relative flex-1 rounded-full py-2 text-[11px]! transition-colors"
+                  >
+                    {activeTab === tab.id && (
+                      <motion.span
+                        layoutId="setlist-tab"
+                        className="glass absolute inset-0 rounded-full"
+                        transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                      />
+                    )}
+                    <span className={`relative ${activeTab === tab.id ? "text-[#F4EFE6]" : "text-[#F4EFE6]/50"}`}>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="no-scrollbar mt-4 min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
+                {/* cards */}
+                {songs.length > 0 && (
+                  <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto scroll-px-[max(18px,5cqw)] px-[max(18px,5cqw)] pb-2">
+                    {songs.map((song: any, i: number) => {
+                      const v = getVoteState(song)
+                      const isNow = song.id === playerSongId
+                      return (
+                        <div
+                          key={song.id}
+                          id={`setlist-${song.id}`}
+                          className="relative aspect-[4/5] w-[40cqw] max-w-[180px] shrink-0 snap-start rounded-[24px] p-[6px] shadow-[0_18px_30px_-16px_rgba(0,0,0,0.45)]"
+                          style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
+                        >
+                          <div className="relative h-full w-full overflow-hidden rounded-[19px]">
+                            <img src={getYouTubeFrame(song) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                            <p className="title-x absolute inset-x-3 bottom-12 line-clamp-2 text-center text-[13px] leading-tight">{song.song_title}</p>
+                            <div className="absolute inset-x-3 bottom-3 flex items-center justify-between">
+                              {isNow ? (
+                                <button
+                                  type="button"
+                                  aria-label="Open now playing"
+                                  onClick={() => {
+                                    setListOpen(false)
+                                    setView("player")
+                                  }}
+                                  className="grid h-8 w-8 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e]"
+                                >
+                                  <Play className="ml-0.5 h-3.5 w-3.5 fill-current" strokeWidth={0} />
+                                </button>
+                              ) : (
+                                <span className="micro text-[11px]! text-[#F4EFE6]/85">{String(i + 1).padStart(2, "0")}</span>
+                              )}
+                              <button
+                                type="button"
+                                aria-label={v.hasVoted ? "Remove your heart" : "Heart this song"}
+                                onClick={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect()
+                                  handleUpvote(song, { x: rect.left + rect.width / 2, y: rect.top })
+                                }}
+                                className="-m-2 p-2 text-[#F4EFE6]"
+                              >
+                                <Heart className={`h-6 w-6 ${v.hasVoted ? "fill-[#F4EFE6]" : ""}`} strokeWidth={1.6} />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* table */}
+                <div className="mt-4 px-[max(18px,5cqw)]">
+                  <div className="micro flex items-center gap-4 border-b border-white/10 pb-2 text-[10px]! text-[#F4EFE6]/45">
+                    <span className="w-5 text-center">#</span>
+                    <span className="flex-1">Title</span>
+                    <Heart className="h-3 w-3" strokeWidth={1.6} />
+                  </div>
+                  {songs.length === 0 && <p className="py-10 text-center text-[14px] text-[#F4EFE6]/50">No songs yet. Tap + to request one.</p>}
                   {songs.map((song: any, i: number) => {
                     const v = getVoteState(song)
                     const isNow = song.id === playerSongId
                     return (
-                      <div
-                        key={song.id}
-                        id={`setlist-${song.id}`}
-                        className="relative h-full w-[46cqw] shrink-0 snap-start rounded-[7cqw] p-[2.4cqw] shadow-[0_18px_30px_-16px_rgba(0,0,0,0.45)]"
-                        style={{ background: CARD_COLORS[i % CARD_COLORS.length] }}
-                      >
-                        <div className="relative h-full w-full overflow-hidden rounded-[5.4cqw]">
-                          <img src={getYouTubeFrame(song) || artistAvatar} onError={toHqThumb} alt="" className="h-full w-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-transparent" />
-                          <p className="title-x absolute inset-x-[3cqw] bottom-[13cqw] truncate text-center text-[3.2cqw]">
-                            {song.song_title}
-                          </p>
-                          <div className="absolute inset-x-[3cqw] bottom-[3cqw] flex items-center justify-between">
-                            {isNow ? (
-                              <button
-                                type="button"
-                                aria-label="Open now playing"
-                                onClick={() => setView("player")}
-                                className="flex h-[7.5cqw] w-[7.5cqw] items-center justify-center rounded-full bg-[#F4EFE6] text-[#0b0a0e]"
-                              >
-                                <Play className="ml-[0.4cqw] h-[3cqw] w-[3cqw] fill-current" strokeWidth={0} />
-                              </button>
-                            ) : (
-                              <span className="micro text-[2.4cqw]! text-[#F4EFE6]/85">{String(i + 1).padStart(2, "0")}</span>
-                            )}
-                            <button
-                              type="button"
-                              aria-label={v.hasVoted ? "Remove your heart" : "Heart this song"}
-                              onClick={(e) => {
-                                const rect = e.currentTarget.getBoundingClientRect()
-                                handleUpvote(song, { x: rect.left + rect.width / 2, y: rect.top })
-                              }}
-                              className="text-[#F4EFE6]"
-                            >
-                              <Heart className={`h-[6.4cqw] w-[6.4cqw] ${v.hasVoted ? "fill-[#F4EFE6]" : ""}`} strokeWidth={1.6} />
-                            </button>
-                          </div>
+                      <div key={song.id} className="flex min-h-[52px] items-center gap-4 border-b border-white/[0.06] py-2 last:border-0">
+                        <span className="w-5 text-center text-[13px] tabular-nums text-[#F4EFE6]/50">
+                          {isNow ? <Play className="mx-auto h-3 w-3 fill-current text-[#F4EFE6]" strokeWidth={0} /> : i + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className={`truncate text-[15px] ${isNow ? "font-semibold" : ""}`}>{song.song_title}</p>
+                          {song.dedicated_to && <p className="truncate text-[12px] italic text-[#F4EFE6]/55">for {song.dedicated_to}</p>}
                         </div>
+                        <button
+                          type="button"
+                          aria-label={v.hasVoted ? "Remove your heart" : "Heart this song"}
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            handleUpvote(song, { x: rect.left + rect.width / 2, y: rect.top })
+                          }}
+                          className={`-mr-2 flex items-center gap-1.5 rounded-full px-2 py-2 text-[13px] tabular-nums ${v.hasVoted ? "text-[#F4EFE6]" : "text-[#F4EFE6]/55"}`}
+                        >
+                          {v.count}
+                          <Heart className={`h-4 w-4 ${v.hasVoted ? "fill-current" : ""}`} strokeWidth={1.6} />
+                        </button>
                       </div>
                     )
                   })}
                 </div>
               </div>
 
-              {/* table */}
-              <div className="no-scrollbar mt-[6cqw] min-h-0 flex-1 overflow-y-auto px-[7cqw] pb-[26cqw]">
-                <div className="micro flex items-center gap-[5cqw] border-b border-white/10 pb-[2cqw] text-[2.2cqw]! text-[#F4EFE6]/45">
-                  <span className="w-[4cqw] text-center">#</span>
-                  <span className="flex-1">Title</span>
-                  <Heart className="h-[2.8cqw] w-[2.8cqw]" strokeWidth={1.6} />
-                </div>
-                {songs.length === 0 && <p className="py-8 text-center text-[3.2cqw] text-[#F4EFE6]/50">No songs yet. Tap + to request one.</p>}
-                {songs.map((song: any, i: number) => {
-                  const v = getVoteState(song)
-                  const isNow = song.id === playerSongId
-                  return (
-                    <div key={song.id} className="flex items-center gap-[5cqw] py-[2.6cqw]">
-                      <span className="w-[4cqw] text-center text-[3.1cqw] tabular-nums text-[#F4EFE6]/60">
-                        {isNow ? <Play className="mx-auto h-[2.8cqw] w-[2.8cqw] fill-current text-[#F4EFE6]" strokeWidth={0} /> : i + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className={`truncate text-[3.3cqw] ${isNow ? "font-medium" : ""}`}>{song.song_title}</p>
-                        {song.dedicated_to && <p className="truncate text-[2.5cqw] italic text-[#F4EFE6]/55">for {song.dedicated_to}</p>}
-                      </div>
-                      <button
-                        type="button"
-                        aria-label={v.hasVoted ? "Remove your heart" : "Heart this song"}
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          handleUpvote(song, { x: rect.left + rect.width / 2, y: rect.top })
-                        }}
-                        className={`flex items-center gap-[1.4cqw] text-[3cqw] tabular-nums ${v.hasVoted ? "text-[#F4EFE6]" : "text-[#F4EFE6]/55"}`}
-                      >
-                        {v.count}
-                        <Heart className={`h-[3.2cqw] w-[3.2cqw] ${v.hasVoted ? "fill-current" : ""}`} strokeWidth={1.6} />
-                      </button>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* mini player */}
+              {/* now playing, back to the player */}
               {playerSong && (
                 <button
                   type="button"
-                  onClick={() => setView("player")}
-                  className="absolute inset-x-[5cqw] bottom-[7cqw] flex items-center gap-[3cqw] rounded-[3cqw] border border-white/10 bg-[#121014]/90 p-[2cqw] pr-[4cqw] text-left shadow-[0_10px_30px_-12px_rgba(0,0,0,0.7)] backdrop-blur-md"
+                  onClick={() => {
+                    setListOpen(false)
+                    setView("player")
+                  }}
+                  className="glass glass-button mx-2 mb-2 flex shrink-0 items-center gap-3 rounded-[22px] p-2 pr-4 text-left"
                 >
-                  <img src={getYouTubeFrame(playerSong) || artistAvatar} onError={toHqThumb} alt="" className="h-[9cqw] w-[9cqw] rounded-full object-cover" />
+                  <img src={getYouTubeFrame(playerSong) || artistAvatar} onError={toHqThumb} alt="" className="h-10 w-10 rounded-full object-cover" />
                   <span className="min-w-0 flex-1">
-                    <span className="title-x block truncate text-[3.2cqw]">{playerTitle}</span>
-                    <span className="micro mt-[0.8cqw] block truncate text-[2.2cqw]! text-[#F4EFE6]/50">{playerArtist}</span>
+                    <span className="title-x block truncate text-[14px]">{playerTitle}</span>
+                    <span className="micro mt-0.5 block truncate text-[10px]! text-[#F4EFE6]/55">{playerArtist}</span>
                   </span>
-                  <Play className="h-[3.6cqw] w-[3.6cqw] fill-current text-[#F4EFE6]/70" strokeWidth={0} />
+                  <Play className="h-4 w-4 fill-current text-[#F4EFE6]/80" strokeWidth={0} />
                 </button>
               )}
-            </motion.section>
+            </motion.div>
           )}
         </AnimatePresence>
+
+        {/* the Liquid Glass menu button: three lines that morph into an X while the setlist is open */}
+        <button
+          type="button"
+          onClick={() => setListOpen((o) => !o)}
+          aria-label={listOpen ? "Close the setlist" : "Open the setlist"}
+          aria-expanded={listOpen}
+          className="glass glass-button absolute right-[5cqw] top-[max(16px,4cqw)] z-40 grid h-11 w-11 place-items-center rounded-full"
+        >
+          <span aria-hidden className="relative block h-3 w-4">
+            <span className={`glass-line top-0 ${listOpen ? "translate-y-[5px] rotate-45" : ""}`} />
+            <span className={`glass-line top-[5px] ${listOpen ? "scale-x-0 opacity-0" : ""}`} />
+            <span className={`glass-line top-[10px] ${listOpen ? "-translate-y-[5px] -rotate-45" : ""}`} />
+          </span>
+        </button>
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
@@ -1063,7 +1151,7 @@ export default function AudienceLiveGigPage({
                       key={song.id}
                       onClick={() => {
                         setShowSearchModal(false)
-                        setView("list")
+                        setListOpen(true)
                         requestAnimationFrame(() =>
                           document
                             .getElementById(`setlist-${song.id}`)
