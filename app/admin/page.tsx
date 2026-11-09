@@ -197,7 +197,7 @@ const istDate = (iso: string) =>
 /** Gigs, what's been paid and what's still owed to artists, worked out from each gig's fee and status. */
 function ArtistPaymentsSection({ p, onOpen }: { p: Payments; onOpen: (a: { id: string; name: string }) => void }) {
   const t = p.totals
-  const owed = p.byArtist.filter((a) => a.due.count > 0)
+  const owed = p.byArtist.filter((a) => a.due.amount > 0)
   const months = p.byMonth.map((m) => ({ ...m, label: monthLabel(m.month) }))
   const cards = [
     { label: "Gigs", value: String(t.gigs), sub: `${t.played} played · ${t.upcoming} upcoming${t.cancelled ? ` · ${t.cancelled} cancelled` : ""}` },
