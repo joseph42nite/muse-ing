@@ -9,7 +9,7 @@ import React, {
   use,
 } from "react"
 import Link from "next/link"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, animate, motion, useMotionValue, useTransform } from "framer-motion"
 import MuseLoadingScreen from "@/components/muse-loading-screen"
 import { extractYouTubeId } from "@/lib/youtube"
 import { generateUPIQR } from "@/lib/upipay"
@@ -182,6 +182,70 @@ export default function AudienceLiveGigPage({
   // ── Lyrics view (first view): follows whatever the artist is playing ──
   const [clock, setClock] = useState(0)
   const [view, setView] = useState<"player" | "lyrics">("player")
+  // The lyrics are a sheet that rides up over now playing. sheetY is its top edge in px:
+  // 0 = open, the stage height = tucked away below. It follows the finger 1:1 and springs on release.
+  const stageH = useRef(0)
+  const sheetY = useMotionValue(4000)
+  const sheetAnim = useRef<ReturnType<typeof animate> | null>(null)
+  const sheetP = useTransform(sheetY, (y) => (stageH.current ? Math.min(1, Math.max(0, y / stageH.current)) : 1))
+  const playerScale = useTransform(sheetP, [0, 1], [0.92, 1])
+  const playerDim = useTransform(sheetP, [0, 1], [0.65, 0])
+  const sheetRadius = useTransform(sheetP, [0, 0.04], [0, 34])
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const goTo = (to: "player" | "lyrics", velocity = 0) => {
+    sheetAnim.current?.stop()
+    sheetAnim.current = animate(sheetY, to === "lyrics" ? 0 : stageH.current, {
+      type: "spring",
+      stiffness: 300,
+      damping: 34,
+      mass: 0.9,
+      velocity,
+      restDelta: 0.5,
+    })
+    setView(to)
+  }
+  // Measured through a callback ref: the stage only mounts once the gig has loaded
+  const stageRO = useRef<ResizeObserver | null>(null)
+  const stageRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      stageRO.current?.disconnect()
+      if (!el) return
+      const measure = () => {
+        stageH.current = el.clientHeight
+        if (!sheetY.isAnimating()) sheetY.set(viewRef.current === "lyrics" ? 0 : el.clientHeight)
+      }
+      measure()
+      stageRO.current = new ResizeObserver(measure)
+      stageRO.current.observe(el)
+    },
+    [sheetY],
+  )
+  // Vertical pans anywhere on the stage drag the sheet; sideways pans are left alone
+  const panFrom = useRef<number | null>(null)
+  const onStagePanStart = (_: PointerEvent, info: { offset: { x: number; y: number } }) => {
+    if (Math.abs(info.offset.x) > Math.abs(info.offset.y)) return void (panFrom.current = null)
+    sheetAnim.current?.stop()
+    panFrom.current = sheetY.get()
+  }
+  const onStagePan = (_: PointerEvent, info: { offset: { y: number } }) => {
+    if (panFrom.current == null) return
+    const h = stageH.current
+    let y = panFrom.current + info.offset.y
+    if (y < 0) y *= 0.2 // rubber band past the ends
+    if (y > h) y = h + (y - h) * 0.2
+    sheetY.set(y)
+  }
+  const onStagePanEnd = (_: PointerEvent, info: { velocity: { y: number } }) => {
+    if (panFrom.current == null) return
+    const moved = sheetY.get() - panFrom.current
+    panFrom.current = null
+    const v = info.velocity.y
+    // a flick decides it; otherwise pulling a fifth of the screen is enough to commit
+    const far = stageH.current * 0.2
+    const open = v < -350 ? true : v > 350 ? false : view === "lyrics" ? moved < far : moved < -far
+    goTo(open ? "lyrics" : "player", v)
+  }
   // The setlist opens as a Liquid Glass sheet over whichever screen is showing
   const [listOpen, setListOpen] = useState(false)
   useEffect(() => {
@@ -195,8 +259,8 @@ export default function AudienceLiveGigPage({
   const onWheelFlip = (e: React.WheelEvent) => {
     if (listOpen || Math.abs(e.deltaY) < 30 || Date.now() - wheelAt.current < 900) return
     wheelAt.current = Date.now()
-    if (e.deltaY > 0 && view === "player") setView("lyrics")
-    if (e.deltaY < 0 && view === "lyrics") setView("player")
+    if (e.deltaY > 0 && view === "player") goTo("lyrics")
+    if (e.deltaY < 0 && view === "lyrics") goTo("player")
   }
   const [lyrics, setLyrics] = useState<{
     synced: boolean
@@ -638,13 +702,6 @@ export default function AudienceLiveGigPage({
     </a>
     ) : null
 
-  const slide = {
-    initial: { opacity: 0, y: 24 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -20 },
-    transition: { duration: 0.28, ease: [0.22, 1, 0.36, 1] as any },
-  }
-
   return (
     <div className="fixed inset-0 flex justify-center bg-[radial-gradient(120%_80%_at_50%_0%,#5a0910_0%,#1a0507_55%,#070709_100%)] font-sans">
       <MuseLoadingScreen isLoading={false} minDurationMs={2600} />
@@ -678,22 +735,23 @@ export default function AudienceLiveGigPage({
       )}
 
       <div className="relative h-full w-full max-w-[480px] overflow-hidden" style={{ containerType: "inline-size" }}>
-        <AnimatePresence mode="wait" initial={false}>
+        {/* Both screens stay mounted: swiping up pulls the lyrics sheet over now playing, swiping down
+            pushes it back, following the finger and springing to whichever side it was thrown to. */}
+        <motion.div
+          ref={stageRef}
+          className="absolute inset-0"
+          style={{ touchAction: "pan-x" }}
+          onPanStart={onStagePanStart}
+          onPan={onStagePan}
+          onPanEnd={onStagePanEnd}
+          onWheel={onWheelFlip}
+        >
           {/* ───────── Screen 2 · Now playing ───────── */}
-          {view === "player" && (
             <motion.section
               key="player"
-              {...slide}
-              // swipe up (or pull the lyrics tab) to open the lyrics
-              drag="y"
-              dragDirectionLock
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0.35, bottom: 0.06 }}
-              onDragEnd={(_, info) => {
-                if (info.offset.y < -70 || info.velocity.y < -450) setView("lyrics")
-              }}
-              onWheel={onWheelFlip}
-              className="absolute inset-0 flex flex-col overflow-hidden overscroll-none bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]"
+              inert={view !== "player"}
+              style={{ scale: playerScale }}
+              className="absolute inset-0 flex origin-top flex-col overflow-hidden overscroll-none bg-[radial-gradient(120%_70%_at_50%_45%,#6a0a12_0%,#2a0509_50%,#0b0405_100%)] text-[#F4EFE6]"
             >
               {/* disc stage is laid out in flow below; its red capsule reaches up behind the header.
                   The glass menu button floats over the top-right corner of every screen. */}
@@ -764,31 +822,26 @@ export default function AudienceLiveGigPage({
               {/* lyrics drawer handle */}
               <button
                 type="button"
-                onClick={() => setView("lyrics")}
+                onClick={() => goTo("lyrics")}
                 className="relative z-10 flex shrink-0 flex-col items-center justify-center gap-[max(10px,2.6cqw)] rounded-t-[9cqw] border-t border-white/10 bg-[#0b0a0e] pt-[max(16px,4cqw)] pb-[max(16px,4cqw,env(safe-area-inset-bottom))] text-[#F4EFE6]"
               >
                 <span className="micro text-[max(11px,2.6cqw)]!">Lyrics</span>
                 <span className="h-[3px] w-[22cqw] rounded-full bg-[#F4EFE6]/50" />
               </button>
             </motion.section>
-          )}
+
+          {/* now playing dims as the lyrics come up over it */}
+          <motion.div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-black" style={{ opacity: playerDim }} />
 
           {/* ───────── Screen 3 · Lyrics ───────── */}
-          {view === "lyrics" && (
             <motion.section
               key="lyrics"
-              {...slide}
-              // swipe down to go back to now playing
-              drag="y"
-              dragDirectionLock
-              dragConstraints={{ top: 0, bottom: 0 }}
-              dragElastic={{ top: 0.06, bottom: 0.35 }}
-              onDragEnd={(_, info) => {
-                if (info.offset.y > 70 || info.velocity.y > 450) setView("player")
-              }}
-              onWheel={onWheelFlip}
-              className="absolute inset-0 overflow-hidden overscroll-none bg-[#0d0c0e] text-white"
+              inert={view !== "lyrics"}
+              style={{ y: sheetY, borderTopLeftRadius: sheetRadius, borderTopRightRadius: sheetRadius }}
+              className="absolute inset-0 overflow-hidden overscroll-none bg-[#0d0c0e] text-white shadow-[0_-20px_50px_-10px_rgba(0,0,0,0.6)] will-change-transform"
             >
+              {/* grab handle */}
+              <span aria-hidden="true" className="absolute left-1/2 top-[6px] z-20 h-[4px] w-9 -translate-x-1/2 rounded-full bg-white/35" />
               <img src={artistPhoto} alt="" aria-hidden="true" className="absolute inset-x-0 top-0 h-[85%] w-full object-cover grayscale contrast-110 brightness-[0.55]" />
               <div className="absolute inset-0 bg-[#8f0d16] mix-blend-multiply opacity-75" />
               <div className="absolute inset-0 bg-[#0d0c0e]/40" />
@@ -796,7 +849,7 @@ export default function AudienceLiveGigPage({
               <div className="absolute inset-x-0 bottom-0 h-[55%] bg-gradient-to-t from-[#0d0c0e] from-[35%] to-transparent" />
 
               <header className="absolute inset-x-0 top-[max(16px,4cqw)] z-10 flex items-start justify-between px-[5cqw]">
-                <button type="button" aria-label="Back to now playing" onClick={() => setView("player")} className="-m-2 grid h-11 w-11 shrink-0 place-items-center p-2 text-white/85">
+                <button type="button" aria-label="Back to now playing" onClick={() => goTo("player")} className="-m-2 grid h-11 w-11 shrink-0 place-items-center p-2 text-white/85">
                   <ChevronUp className="h-6 w-6" strokeWidth={1.4} />
                 </button>
                 <div className="min-w-0 flex-1 px-3 pt-1 text-center">
@@ -885,8 +938,7 @@ export default function AudienceLiveGigPage({
                 </div>
               </div>
             </motion.section>
-          )}
-        </AnimatePresence>
+        </motion.div>
 
         {/* ───────── Setlist · a Liquid Glass sheet that springs out of the menu button ───────── */}
         <AnimatePresence>
@@ -999,7 +1051,7 @@ export default function AudienceLiveGigPage({
                                   aria-label="Open now playing"
                                   onClick={() => {
                                     setListOpen(false)
-                                    setView("player")
+                                    goTo("player")
                                   }}
                                   className="grid h-8 w-8 place-items-center rounded-full bg-[#F4EFE6] text-[#0b0a0e]"
                                 >
@@ -1071,7 +1123,7 @@ export default function AudienceLiveGigPage({
                   type="button"
                   onClick={() => {
                     setListOpen(false)
-                    setView("player")
+                    goTo("player")
                   }}
                   className="glass glass-button mx-2 mb-2 flex shrink-0 items-center gap-3 rounded-[22px] p-2 pr-4 text-left"
                 >
